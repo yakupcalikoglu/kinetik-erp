@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { api, hataMesajiCikar } from '../api/client';
 
 const MODULLER = [
   { yol: '/', ad: 'Genel Bakış', simge: '◧' },
@@ -14,12 +16,28 @@ const MODULLER = [
 ];
 
 export default function AnaDuzen() {
-  const { oturum, cikisYap, sirketDegistir } = useAuth();
+  const { oturum, cikisYap, sirketDegistir, sirketleriTazele } = useAuth();
   const navigate = useNavigate();
+  const [yeniSirketFormuAcik, setYeniSirketFormuAcik] = useState(false);
+  const [yeniSirketAdi, setYeniSirketAdi] = useState('');
+  const [hata, setHata] = useState(null);
 
   function cikisIslemi() {
     cikisYap();
     navigate('/giris');
+  }
+
+  async function yeniSirketEkle(e) {
+    e.preventDefault();
+    setHata(null);
+    try {
+      await api.post('/sirketler', { unvan: yeniSirketAdi });
+      setYeniSirketFormuAcik(false);
+      setYeniSirketAdi('');
+      await sirketleriTazele();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    }
   }
 
   return (
@@ -89,35 +107,61 @@ export default function AnaDuzen() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <header
           style={{
-            height: 56,
+            minHeight: 56,
             background: 'var(--yuzey)',
             borderBottom: '1px solid var(--kenarlik)',
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'flex-end',
-            padding: '0 24px',
+            flexDirection: 'column',
+            padding: '10px 24px',
             flexShrink: 0,
           }}
         >
-          {oturum?.sirketler?.length > 1 ? (
-            <select
-              value={oturum.aktifSirketId ?? ''}
-              onChange={(e) => sirketDegistir(Number(e.target.value))}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, width: '100%' }}>
+            {oturum?.sirketler?.length > 1 ? (
+              <select
+                value={oturum.aktifSirketId ?? ''}
+                onChange={(e) => sirketDegistir(Number(e.target.value))}
+                style={{
+                  padding: '6px 10px',
+                  borderRadius: 6,
+                  border: '1px solid var(--kenarlik-koyu)',
+                  background: 'white',
+                }}
+              >
+                {oturum.sirketler.map((s) => (
+                  <option key={s.id} value={s.id}>{s.unvan}</option>
+                ))}
+              </select>
+            ) : (
+              <span style={{ fontSize: 13, color: 'var(--metin-ikincil)' }}>
+                {oturum?.sirketler?.[0]?.unvan}
+              </span>
+            )}
+            <button
+              onClick={() => setYeniSirketFormuAcik((a) => !a)}
               style={{
-                padding: '6px 10px',
-                borderRadius: 6,
-                border: '1px solid var(--kenarlik-koyu)',
-                background: 'white',
+                padding: '6px 12px', borderRadius: 6, border: '1px solid var(--kenarlik-koyu)',
+                background: 'white', fontSize: 12.5, color: 'var(--metin-ikincil)',
               }}
             >
-              {oturum.sirketler.map((s) => (
-                <option key={s.id} value={s.id}>{s.unvan}</option>
-              ))}
-            </select>
-          ) : (
-            <span style={{ fontSize: 13, color: 'var(--metin-ikincil)' }}>
-              {oturum?.sirketler?.[0]?.unvan}
-            </span>
+              + Yeni şirket
+            </button>
+          </div>
+
+          {yeniSirketFormuAcik && (
+            <form onSubmit={yeniSirketEkle} style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center' }}>
+              <input
+                required
+                value={yeniSirketAdi}
+                onChange={(e) => setYeniSirketAdi(e.target.value)}
+                placeholder="Yeni şirket unvanı"
+                style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--kenarlik-koyu)', width: 280 }}
+              />
+              <button type="submit" style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid var(--lacivert)', background: 'var(--lacivert)', color: 'white', fontSize: 12.5 }}>
+                Oluştur
+              </button>
+              {hata && <span style={{ fontSize: 12, color: 'var(--kirmizi)' }}>{hata}</span>}
+            </form>
           )}
         </header>
 

@@ -31,9 +31,24 @@ def sirketleri_listele(
 
 
 @router.post("", response_model=SirketOzet, dependencies=[Depends(izin_gerektir("SIRKET_YONET"))])
-def sirket_olustur(istek: SirketOlusturIstegi, db: Session = Depends(get_db)):
+def sirket_olustur(
+    istek: SirketOlusturIstegi,
+    kullanici=Depends(aktif_kullanici_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Yeni sirket olusturur VE olusturan kullaniciya bu sirkete erisim
+    verir (KullaniciSirketErisim). Bu eksik olursa kullanici kendi
+    olusturdugu sirketi sirket seciminde goremez - GET /sirketler
+    bu tabloya join ederek calisir.
+    """
+    from app.models.auth import KullaniciSirketErisim
+
     yeni = Sirket(**istek.model_dump())
     db.add(yeni)
+    db.flush()
+
+    db.add(KullaniciSirketErisim(kullanici_id=kullanici.id, sirket_id=yeni.id))
     db.commit()
     db.refresh(yeni)
     return yeni

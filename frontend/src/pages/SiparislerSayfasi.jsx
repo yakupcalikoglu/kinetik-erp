@@ -120,6 +120,12 @@ export default function SiparislerSayfasi() {
                             Onayla
                           </button>
                         )}
+                        {(s.durum === 'ONAYLANDI' || s.durum === 'YOLDA' || s.durum === 'GUMRUKTE') && (
+                          <Link to={`/siparisler/${s.id}/teslim-al`}
+                            style={{ color: 'var(--yesil)', fontSize: 13, fontWeight: 500 }}>
+                            Teslim al
+                          </Link>
+                        )}
                         <button onClick={() => pdfIndir(s.id, s.siparis_no, 'ic')}
                           style={{ background: 'none', border: 'none', color: 'var(--lacivert)', fontSize: 13 }}>
                           PDF (şirket içi)

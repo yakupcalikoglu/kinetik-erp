@@ -7,6 +7,7 @@ import CarilerSayfasi from './pages/CarilerSayfasi';
 import StokSayfasi from './pages/StokSayfasi';
 import SiparislerSayfasi from './pages/SiparislerSayfasi';
 import SiparisOlusturSayfasi from './pages/SiparisOlusturSayfasi';
+import SiparisTeslimAlSayfasi from './pages/SiparisTeslimAlSayfasi';
 import BankaKasaSayfasi from './pages/BankaKasaSayfasi';
 import RaporlarSayfasi from './pages/RaporlarSayfasi';
 import FinansalTakipSayfasi from './pages/FinansalTakipSayfasi';
@@ -38,6 +39,7 @@ function App() {
             <Route path="stok" element={<StokSayfasi />} />
             <Route path="siparisler" element={<SiparislerSayfasi />} />
             <Route path="siparisler/yeni" element={<SiparisOlusturSayfasi />} />
+            <Route path="siparisler/:siparisId/teslim-al" element={<SiparisTeslimAlSayfasi />} />
             <Route path="banka-kasa" element={<BankaKasaSayfasi />} />
             <Route path="finansal" element={<FinansalTakipSayfasi />} />
             <Route path="proforma-fatura" element={<ProformaFaturaSayfasi />} />

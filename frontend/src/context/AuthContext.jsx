@@ -64,8 +64,20 @@ export function AuthSaglayici({ children }) {
     });
   }, []);
 
+  // Yeni sirket olusturulduktan sonra, token icindeki eski sirket listesini
+  // yenilemeden kullaniciya gosterebilmek icin /auth/me'den guncel listeyi
+  // ceker ve oturuma isler (sayfayi yeniden yuklemeye gerek kalmaz).
+  const sirketleriTazele = useCallback(async () => {
+    try {
+      const { data } = await api.get('/auth/me');
+      setOturum((onceki) => onceki ? { ...onceki, sirketler: data.erisebildigi_sirketler } : onceki);
+    } catch {
+      // sessizce yut - kritik olmayan bir tazeleme islemi
+    }
+  }, []);
+
   return (
-    <AuthBaglami.Provider value={{ oturum, girisYap, cikisYap, sirketDegistir, yukleniyor, hata }}>
+    <AuthBaglami.Provider value={{ oturum, girisYap, cikisYap, sirketDegistir, sirketleriTazele, yukleniyor, hata }}>
       {children}
     </AuthBaglami.Provider>
   );
