@@ -42,6 +42,29 @@ class SirketOlusturIstegi(BaseModel):
     email: EmailStr | None = None
 
 
+class SirketDetayYanit(BaseModel):
+    id: int
+    unvan: str
+    vergi_dairesi: str | None = None
+    vergi_no: str | None = None
+    adres: str | None = None
+    telefon: str | None = None
+    email: EmailStr | None = None
+    logo_dosya_yolu: str | None = None
+
+    class Config:
+        from_attributes = True
+
+
+class SirketGuncelleIstegi(BaseModel):
+    unvan: str | None = None
+    vergi_dairesi: str | None = None
+    vergi_no: str | None = None
+    adres: str | None = None
+    telefon: str | None = None
+    email: EmailStr | None = None
+
+
 class KullaniciOlusturIstegi(BaseModel):
     ad_soyad: str
     email: EmailStr

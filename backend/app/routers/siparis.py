@@ -1,13 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
 from app.db.session import get_db
 from app.core.deps import aktif_sirket_id_getir, izin_gerektir
 from app.models.stok import (Siparis, SiparisDetay, StokSeriNo, StokDurum,
-                              SiparisDurum)
+                              SiparisDurum, StokKarti)
+from app.models.auth import Sirket
+from app.models.cari import CariHesap
 from app.schemas.stok import (SiparisOlusturIstegi, SiparisYanit,
                                SiparisDurumGuncelleIstegi, TeslimAlIstegi)
+from app.services import siparis_pdf
 
 router = APIRouter(prefix="/siparisler", tags=["Sipariş"])
 
@@ -212,3 +216,60 @@ def siparis_teslim_al(
     siparis.durum = SiparisDurum.TESLIM_ALINDI
     db.commit()
     return olusturulan_idler
+
+
+@router.get("/{siparis_id}/pdf",
+            dependencies=[Depends(izin_gerektir("SIPARIS_GORUNTULE"))])
+def siparis_pdf_indir(
+    siparis_id: int,
+    nusha: str = Query("ic", pattern="^(ic|tedarikci)$"),
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Siparis formunu PDF olarak uretir. nusha=ic -> maliyet detayi dahil
+    (sirket ici), nusha=tedarikci -> maliyet bolumu olmadan tedarikciye
+    gonderilecek nusha.
+    """
+    siparis = _siparis_getir_veya_404(db, siparis_id, sirket_id)
+    sirket = db.get(Sirket, sirket_id)
+    tedarikci = db.get(CariHesap, siparis.tedarikci_cari_id)
+    urun_satirlari = list(db.execute(
+        select(SiparisDetay).where(SiparisDetay.siparis_id == siparis.id)
+    ).scalars())
+
+    urunler_pdf = []
+    for u in urun_satirlari:
+        kart = db.get(StokKarti, u.stok_karti_id)
+        marka_model = f"{kart.marka} {kart.model}".strip() if kart else None
+        urunler_pdf.append({
+            "marka_model": marka_model,
+            "seri_no": None,
+            "miktar": u.miktar,
+            "birim_fiyat": float(u.birim_fiyat),
+        })
+
+    veri = {
+        "sirket_unvan": sirket.unvan, "sirket_adres": sirket.adres,
+        "sirket_tel": sirket.telefon, "sirket_email": sirket.email,
+        "sirket_vergi_no": sirket.vergi_no,
+        "siparis_no": siparis.siparis_no, "siparis_tarihi": str(siparis.siparis_tarihi),
+        "kaynak": "İTHALAT" if siparis.kaynak.value == "ITHALAT" else "YURTİÇİ ALIM",
+        "durum": siparis.durum.value,
+        "tedarikci_unvan": tedarikci.unvan if tedarikci else None,
+        "tedarikci_vergi_no": tedarikci.vergi_no if tedarikci else None,
+        "tedarikci_adres": tedarikci.adres if tedarikci else None,
+        "tedarikci_tel": tedarikci.telefon if tedarikci else None,
+        "cikis_limani": siparis.cikis_limani, "varis_limani": siparis.varis_limani,
+        "para_birimi": siparis.para_birimi.value,
+        "urunler": urunler_pdf,
+        "notlar": siparis.notlar,
+    }
+
+    pdf_bytes = siparis_pdf.build_pdf(veri, ic_kullanim=(nusha == "ic"))
+    dosya_adi = f"{siparis.siparis_no}_{nusha}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{dosya_adi}"'},
+    )

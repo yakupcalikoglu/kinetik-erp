@@ -1,11 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import select
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 
 from app.db.session import get_db
 from app.core.deps import aktif_sirket_id_getir, izin_gerektir
-from app.models.auth import Izin, Rol, rol_izinleri
+from app.models.auth import (Izin, Rol, rol_izinleri, Kullanici,
+                              KullaniciSirketErisim, KullaniciRolu)
+from app.core.security import sifre_hashle
 
 router = APIRouter(tags=["Yetki Yönetimi"])
 
@@ -83,3 +85,98 @@ def rol_izinlerini_guncelle(
         .where(rol_izinleri.c.rol_id == rol_id)
     ).scalars())
     return RolYanit(id=rol.id, ad=rol.ad, aciklama=rol.aciklama, izin_kodlari=izin_kodlari)
+
+
+# ============================================================== KULLANICI YÖNETİMİ
+class KullaniciOlusturIstegi(BaseModel):
+    ad_soyad: str
+    email: EmailStr
+    sifre: str
+    rol_id: int | None = None
+
+
+class KullaniciYanit(BaseModel):
+    id: int
+    ad_soyad: str
+    email: EmailStr
+    aktif: bool
+    roller: list[str]
+
+    class Config:
+        from_attributes = True
+
+
+class KullaniciRolGuncelleIstegi(BaseModel):
+    rol_id: int
+
+
+@router.get("/kullanicilar", response_model=list[KullaniciYanit],
+            dependencies=[Depends(izin_gerektir("KULLANICI_YONET"))])
+def kullanicilari_listele(
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    sorgu = (
+        select(Kullanici)
+        .join(KullaniciSirketErisim, KullaniciSirketErisim.kullanici_id == Kullanici.id)
+        .where(KullaniciSirketErisim.sirket_id == sirket_id)
+    )
+    sonuc = []
+    for k in db.execute(sorgu).scalars():
+        roller = list(db.execute(
+            select(Rol.ad)
+            .join(KullaniciRolu, KullaniciRolu.rol_id == Rol.id)
+            .where(KullaniciRolu.kullanici_id == k.id, KullaniciRolu.sirket_id == sirket_id)
+        ).scalars())
+        sonuc.append(KullaniciYanit(id=k.id, ad_soyad=k.ad_soyad, email=k.email, aktif=k.aktif, roller=roller))
+    return sonuc
+
+
+@router.post("/kullanicilar", response_model=KullaniciYanit,
+             dependencies=[Depends(izin_gerektir("KULLANICI_YONET"))])
+def kullanici_olustur(
+    istek: KullaniciOlusturIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    mevcut = db.execute(select(Kullanici).where(Kullanici.email == istek.email)).scalar_one_or_none()
+    if mevcut is not None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bu e-posta adresi zaten kayıtlı.")
+
+    yeni = Kullanici(ad_soyad=istek.ad_soyad, email=istek.email, sifre_hash=sifre_hashle(istek.sifre))
+    db.add(yeni)
+    db.flush()
+
+    db.add(KullaniciSirketErisim(kullanici_id=yeni.id, sirket_id=sirket_id))
+    roller = []
+    if istek.rol_id is not None:
+        db.add(KullaniciRolu(kullanici_id=yeni.id, rol_id=istek.rol_id, sirket_id=sirket_id))
+        rol = db.get(Rol, istek.rol_id)
+        if rol:
+            roller.append(rol.ad)
+
+    db.commit()
+    return KullaniciYanit(id=yeni.id, ad_soyad=yeni.ad_soyad, email=yeni.email, aktif=yeni.aktif, roller=roller)
+
+
+@router.put("/kullanicilar/{kullanici_id}/rol", response_model=KullaniciYanit,
+            dependencies=[Depends(izin_gerektir("KULLANICI_YONET"))])
+def kullanici_rolu_guncelle(
+    kullanici_id: int,
+    istek: KullaniciRolGuncelleIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    kullanici = db.get(Kullanici, kullanici_id)
+    if kullanici is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Kullanıcı bulunamadı.")
+
+    db.execute(KullaniciRolu.__table__.delete().where(
+        KullaniciRolu.kullanici_id == kullanici_id, KullaniciRolu.sirket_id == sirket_id
+    ))
+    db.add(KullaniciRolu(kullanici_id=kullanici_id, rol_id=istek.rol_id, sirket_id=sirket_id))
+    db.commit()
+
+    rol = db.get(Rol, istek.rol_id)
+    return KullaniciYanit(id=kullanici.id, ad_soyad=kullanici.ad_soyad, email=kullanici.email,
+                           aktif=kullanici.aktif, roller=[rol.ad] if rol else [])

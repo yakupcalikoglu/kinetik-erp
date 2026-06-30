@@ -41,6 +41,37 @@ export default function SiparislerSayfasi() {
     }
   }
 
+  async function pdfIndir(siparisId, siparisNo, nusha) {
+    try {
+      const { data } = await api.get(`/siparisler/${siparisId}/pdf`, {
+        params: { nusha },
+        responseType: 'blob',
+      });
+      const url = window.URL.createObjectURL(data);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${siparisNo}_${nusha}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    }
+  }
+
+  async function kopyala(siparisId) {
+    const yeniNo = window.prompt('Yeni sipariş numarası:');
+    if (!yeniNo) return;
+    try {
+      await api.post(`/siparisler/${siparisId}/kopyala`, null, { params: { yeni_siparis_no: yeniNo } });
+      setBilgiMesaji(`${yeniNo} numaralı yeni taslak oluşturuldu.`);
+      listeyiYukle();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    }
+  }
+
   return (
     <div>
       <SayfaBasligi
@@ -82,12 +113,26 @@ export default function SiparislerSayfasi() {
                     </td>
                     <td style={{ padding: '12px 16px' }}>{paraFormat(toplam, s.para_birimi)}</td>
                     <td style={{ padding: '12px 16px' }}>
-                      {s.durum === 'TASLAK' && (
-                        <button onClick={() => durumDegistir(s.id, 'ONAYLANDI')}
-                          style={{ background: 'none', border: 'none', color: 'var(--lacivert)', fontSize: 13, fontWeight: 500 }}>
-                          Onayla
+                      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                        {s.durum === 'TASLAK' && (
+                          <button onClick={() => durumDegistir(s.id, 'ONAYLANDI')}
+                            style={{ background: 'none', border: 'none', color: 'var(--lacivert)', fontSize: 13, fontWeight: 500 }}>
+                            Onayla
+                          </button>
+                        )}
+                        <button onClick={() => pdfIndir(s.id, s.siparis_no, 'ic')}
+                          style={{ background: 'none', border: 'none', color: 'var(--lacivert)', fontSize: 13 }}>
+                          PDF (şirket içi)
                         </button>
-                      )}
+                        <button onClick={() => pdfIndir(s.id, s.siparis_no, 'tedarikci')}
+                          style={{ background: 'none', border: 'none', color: 'var(--lacivert)', fontSize: 13 }}>
+                          PDF (tedarikçi)
+                        </button>
+                        <button onClick={() => kopyala(s.id)}
+                          style={{ background: 'none', border: 'none', color: 'var(--metin-ikincil)', fontSize: 13 }}>
+                          Kopyala
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );

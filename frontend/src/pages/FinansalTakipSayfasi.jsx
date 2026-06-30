@@ -11,6 +11,8 @@ const SEKMELER = [
   { deger: 'kiralama', etiket: 'Kiralama' },
   { deger: 'bakim', etiket: 'Bakım' },
   { deger: 'personel', etiket: 'Personel' },
+  { deger: 'gider', etiket: 'Sabit Giderler' },
+  { deger: 'borc', etiket: 'Ortak / Dış Borç' },
 ];
 
 function BasitTablo({ basliklar, satirlar, render }) {
@@ -430,12 +432,197 @@ function TaksitSekmesi() {
   );
 }
 
+// ============================================================== SABİT GİDERLER
+function SabitGiderSekmesi() {
+  const [liste, setListe] = useState([]);
+  const [kategoriler, setKategoriler] = useState([]);
+  const [formAcik, setFormAcik] = useState(false);
+  const [form, setForm] = useState({ kategori_id: '', donem: new Date().toISOString().slice(0, 10), tutar: '', aciklama: '' });
+  const [hata, setHata] = useState(null);
+
+  function yukle() {
+    api.get('/sabit-giderler').then((r) => setListe(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
+  }
+  useEffect(() => {
+    yukle();
+    api.get('/sabit-gider-kategorileri').then((r) => setKategoriler(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
+  }, []);
+
+  async function kaydet(e) {
+    e.preventDefault();
+    setHata(null);
+    try {
+      await api.post('/sabit-giderler', { ...form, kategori_id: Number(form.kategori_id), tutar: Number(form.tutar) });
+      setFormAcik(false);
+      yukle();
+    } catch (err) { setHata(hataMesajiCikar(err)); }
+  }
+
+  async function ode(giderId) {
+    try {
+      await api.put(`/sabit-giderler/${giderId}/ode`, { odeme_tarihi: new Date().toISOString().slice(0, 10) });
+      yukle();
+    } catch (err) { setHata(hataMesajiCikar(err)); }
+  }
+
+  const kategoriAdi = (id) => kategoriler.find((k) => k.id === id)?.ad || '—';
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+        <Buton onClick={() => setFormAcik((a) => !a)}>{formAcik ? 'Kapat' : '+ Yeni gider'}</Buton>
+      </div>
+      <HataMesaji>{hata}</HataMesaji>
+
+      {formAcik && (
+        <Kart style={{ marginBottom: 16 }}>
+          <form onSubmit={kaydet} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12 }}>
+            <Alan etiket="Kategori">
+              <select required value={form.kategori_id} onChange={(e) => setForm((f) => ({ ...f, kategori_id: e.target.value }))} style={girdiStili}>
+                <option value="">Seçin...</option>
+                {kategoriler.map((k) => <option key={k.id} value={k.id}>{k.ad}</option>)}
+              </select>
+            </Alan>
+            <Alan etiket="Dönem">
+              <input required type="date" value={form.donem} onChange={(e) => setForm((f) => ({ ...f, donem: e.target.value }))} style={girdiStili} />
+            </Alan>
+            <Alan etiket="Tutar (TL)">
+              <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
+            </Alan>
+            <Alan etiket="Açıklama">
+              <input value={form.aciklama} onChange={(e) => setForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
+            </Alan>
+            <div style={{ alignSelf: 'end' }}><Buton type="submit">Kaydet</Buton></div>
+          </form>
+        </Kart>
+      )}
+
+      <Kart style={{ padding: 0 }}>
+        <BasitTablo
+          basliklar={['Kategori', 'Dönem', 'Tutar', 'Açıklama', 'Durum', '']}
+          satirlar={liste}
+          render={(g) => (
+            <tr key={g.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+              <td style={{ padding: '10px 16px', fontWeight: 500 }}>{kategoriAdi(g.kategori_id)}</td>
+              <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{g.donem}</td>
+              <td style={{ padding: '10px 16px' }}>{paraFormat(g.tutar)}</td>
+              <td style={{ padding: '10px 16px' }}>{g.aciklama || '—'}</td>
+              <td style={{ padding: '10px 16px' }}><Etiket ton={g.odendi_mi ? 'yesil' : 'amber'}>{g.odendi_mi ? 'Ödendi' : 'Bekliyor'}</Etiket></td>
+              <td style={{ padding: '10px 16px' }}>
+                {!g.odendi_mi && (
+                  <button onClick={() => ode(g.id)} style={{ background: 'none', border: 'none', color: 'var(--lacivert)', fontSize: 13 }}>Öde</button>
+                )}
+              </td>
+            </tr>
+          )}
+        />
+      </Kart>
+    </div>
+  );
+}
+
+// ============================================================== ORTAK / DIŞ BORÇ
+const BORC_TIP_METIN = { ORTAKTAN_ALINAN: 'Ortaktan Alınan', DISARIDAN_ALINAN: 'Dışarıdan Alınan', ORTAGA_VERILEN: 'Ortağa Verilen' };
+
+function BorcSekmesi() {
+  const [liste, setListe] = useState([]);
+  const [formAcik, setFormAcik] = useState(false);
+  const [form, setForm] = useState({ tip: 'ORTAKTAN_ALINAN', cari_id: '', tutar: '', para_birimi: 'TRY', alinma_tarihi: new Date().toISOString().slice(0, 10) });
+  const [hata, setHata] = useState(null);
+  const [bakiyeler, setBakiyeler] = useState({});
+
+  function yukle() {
+    api.get('/borclar').then((r) => setListe(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
+  }
+  useEffect(yukle, []);
+
+  async function kaydet(e) {
+    e.preventDefault();
+    setHata(null);
+    try {
+      await api.post('/borclar', { ...form, cari_id: Number(form.cari_id), tutar: Number(form.tutar) });
+      setFormAcik(false);
+      yukle();
+    } catch (err) { setHata(hataMesajiCikar(err)); }
+  }
+
+  async function bakiyeyiGetir(borcId) {
+    try {
+      const { data } = await api.get(`/borclar/${borcId}/bakiye`);
+      setBakiyeler((b) => ({ ...b, [borcId]: data }));
+    } catch (err) { setHata(hataMesajiCikar(err)); }
+  }
+
+  async function odemeEkle(borcId) {
+    const tutar = window.prompt('Ödeme tutarı (TL):');
+    if (!tutar) return;
+    try {
+      await api.post(`/borclar/${borcId}/odeme`, { tarih: new Date().toISOString().slice(0, 10), tutar: Number(tutar) });
+      bakiyeyiGetir(borcId);
+    } catch (err) { setHata(hataMesajiCikar(err)); }
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+        <Buton onClick={() => setFormAcik((a) => !a)}>{formAcik ? 'Kapat' : '+ Yeni borç kaydı'}</Buton>
+      </div>
+      <HataMesaji>{hata}</HataMesaji>
+
+      {formAcik && (
+        <Kart style={{ marginBottom: 16 }}>
+          <form onSubmit={kaydet} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12 }}>
+            <Alan etiket="Tip">
+              <select value={form.tip} onChange={(e) => setForm((f) => ({ ...f, tip: e.target.value }))} style={girdiStili}>
+                <option value="ORTAKTAN_ALINAN">Ortaktan Alınan</option>
+                <option value="DISARIDAN_ALINAN">Dışarıdan Alınan</option>
+                <option value="ORTAGA_VERILEN">Ortağa Verilen</option>
+              </select>
+            </Alan>
+            <Alan etiket="Cari ID">
+              <input required type="number" value={form.cari_id} onChange={(e) => setForm((f) => ({ ...f, cari_id: e.target.value }))} style={girdiStili} />
+            </Alan>
+            <Alan etiket="Tutar">
+              <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
+            </Alan>
+            <Alan etiket="Alınma tarihi">
+              <input required type="date" value={form.alinma_tarihi} onChange={(e) => setForm((f) => ({ ...f, alinma_tarihi: e.target.value }))} style={girdiStili} />
+            </Alan>
+            <div style={{ alignSelf: 'end' }}><Buton type="submit">Kaydet</Buton></div>
+          </form>
+        </Kart>
+      )}
+
+      <Kart style={{ padding: 0 }}>
+        <BasitTablo
+          basliklar={['Tip', 'Cari ID', 'Toplam Borç', 'Kalan Bakiye', '']}
+          satirlar={liste}
+          render={(b) => (
+            <tr key={b.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+              <td style={{ padding: '10px 16px' }}>{BORC_TIP_METIN[b.tip]}</td>
+              <td style={{ padding: '10px 16px' }}>{b.cari_id}</td>
+              <td style={{ padding: '10px 16px' }}>{paraFormat(b.tutar, b.para_birimi)}</td>
+              <td style={{ padding: '10px 16px', fontWeight: 500 }}>
+                {bakiyeler[b.id] ? paraFormat(bakiyeler[b.id].kalan_bakiye, b.para_birimi)
+                  : <button onClick={() => bakiyeyiGetir(b.id)} style={{ background: 'none', border: 'none', color: 'var(--lacivert)', fontSize: 13 }}>Göster</button>}
+              </td>
+              <td style={{ padding: '10px 16px' }}>
+                <button onClick={() => odemeEkle(b.id)} style={{ background: 'none', border: 'none', color: 'var(--lacivert)', fontSize: 13 }}>Ödeme ekle</button>
+              </td>
+            </tr>
+          )}
+        />
+      </Kart>
+    </div>
+  );
+}
+
 export default function FinansalTakipSayfasi() {
   const [sekme, setSekme] = useState('cek');
 
   return (
     <div>
-      <SayfaBasligi baslik="Finansal takip" aciklama="Çek, leasing, taksitli satış, kiralama, bakım ve personel" />
+      <SayfaBasligi baslik="Finansal takip" aciklama="Çek, leasing, taksitli satış, kiralama, bakım, personel, sabit giderler ve borçlar" />
       <Sekmeler sekmeler={SEKMELER} aktif={sekme} onDegistir={setSekme} />
 
       {sekme === 'cek' && <CekSekmesi />}
@@ -444,6 +631,8 @@ export default function FinansalTakipSayfasi() {
       {sekme === 'kiralama' && <KiralamaSekmesi />}
       {sekme === 'bakim' && <BakimSekmesi />}
       {sekme === 'personel' && <PersonelSekmesi />}
+      {sekme === 'gider' && <SabitGiderSekmesi />}
+      {sekme === 'borc' && <BorcSekmesi />}
     </div>
   );
 }
