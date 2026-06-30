@@ -1,0 +1,10 @@
+fastapi==0.138.2
+uvicorn[standard]
+sqlalchemy==2.0.51
+psycopg2-binary
+python-jose[cryptography]
+passlib[bcrypt]
+bcrypt
+python-multipart
+pydantic-settings
+pydantic[email]

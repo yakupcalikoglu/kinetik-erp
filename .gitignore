@@ -1,0 +1,27 @@
+# Ortam ve sirlar - ASLA repoya girmemeli
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Veritabani yedekleri (yerel) - bunlar GitHub'a degil sifrelenmis olarak
+# ayri bir depoya gider, asla duz commit edilmez
+backups/
+*.sql.gpg
+*.dump
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Loglar
+*.log

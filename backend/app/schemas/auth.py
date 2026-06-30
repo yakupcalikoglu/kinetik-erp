@@ -1,0 +1,49 @@
+from pydantic import BaseModel, EmailStr
+
+
+class GirisIstegi(BaseModel):
+    email: EmailStr
+    sifre: str
+
+
+class SirketOzet(BaseModel):
+    id: int
+    unvan: str
+
+    class Config:
+        from_attributes = True
+
+
+class KullaniciOzet(BaseModel):
+    id: int
+    ad_soyad: str
+    email: EmailStr
+
+    class Config:
+        from_attributes = True
+
+
+class GirisYaniti(BaseModel):
+    token: str
+    kullanici: KullaniciOzet
+    erisebildigi_sirketler: list[SirketOzet]
+
+
+class SirketDegistirIstegi(BaseModel):
+    sirket_id: int
+
+
+class SirketOlusturIstegi(BaseModel):
+    unvan: str
+    vergi_dairesi: str | None = None
+    vergi_no: str | None = None
+    adres: str | None = None
+    telefon: str | None = None
+    email: EmailStr | None = None
+
+
+class KullaniciOlusturIstegi(BaseModel):
+    ad_soyad: str
+    email: EmailStr
+    sifre: str
+    telefon: str | None = None
