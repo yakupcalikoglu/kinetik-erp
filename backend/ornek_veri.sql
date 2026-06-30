@@ -18,3 +18,12 @@ INSERT INTO izinler (kod, modul, aciklama) VALUES
 INSERT INTO roller (sirket_id, ad, aciklama) VALUES (1, 'Yönetici', 'Tam yetkili rol');
 INSERT INTO rol_izinleri (rol_id, izin_id) SELECT 1, id FROM izinler;
 INSERT INTO kullanici_rolleri (kullanici_id, rol_id, sirket_id) VALUES (1, 1, 1);
+
+-- Yonetici paneli (rol/izin yonetimi) izni
+INSERT INTO izinler (kod, modul, aciklama) VALUES
+('KULLANICI_YONET','KULLANICI','Kullanıcı/rol/izin yönetimi')
+ON CONFLICT (kod) DO NOTHING;
+
+INSERT INTO rol_izinleri (rol_id, izin_id)
+SELECT 1, id FROM izinler WHERE kod = 'KULLANICI_YONET'
+ON CONFLICT DO NOTHING;

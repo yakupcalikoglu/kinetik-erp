@@ -122,6 +122,36 @@ export function HataMesaji({ children }) {
   );
 }
 
+export function Sekmeler({ sekmeler, aktif, onDegistir }) {
+  return (
+    <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--kenarlik)', marginBottom: 20 }}>
+      {sekmeler.map((s) => (
+        <button
+          key={s.deger}
+          onClick={() => onDegistir(s.deger)}
+          style={{
+            padding: '9px 16px',
+            background: 'none',
+            border: 'none',
+            borderBottom: aktif === s.deger ? '2px solid var(--lacivert)' : '2px solid transparent',
+            color: aktif === s.deger ? 'var(--lacivert)' : 'var(--metin-ikincil)',
+            fontWeight: aktif === s.deger ? 600 : 400,
+            fontSize: 13.5,
+            marginBottom: -1,
+          }}
+        >
+          {s.etiket}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function tarihFormat(deger) {
+  if (!deger) return '—';
+  return deger;
+}
+
 export function paraFormat(deger, paraBirimi = 'TRY') {
   if (deger === null || deger === undefined) return '—';
   const sembol = { TRY: '₺', USD: '$', EUR: '€', ALTIN: 'gr' }[paraBirimi] || '';

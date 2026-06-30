@@ -7,7 +7,10 @@ const MODULLER = [
   { yol: '/stok', ad: 'Stok', simge: '◫' },
   { yol: '/siparisler', ad: 'Siparişler', simge: '⇄' },
   { yol: '/banka-kasa', ad: 'Banka / Kasa', simge: '◈' },
+  { yol: '/finansal', ad: 'Finansal Takip', simge: '◇' },
+  { yol: '/proforma-fatura', ad: 'Proforma / Fatura', simge: '▭' },
   { yol: '/raporlar', ad: 'Raporlar', simge: '◔' },
+  { yol: '/yonetici-paneli', ad: 'Yönetici Paneli', simge: '⚙' },
 ];
 
 export default function AnaDuzen() {

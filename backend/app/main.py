@@ -5,7 +5,7 @@ Calistirmak icin: uvicorn app.main:app --reload
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import auth, sirketler, cari, stok, siparis, banka, finansal, diger, raporlama
+from app.routers import auth, sirketler, cari, stok, siparis, banka, finansal, diger, raporlama, yetki
 
 app = FastAPI(
     title="Kinetik ERP API",
@@ -32,6 +32,7 @@ app.include_router(banka.router)
 app.include_router(finansal.router)
 app.include_router(diger.router)
 app.include_router(raporlama.router)
+app.include_router(yetki.router)
 
 
 @app.get("/")
