@@ -1,0 +1,80 @@
+:root {
+  --lacivert: #1B2A4A;
+  --lacivert-koyu: #11192E;
+  --lacivert-acik: #2C4170;
+  --yesil: #0F6E56;
+  --yesil-acik: #E1F5EE;
+  --kirmizi: #A32D2D;
+  --kirmizi-acik: #FCEBEB;
+  --amber: #854F0B;
+  --amber-acik: #FAEEDA;
+
+  --zemin: #F5F6F8;
+  --yuzey: #FFFFFF;
+  --kenarlik: #E2E5EA;
+  --kenarlik-koyu: #C9CDD6;
+
+  --metin-birincil: #1A1D24;
+  --metin-ikincil: #5A5F6A;
+  --metin-soluk: #9098A6;
+
+  --radius: 8px;
+  --radius-buyuk: 12px;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+
+  --golge-sm: 0 1px 2px rgba(20, 24, 35, 0.06);
+  --golge-md: 0 4px 12px rgba(20, 24, 35, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--zemin);
+  color: var(--metin-birincil);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+a {
+  color: var(--lacivert);
+  text-decoration: none;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+input, select, textarea, button {
+  font-size: 14px;
+}
+
+::selection {
+  background: var(--lacivert-acik);
+  color: white;
+}
+
+/* Klavye odak gorunurlugu - erisilebilirlik */
+:focus-visible {
+  outline: 2px solid var(--lacivert-acik);
+  outline-offset: 1px;
+}

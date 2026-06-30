@@ -1,0 +1,129 @@
+export function Kart({ children, style }) {
+  return (
+    <div
+      style={{
+        background: 'var(--yuzey)',
+        border: '1px solid var(--kenarlik)',
+        borderRadius: 'var(--radius-buyuk)',
+        padding: 20,
+        boxShadow: 'var(--golge-sm)',
+        ...style,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+export function SayfaBasligi({ baslik, aciklama, eylem }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 22 }}>
+      <div>
+        <h1 style={{ fontSize: 20, fontWeight: 600, margin: 0 }}>{baslik}</h1>
+        {aciklama && (
+          <p style={{ fontSize: 13.5, color: 'var(--metin-ikincil)', margin: '4px 0 0' }}>{aciklama}</p>
+        )}
+      </div>
+      {eylem}
+    </div>
+  );
+}
+
+export function Buton({ children, variant = 'birincil', ...props }) {
+  const stiller = {
+    birincil: { background: 'var(--lacivert)', color: 'white', border: '1px solid var(--lacivert)' },
+    ikincil: { background: 'white', color: 'var(--metin-birincil)', border: '1px solid var(--kenarlik-koyu)' },
+    tehlike: { background: 'var(--kirmizi-acik)', color: 'var(--kirmizi)', border: '1px solid var(--kirmizi-acik)' },
+  };
+  return (
+    <button
+      {...props}
+      style={{
+        padding: '8px 16px',
+        borderRadius: 7,
+        fontSize: 13.5,
+        fontWeight: 500,
+        opacity: props.disabled ? 0.55 : 1,
+        ...stiller[variant],
+        ...props.style,
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+export function Etiket({ children, ton = 'notr' }) {
+  const tonlar = {
+    notr: { background: '#F1F2F4', color: 'var(--metin-ikincil)' },
+    yesil: { background: 'var(--yesil-acik)', color: 'var(--yesil)' },
+    kirmizi: { background: 'var(--kirmizi-acik)', color: 'var(--kirmizi)' },
+    amber: { background: 'var(--amber-acik)', color: 'var(--amber)' },
+  };
+  return (
+    <span
+      style={{
+        display: 'inline-block',
+        padding: '2px 9px',
+        borderRadius: 5,
+        fontSize: 12,
+        fontWeight: 500,
+        ...tonlar[ton],
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
+export function Alan({ etiket, children }) {
+  return (
+    <label style={{ display: 'block', marginBottom: 14 }}>
+      <span style={{ display: 'block', fontSize: 12.5, color: 'var(--metin-ikincil)', marginBottom: 5 }}>
+        {etiket}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+export const girdiStili = {
+  width: '100%',
+  padding: '9px 12px',
+  border: '1px solid var(--kenarlik-koyu)',
+  borderRadius: 7,
+  background: 'white',
+};
+
+export function BosDurum({ baslik, aciklama }) {
+  return (
+    <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--metin-soluk)' }}>
+      <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--metin-ikincil)', marginBottom: 4 }}>{baslik}</div>
+      {aciklama && <div style={{ fontSize: 13 }}>{aciklama}</div>}
+    </div>
+  );
+}
+
+export function HataMesaji({ children }) {
+  if (!children) return null;
+  return (
+    <div
+      style={{
+        background: 'var(--kirmizi-acik)',
+        color: 'var(--kirmizi)',
+        padding: '10px 14px',
+        borderRadius: 7,
+        fontSize: 13,
+        marginBottom: 16,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+export function paraFormat(deger, paraBirimi = 'TRY') {
+  if (deger === null || deger === undefined) return '—';
+  const sembol = { TRY: '₺', USD: '$', EUR: '€', ALTIN: 'gr' }[paraBirimi] || '';
+  return `${Number(deger).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${sembol}`;
+}
