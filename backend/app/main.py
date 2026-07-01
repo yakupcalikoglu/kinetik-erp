@@ -17,7 +17,11 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # uretimde web arayuzun gercek domaini ile sinirlandirilmali
+    allow_origins=[
+    "https://kinetik-erp.vercel.app",
+    "https://kinetik-gp468ej7p-kinetikerp.vercel.app",
+    "http://localhost:5173",
+],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
