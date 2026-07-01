@@ -7,6 +7,11 @@ from app.models.auth import Kullanici, KullaniciSirketErisim, Sirket
 from app.core.security import sifre_dogrula, token_olustur
 from app.core.deps import aktif_kullanici_getir
 from app.schemas.auth import GirisIstegi, GirisYaniti, SirketDegistirIstegi
+import secrets
+from datetime import datetime, timedelta, timezone
+from app.core.security import sifre_hashle
+from app.schemas.auth import SifremiUnuttumIstegi, SifreSifirlaIstegi
+from app.services.eposta import sifre_sifirlama_epostasi_gonder
 
 router = APIRouter(prefix="/auth", tags=["Kimlik Doğrulama"])
 
