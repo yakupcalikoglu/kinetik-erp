@@ -22,6 +22,8 @@ class Sirket(Base):
     logo_dosya_yolu = Column(String(500))
     aktif = Column(Boolean, default=True)
     olusturma_tarihi = Column(DateTime, server_default=func.now())
+  sifre_sifirlama_token = Column(String(255), nullable=True)
+    sifre_sifirlama_son_gecerlilik = Column(DateTime, nullable=True)
 
 
 class Kullanici(Base):
