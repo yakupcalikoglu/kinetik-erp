@@ -11,3 +11,4 @@ pydantic[email]
 
 reportlab
 python-dateutil
+resend
