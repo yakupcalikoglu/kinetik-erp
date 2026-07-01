@@ -67,3 +67,43 @@ def sirket_degistir(
 
     token = token_olustur(kullanici.id, [s.id for s in sirketler])
     return GirisYaniti(token=token, kullanici=kullanici, erisebildigi_sirketler=sirketler)
+    @router.post("/sifremi-unuttum")
+def sifremi_unuttum(istek: SifremiUnuttumIstegi, db: Session = Depends(get_db)):
+    kullanici = db.execute(
+        select(Kullanici).where(Kullanici.email == istek.email)
+    ).scalar_one_or_none()
+
+    # Guvenlik: kullanici bulunamasa bile ayni mesaji donduruyoruz,
+    # boylece kayitli e-postalar tahmin edilemez.
+    if kullanici is not None:
+        token = secrets.token_urlsafe(32)
+        kullanici.sifre_sifirlama_token = token
+        kullanici.sifre_sifirlama_son_gecerlilik = datetime.now(timezone.utc) + timedelta(hours=1)
+        db.commit()
+        sifre_sifirlama_epostasi_gonder(kullanici.email, token)
+
+    return {"mesaj": "Eğer bu e-posta kayıtlıysa, şifre sıfırlama bağlantısı gönderildi."}
+
+
+@router.post("/sifre-sifirla")
+def sifre_sifirla(istek: SifreSifirlaIstegi, db: Session = Depends(get_db)):
+    kullanici = db.execute(
+        select(Kullanici).where(Kullanici.sifre_sifirlama_token == istek.token)
+    ).scalar_one_or_none()
+
+    if kullanici is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Geçersiz veya süresi dolmuş bağlantı.")
+
+    son_gecerlilik = kullanici.sifre_sifirlama_son_gecerlilik
+    if son_gecerlilik is not None and son_gecerlilik.tzinfo is None:
+        son_gecerlilik = son_gecerlilik.replace(tzinfo=timezone.utc)
+
+    if son_gecerlilik is None or son_gecerlilik < datetime.now(timezone.utc):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Geçersiz veya süresi dolmuş bağlantı.")
+
+    kullanici.sifre_hash = sifre_hashle(istek.yeni_sifre)
+    kullanici.sifre_sifirlama_token = None
+    kullanici.sifre_sifirlama_son_gecerlilik = None
+    db.commit()
+
+    return {"mesaj": "Şifreniz başarıyla güncellendi."}
