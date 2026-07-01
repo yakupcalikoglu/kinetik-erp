@@ -67,7 +67,9 @@ def sirket_degistir(
 
     token = token_olustur(kullanici.id, [s.id for s in sirketler])
     return GirisYaniti(token=token, kullanici=kullanici, erisebildigi_sirketler=sirketler)
-    @router.post("/sifremi-unuttum")
+
+
+@router.post("/sifremi-unuttum")
 def sifremi_unuttum(istek: SifremiUnuttumIstegi, db: Session = Depends(get_db)):
     kullanici = db.execute(
         select(Kullanici).where(Kullanici.email == istek.email)
