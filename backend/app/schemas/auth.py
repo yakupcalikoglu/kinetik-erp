@@ -12,6 +12,15 @@ class SirketOzet(BaseModel):
 
     class Config:
         from_attributes = True
+        
+
+class SifremiUnuttumIstegi(BaseModel):
+    email: EmailStr
+
+
+class SifreSifirlaIstegi(BaseModel):
+    token: str
+    yeni_sifre: str
 
 
 class KullaniciOzet(BaseModel):
