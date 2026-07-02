@@ -60,4 +60,6 @@ class AkreditifKalemEkleIstegi(BaseModel):
  
 class AkreditifKalemOdeIstegi(BaseModel):
     odeme_tarihi: date
+    odeme_yontemi: str  # "NAKIT" | "BANKA"
+    banka_hesap_id: int | None = None
  
