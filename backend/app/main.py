@@ -37,6 +37,8 @@ app.include_router(finansal.router)
 app.include_router(diger.router)
 app.include_router(raporlama.router)
 app.include_router(yetki.router)
+app.include_router(akreditif.router)
+app.include_router(akreditif.kalem_router)
 
 
 @app.get("/")
