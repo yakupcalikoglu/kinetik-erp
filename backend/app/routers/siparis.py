@@ -203,11 +203,13 @@ def siparis_teslim_al(
             seri_no=urun.seri_no,
             sasi_no=urun.sasi_no,
             uretim_yili=urun.uretim_yili,
+            garanti_bitis_tarihi=urun.garanti_bitis_tarihi,
+            barkod=urun.barkod,
             kaynak=siparis.kaynak,
             siparis_id=siparis.id,
             durum=StokDurum.GUMRUKTE if siparis.kaynak.value == "ITHALAT" else StokDurum.DEPODA,
             tedarikci_cari_id=siparis.tedarikci_cari_id,
-            satinalma_maliyeti_try=detay.birim_fiyat,  # basitlestirilmis; kur cevrimi sonraki adim
+            satinalma_maliyeti_try=detay.birim_fiyat,
         )
         db.add(yeni_stok)
         db.flush()
