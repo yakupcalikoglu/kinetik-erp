@@ -16,7 +16,7 @@ from app.models.finansal import (
 from app.models.diger import PersonelOdeme, Personel, SabitGider, BorcOdeme, Borc
 from app.schemas.raporlama import (
     SeriNoRaporYaniti, HareketTuruRaporYaniti, HareketTuruSatiri,
-    AnaKasaOzetYaniti, GenelBakisYaniti,
+    AnaKasaOzetYaniti, GenelBakisYaniti, YaklasanVadeSatiri, YaklasanVadelerYaniti,
 )
 
 router = APIRouter(prefix="/raporlar", tags=["Raporlama"])
@@ -299,7 +299,9 @@ def genel_bakis(
         geciken_taksit_sayisi=len(geciken_taksitler),
         geciken_taksit_toplami=sum((t.tutar for t in geciken_taksitler), Decimal("0")),
         depodaki_urun_sayisi=depodaki_sayisi,
-        aktif_kiralama_sayisi=aktif_kiralama_sayisi,)
+        aktif_kiralama_sayisi=aktif_kiralama_sayisi,
+    )
+
 
 @router.get("/yaklasan-vadeler", response_model=YaklasanVadelerYaniti,
             dependencies=[Depends(izin_gerektir("RAPOR_GORUNTULE"))])
@@ -314,15 +316,15 @@ def yaklasan_vadeler(
     listede, kaynagi ne olursa olsun (cek/leasing/akreditif/taksit/kira)
     birlestirip tarihe gore siralar.
     """
-    from app.models.finansal import CekTip, LeasingSozlesme
+    from app.models.finansal import CekTip, LeasingSozlesme, LeasingOdeme
     from app.models.akreditif import Akreditif, AkreditifKalemi
- 
+
     bugun = date.today()
     son_tarih = bugun + timedelta(days=gun)
- 
+
     odemeler: list[YaklasanVadeSatiri] = []
     tahsilatlar: list[YaklasanVadeSatiri] = []
- 
+
     # --- Çek: VERİLEN -> odeme, ALINAN -> tahsilat
     cekler = list(db.execute(
         select(Cek).where(
@@ -339,7 +341,7 @@ def yaklasan_vadeler(
             tutar=c.tutar, para_birimi=c.para_birimi.value,
         )
         (odemeler if c.tip == CekTip.VERILEN else tahsilatlar).append(satir)
- 
+
     # --- Leasing ödemeleri -> odeme
     leasing_odemeleri = list(db.execute(
         select(LeasingOdeme, LeasingSozlesme.sozlesme_no, LeasingSozlesme.para_birimi)
@@ -357,7 +359,7 @@ def yaklasan_vadeler(
             aciklama=f"Leasing {sozlesme_no or ''} - Taksit {odeme.taksit_no}",
             tutar=odeme.tutar, para_birimi=para_birimi.value,
         ))
- 
+
     # --- Akreditif kalemleri -> odeme
     akreditif_kalemleri = list(db.execute(
         select(AkreditifKalemi, Akreditif.akreditif_no, Akreditif.para_birimi)
@@ -375,7 +377,7 @@ def yaklasan_vadeler(
             aciklama=f"Akreditif {akreditif_no or ''} - {kalem.tip.value}",
             tutar=kalem.tutar, para_birimi=para_birimi,
         ))
- 
+
     # --- Taksitli satış taksitleri -> tahsilat
     taksitler = list(db.execute(
         select(TaksitDetay, TaksitliSatisPlani.para_birimi)
@@ -393,7 +395,7 @@ def yaklasan_vadeler(
             aciklama=f"Taksit {taksit.taksit_no}",
             tutar=taksit.tutar, para_birimi=para_birimi.value,
         ))
- 
+
     # --- Kiralama ödemeleri -> tahsilat (donem_sonu vade kabul edilir)
     kira_odemeleri = list(db.execute(
         select(KiralamaOdeme, KiralamaSozlesme.para_birimi)
@@ -411,14 +413,13 @@ def yaklasan_vadeler(
             aciklama=f"Kira dönemi {odeme.donem_basi} - {odeme.donem_sonu}",
             tutar=odeme.tutar, para_birimi=para_birimi.value,
         ))
- 
+
     odemeler.sort(key=lambda s: s.tarih)
     tahsilatlar.sort(key=lambda s: s.tarih)
- 
+
     return YaklasanVadelerYaniti(
         odemeler=odemeler,
         odemeler_toplam=sum((s.tutar for s in odemeler), Decimal("0")),
         tahsilatlar=tahsilatlar,
         tahsilatlar_toplam=sum((s.tutar for s in tahsilatlar), Decimal("0")),
     )
- 
