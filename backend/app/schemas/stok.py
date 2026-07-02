@@ -70,7 +70,6 @@ class StokDurumGuncelleIstegi(BaseModel):
     satis_fiyati_try: Decimal | None = None
     satis_tarihi: date | None = None
 
-
 class MaliyetKalemiEkleIstegi(BaseModel):
     tip: MaliyetTip
     aciklama: str | None = None
