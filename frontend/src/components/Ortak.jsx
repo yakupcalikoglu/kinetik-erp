@@ -182,4 +182,6 @@ export function eylemChipStili(ton = 'notr') {
     lineHeight: 1.4,
   };
 }
-
+export const BIRIM_SECENEKLERI = [
+  'ADET', 'KG', 'LT', 'M', 'M2', 'M3', 'TON', 'PAKET', 'KUTU', 'ÇİFT', 'TAKIM',
+];
