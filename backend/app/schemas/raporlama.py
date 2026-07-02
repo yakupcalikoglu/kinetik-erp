@@ -54,7 +54,9 @@ class GenelBakisYaniti(BaseModel):
     geciken_taksit_toplami: Decimal
     depodaki_urun_sayisi: int
     aktif_kiralama_sayisi: int
-    class YaklasanVadeSatiri(BaseModel):
+
+
+class YaklasanVadeSatiri(BaseModel):
     tarih: date
     tur: str  # CEK, LEASING, AKREDITIF, TAKSIT, KIRA
     aciklama: str
