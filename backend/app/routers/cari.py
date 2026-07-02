@@ -1,3 +1,4 @@
+from sqlalchemy.exc import IntegrityError
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func, case
@@ -144,5 +145,25 @@ def cari_bakiye(
             toplam_cikis=r.toplam_cikis or 0,
             net_bakiye=(r.toplam_giris or 0) - (r.toplam_cikis or 0),
         )
-        for r in sonuclar
-    ]
+        for r in sonuclar]
+@router.delete("/{cari_id}",
+               dependencies=[Depends(izin_gerektir("CARI_DUZENLE"))])
+def cari_sil(
+    cari_id: int,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    cari = db.get(CariHesap, cari_id)
+    if cari is None or cari.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Cari kayıt bulunamadı.")
+
+    try:
+        db.delete(cari)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Bu cari kayıt başka kayıtlarda (sipariş, çek, hareket vb.) kullanıldığı için silinemiyor."
+        )
+    return {"silindi": True}
