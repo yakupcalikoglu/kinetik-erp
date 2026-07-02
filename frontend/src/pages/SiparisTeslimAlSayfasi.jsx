@@ -20,7 +20,14 @@ export default function SiparisTeslimAlSayfasi() {
         const acilanSatirlar = [];
         for (const urun of res.data.urunler) {
           for (let i = 0; i < urun.miktar; i++) {
-            acilanSatirlar.push({ siparis_detay_id: urun.id, seri_no: '', sasi_no: '', uretim_yili: '' });
+            acilanSatirlar.push({
+              siparis_detay_id: urun.id,
+              seri_no: '',
+              sasi_no: '',
+              uretim_yili: '',
+              garanti_bitis_tarihi: '',
+              barkod: '',
+            });
           }
         }
         setSatirlar(acilanSatirlar);
@@ -49,6 +56,8 @@ export default function SiparisTeslimAlSayfasi() {
           seri_no: s.seri_no,
           sasi_no: s.sasi_no || null,
           uretim_yili: s.uretim_yili ? Number(s.uretim_yili) : null,
+          garanti_bitis_tarihi: s.garanti_bitis_tarihi || null,
+          barkod: s.barkod || null,
         })),
       });
       setTamamlandi(data);
@@ -93,7 +102,7 @@ export default function SiparisTeslimAlSayfasi() {
           <table>
             <thead>
               <tr style={{ background: 'var(--zemin)' }}>
-                {['#', 'Sipariş Satırı', 'Seri No', 'Şasi No', 'Üretim Yılı'].map((b) => (
+                {['#', 'Sipariş Satırı', 'Seri No', 'Şasi No', 'Üretim Yılı', 'Garanti Bitiş', 'Barkod'].map((b) => (
                   <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)' }}>{b}</th>
                 ))}
               </tr>
@@ -116,6 +125,14 @@ export default function SiparisTeslimAlSayfasi() {
                   <td style={{ padding: 8 }}>
                     <input type="number" value={s.uretim_yili} onChange={(e) => satirGuncelle(i, 'uretim_yili', e.target.value)}
                       style={{ ...girdiStili, width: 90 }} />
+                  </td>
+                  <td style={{ padding: 8 }}>
+                    <input type="date" value={s.garanti_bitis_tarihi} onChange={(e) => satirGuncelle(i, 'garanti_bitis_tarihi', e.target.value)}
+                      style={{ ...girdiStili, width: 140 }} />
+                  </td>
+                  <td style={{ padding: 8 }}>
+                    <input value={s.barkod} onChange={(e) => satirGuncelle(i, 'barkod', e.target.value)}
+                      style={{ ...girdiStili, width: 130 }} />
                   </td>
                 </tr>
               ))}
