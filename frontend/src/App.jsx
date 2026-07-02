@@ -42,6 +42,7 @@ function App() {
             <Route path="cariler" element={<CarilerSayfasi />} />
             <Route path="stok" element={<StokSayfasi />} />
             <Route path="siparisler" element={<SiparislerSayfasi />} />
+            <Route path="siparisler/:siparisId/duzenle" element={<SiparisOlusturSayfasi />} />
             <Route path="siparisler/yeni" element={<SiparisOlusturSayfasi />} />
             <Route path="siparisler/:siparisId/teslim-al" element={<SiparisTeslimAlSayfasi />} />
             <Route path="banka-kasa" element={<BankaKasaSayfasi />} />
