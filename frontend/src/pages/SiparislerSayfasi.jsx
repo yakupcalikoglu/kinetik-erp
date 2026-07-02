@@ -15,10 +15,10 @@ const DURUM_METIN = {
 
 // Küçük, renkli "chip" tarzı işlem butonu. ton: 'lacivert' | 'yesil' | 'kirmizi' | 'notr'
 const CHIP_RENK = {
-  lacivert: { bg: 'var(--lacivert-acik, #e8edf7)', renk: 'var(--lacivert)' },
-  yesil: { bg: 'var(--yesil-acik)', renk: 'var(--yesil)' },
-  kirmizi: { bg: 'var(--kirmizi-acik, #fdeaea)', renk: 'var(--kirmizi)' },
-  notr: { bg: 'var(--zemin)', renk: 'var(--metin-ikincil)' },
+  lacivert: { bg: '#e8edf7', renk: '#1e3a6e' },
+  yesil: { bg: '#e3f5e9', renk: '#1c7c4c' },
+  kirmizi: { bg: '#fdeaea', renk: '#c0392b' },
+  notr: { bg: '#f1f2f4', renk: '#5a6472' },
 };
 
 function eylemChipStili(ton) {
