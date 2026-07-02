@@ -39,6 +39,8 @@ class CekDurumGuncelleIstegi(BaseModel):
     yeni_durum: CekDurum
     ciro_edilen_cari_id: int | None = None
     aciklama: str | None = None
+    odeme_yontemi: str | None = None  # TAHSIL_EDILDI/ODENDI icin zorunlu: "NAKIT" | "BANKA"
+    banka_hesap_id: int | None = None
 
 
 class CekGecmisYanit(BaseModel):
@@ -92,6 +94,8 @@ class LeasingOdemeYanit(BaseModel):
 
 class OdemeTahsilIstegi(BaseModel):
     odeme_tarihi: date
+    odeme_yontemi: str  # "NAKIT" | "BANKA"
+    banka_hesap_id: int | None = None
 
 
 # ------------------------------------------------------------ Taksitli Satış
@@ -134,6 +138,8 @@ class TaksitDetayYanit(BaseModel):
 
 class TaksitTahsilIstegi(BaseModel):
     odeme_tarihi: date
+    odeme_yontemi: str  # "NAKIT" | "BANKA"
+    banka_hesap_id: int | None = None
     tahsilat_kaynak_tablo: str | None = None
     tahsilat_kaynak_id: int | None = None
 
