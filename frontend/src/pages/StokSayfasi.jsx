@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, hataMesajiCikar } from '../api/client';
-import { Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat } from '../components/Ortak';
+import { Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat, eylemChipStili } from '../components/Ortak';
 
 const DURUM_ETIKET = {
   DEPODA: 'yesil', SIPARISTE: 'notr', YOLDA: 'amber', GUMRUKTE: 'amber',
@@ -12,16 +12,24 @@ const DURUM_METIN = {
   ANTREPODA: 'Antrepoda', SATILDI: 'Satıldı', KIRADA: 'Kirada', BAKIMDA: 'Bakımda', HURDA: 'Hurda',
 };
 
-function YeniStokKartiFormu({ onKaydedildi, onVazgec }) {
-  const [form, setForm] = useState({
-    marka: '',
-    model: '',
-    birim: 'ADET',
-    birim_agirlik_kg: '',
-    aciklama: '',
-    mense_ulke: '',
-    gtip_kodu: '',
-  });
+function bosStokKartiForm() {
+  return { marka: '', model: '', birim: 'ADET', birim_agirlik_kg: '', aciklama: '', mense_ulke: '', gtip_kodu: '' };
+}
+
+function StokKartiFormu({ duzenlenenKart, onKaydedildi, onVazgec }) {
+  const duzenlemeModu = !!duzenlenenKart;
+  const [form, setForm] = useState(() => duzenlenenKart
+    ? {
+        marka: duzenlenenKart.marka || '',
+        model: duzenlenenKart.model || '',
+        birim: duzenlenenKart.birim || 'ADET',
+        birim_agirlik_kg: duzenlenenKart.birim_agirlik_kg ?? '',
+        aciklama: duzenlenenKart.aciklama || '',
+        mense_ulke: duzenlenenKart.mense_ulke || '',
+        gtip_kodu: duzenlenenKart.gtip_kodu || '',
+      }
+    : bosStokKartiForm()
+  );
   const [hata, setHata] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
   const [olusturulanId, setOlusturulanId] = useState(null);
@@ -31,11 +39,17 @@ function YeniStokKartiFormu({ onKaydedildi, onVazgec }) {
     setHata(null);
     setKaydediliyor(true);
     try {
-      const { data } = await api.post('/stok-kartlari', {
+      const govde = {
         ...form,
         birim_agirlik_kg: form.birim_agirlik_kg ? Number(form.birim_agirlik_kg) : null,
-      });
-      setOlusturulanId(data.id);
+      };
+      if (duzenlemeModu) {
+        await api.put(`/stok-kartlari/${duzenlenenKart.id}`, govde);
+        onKaydedildi();
+      } else {
+        const { data } = await api.post('/stok-kartlari', govde);
+        setOlusturulanId(data.id);
+      }
     } catch (err) {
       setHata(hataMesajiCikar(err));
     } finally {
@@ -60,7 +74,9 @@ function YeniStokKartiFormu({ onKaydedildi, onVazgec }) {
   return (
     <Kart style={{ marginBottom: 20 }}>
       <form onSubmit={kaydet}>
-        <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 14 }}>Yeni stok kartı</div>
+        <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 14 }}>
+          {duzenlemeModu ? `Stok kartını düzenle — #${duzenlenenKart.id}` : 'Yeni stok kartı'}
+        </div>
         <HataMesaji>{hata}</HataMesaji>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr 1fr', gap: 12 }}>
           <Alan etiket="Marka">
@@ -86,7 +102,9 @@ function YeniStokKartiFormu({ onKaydedildi, onVazgec }) {
           <input value={form.aciklama} onChange={(e) => setForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
         </Alan>
         <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-          <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Kaydediliyor...' : 'Stok kartı oluştur'}</Buton>
+          <Buton type="submit" disabled={kaydediliyor}>
+            {kaydediliyor ? 'Kaydediliyor...' : duzenlemeModu ? 'Değişiklikleri kaydet' : 'Stok kartı oluştur'}
+          </Buton>
           <Buton type="button" variant="ikincil" onClick={onVazgec}>Vazgeç</Buton>
         </div>
       </form>
@@ -101,6 +119,7 @@ export default function StokSayfasi() {
   const [yukleniyor, setYukleniyor] = useState(true);
   const [hata, setHata] = useState(null);
   const [formAcik, setFormAcik] = useState(false);
+  const [duzenlenenKart, setDuzenlenenKart] = useState(null);
 
   function urunleriYukle() {
     setYukleniyor(true);
@@ -110,24 +129,54 @@ export default function StokSayfasi() {
       .finally(() => setYukleniyor(false));
   }
 
+  function stokKartlariniYukle() {
+    api.get('/stok-kartlari').then((r) => setStokKartlari(r.data)).catch(() => {});
+  }
+
   useEffect(() => {
     urunleriYukle();
-    api.get('/stok-kartlari').then((r) => setStokKartlari(r.data)).catch(() => {});
+    stokKartlariniYukle();
   }, [durumFiltre]);
+
+  function yeniKartAc() {
+    setDuzenlenenKart(null);
+    setFormAcik(true);
+  }
+
+  function duzenle(kart) {
+    setDuzenlenenKart(kart);
+    setFormAcik(true);
+  }
+
+  function formuKapat() {
+    setFormAcik(false);
+    setDuzenlenenKart(null);
+  }
+
+  async function kartiSil(kart) {
+    if (!window.confirm(`${kart.marka} ${kart.model} stok kartını silmek istediğinize emin misiniz?`)) return;
+    try {
+      await api.delete(`/stok-kartlari/${kart.id}`);
+      stokKartlariniYukle();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    }
+  }
 
   return (
     <div>
       <SayfaBasligi
         baslik="Stok"
         aciklama="Seri numarası bazlı ürün takibi ve maliyet dökümü"
-        eylem={!formAcik && <Buton onClick={() => setFormAcik(true)}>+ Yeni stok kartı</Buton>}
+        eylem={!formAcik && <Buton onClick={yeniKartAc}>+ Yeni stok kartı</Buton>}
       />
       <HataMesaji>{hata}</HataMesaji>
 
       {formAcik && (
-        <YeniStokKartiFormu
-          onKaydedildi={() => { setFormAcik(false); api.get('/stok-kartlari').then((r) => setStokKartlari(r.data)); }}
-          onVazgec={() => setFormAcik(false)}
+        <StokKartiFormu
+          duzenlenenKart={duzenlenenKart}
+          onKaydedildi={() => { formuKapat(); stokKartlariniYukle(); }}
+          onVazgec={formuKapat}
         />
       )}
 
@@ -139,7 +188,7 @@ export default function StokSayfasi() {
           <table>
             <thead>
               <tr style={{ background: 'var(--zemin)' }}>
-                {['ID', 'Marka', 'Model', 'Birim Ağırlık', 'Menşei', 'GTİP'].map((b) => (
+                {['ID', 'Marka', 'Model', 'Birim Ağırlık', 'Menşei', 'GTİP', 'İşlem'].map((b) => (
                   <th key={b} style={{ textAlign: 'left', padding: '8px 16px', fontSize: 12, color: 'var(--metin-ikincil)' }}>{b}</th>
                 ))}
               </tr>
@@ -153,6 +202,12 @@ export default function StokSayfasi() {
                   <td style={{ padding: '8px 16px' }}>{sk.birim_agirlik_kg ? `${sk.birim_agirlik_kg} kg` : '—'}</td>
                   <td style={{ padding: '8px 16px' }}>{sk.mense_ulke || '—'}</td>
                   <td style={{ padding: '8px 16px' }}>{sk.gtip_kodu || '—'}</td>
+                  <td style={{ padding: '8px 16px' }}>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button onClick={() => duzenle(sk)} style={eylemChipStili('lacivert')}>Düzenle</button>
+                      <button onClick={() => kartiSil(sk)} style={eylemChipStili('kirmizi')}>Sil</button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
