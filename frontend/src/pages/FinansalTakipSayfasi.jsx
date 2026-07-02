@@ -581,15 +581,39 @@ function BakimSekmesi() {
   );
 }
 
-// ============================================================== LEASING (salt görüntüleme - olusturma siparis baglantili)
+// ============================================================== LEASING
 function LeasingSekmesi() {
   const [liste, setListe] = useState([]);
   const [hata, setHata] = useState(null);
   const [seciliPlan, setSeciliPlan] = useState(null);
+  const [formAcik, setFormAcik] = useState(false);
+  const [form, setForm] = useState({
+    leasing_firmasi_cari_id: '', stok_seri_no_id: '', sozlesme_no: '',
+    baslangic_tarihi: new Date().toISOString().slice(0, 10),
+    toplam_tutar: '', para_birimi: 'TRY', taksit_sayisi: 12, notlar: '',
+  });
+  const cariHaritasi = useCariHaritasi();
 
-  useEffect(() => {
+  function yukle() {
     api.get('/leasing-sozlesmeleri').then((r) => setListe(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
-  }, []);
+  }
+  useEffect(yukle, []);
+
+  async function kaydet(e) {
+    e.preventDefault();
+    setHata(null);
+    try {
+      await api.post('/leasing-sozlesmeleri', {
+        ...form,
+        leasing_firmasi_cari_id: Number(form.leasing_firmasi_cari_id),
+        stok_seri_no_id: form.stok_seri_no_id ? Number(form.stok_seri_no_id) : null,
+        toplam_tutar: Number(form.toplam_tutar),
+        taksit_sayisi: Number(form.taksit_sayisi),
+      });
+      setFormAcik(false);
+      yukle();
+    } catch (err) { setHata(hataMesajiCikar(err)); }
+  }
 
   async function planiGoster(id) {
     try {
@@ -607,14 +631,60 @@ function LeasingSekmesi() {
 
   return (
     <div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+        <Buton onClick={() => setFormAcik((a) => !a)}>{formAcik ? 'Kapat' : '+ Yeni leasing'}</Buton>
+      </div>
       <HataMesaji>{hata}</HataMesaji>
+
+      {formAcik && (
+        <Kart style={{ marginBottom: 16 }}>
+          <form onSubmit={kaydet} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+            <Alan etiket="Leasing firması (cari ID)">
+              <input required type="number" value={form.leasing_firmasi_cari_id}
+                onChange={(e) => setForm((f) => ({ ...f, leasing_firmasi_cari_id: e.target.value }))} style={girdiStili} />
+            </Alan>
+            <Alan etiket="Stok seri no ID (opsiyonel)">
+              <input type="number" value={form.stok_seri_no_id}
+                onChange={(e) => setForm((f) => ({ ...f, stok_seri_no_id: e.target.value }))} style={girdiStili} />
+            </Alan>
+            <Alan etiket="Sözleşme no">
+              <input value={form.sozlesme_no} onChange={(e) => setForm((f) => ({ ...f, sozlesme_no: e.target.value }))} style={girdiStili} />
+            </Alan>
+            <Alan etiket="Başlangıç tarihi">
+              <input required type="date" value={form.baslangic_tarihi}
+                onChange={(e) => setForm((f) => ({ ...f, baslangic_tarihi: e.target.value }))} style={girdiStili} />
+            </Alan>
+            <Alan etiket="Toplam tutar">
+              <input required type="number" step="0.01" value={form.toplam_tutar}
+                onChange={(e) => setForm((f) => ({ ...f, toplam_tutar: e.target.value }))} style={girdiStili} />
+            </Alan>
+            <Alan etiket="Para birimi">
+              <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={girdiStili}>
+                <option value="TRY">TRY</option>
+                <option value="USD">USD</option>
+                <option value="EUR">EUR</option>
+              </select>
+            </Alan>
+            <Alan etiket="Taksit sayısı">
+              <input required type="number" min="1" value={form.taksit_sayisi}
+                onChange={(e) => setForm((f) => ({ ...f, taksit_sayisi: e.target.value }))} style={girdiStili} />
+            </Alan>
+            <Alan etiket="Notlar">
+              <input value={form.notlar} onChange={(e) => setForm((f) => ({ ...f, notlar: e.target.value }))} style={girdiStili} />
+            </Alan>
+            <div style={{ alignSelf: 'end' }}><Buton type="submit">Sözleşmeyi oluştur</Buton></div>
+          </form>
+        </Kart>
+      )}
+
       <Kart style={{ padding: 0, marginBottom: 16 }}>
         <BasitTablo
-          basliklar={['Sözleşme No', 'Toplam Tutar', 'Taksit Sayısı', '']}
+          basliklar={['Sözleşme No', 'Leasing Firması', 'Toplam Tutar', 'Taksit Sayısı', '']}
           satirlar={liste}
           render={(l) => (
             <tr key={l.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
               <td style={{ padding: '10px 16px', fontWeight: 500 }}>{l.sozlesme_no || `#${l.id}`}</td>
+              <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{cariGoster(l.leasing_firmasi_cari_id, cariHaritasi)}</td>
               <td style={{ padding: '10px 16px' }}>{paraFormat(l.toplam_tutar, l.para_birimi)}</td>
               <td style={{ padding: '10px 16px' }}>{l.taksit_sayisi}</td>
               <td style={{ padding: '10px 16px' }}>
