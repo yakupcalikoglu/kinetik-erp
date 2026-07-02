@@ -13,7 +13,15 @@ const DURUM_METIN = {
 };
 
 function YeniStokKartiFormu({ onKaydedildi, onVazgec }) {
-  const [form, setForm] = useState({ marka: '', model: '', birim: 'ADET', birim_agirlik_kg: '', aciklama: '', mense_ulke: '', gtip_kodu: '' });
+  const [form, setForm] = useState({
+    marka: '',
+    model: '',
+    birim: 'ADET',
+    birim_agirlik_kg: '',
+    aciklama: '',
+    mense_ulke: '',
+    gtip_kodu: '',
+  });
   const [hata, setHata] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
   const [olusturulanId, setOlusturulanId] = useState(null);
@@ -54,7 +62,7 @@ function YeniStokKartiFormu({ onKaydedildi, onVazgec }) {
       <form onSubmit={kaydet}>
         <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 14 }}>Yeni stok kartı</div>
         <HataMesaji>{hata}</HataMesaji>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr 1fr', gap: 12 }}>
           <Alan etiket="Marka">
             <input required value={form.marka} onChange={(e) => setForm((f) => ({ ...f, marka: e.target.value }))} style={girdiStili} />
           </Alan>
@@ -66,6 +74,12 @@ function YeniStokKartiFormu({ onKaydedildi, onVazgec }) {
           </Alan>
           <Alan etiket="Birim ağırlık (kg)">
             <input type="number" step="0.1" value={form.birim_agirlik_kg} onChange={(e) => setForm((f) => ({ ...f, birim_agirlik_kg: e.target.value }))} style={girdiStili} />
+          </Alan>
+          <Alan etiket="Menşei ülke">
+            <input value={form.mense_ulke} onChange={(e) => setForm((f) => ({ ...f, mense_ulke: e.target.value }))} placeholder="Çin" style={girdiStili} />
+          </Alan>
+          <Alan etiket="GTİP kodu">
+            <input value={form.gtip_kodu} onChange={(e) => setForm((f) => ({ ...f, gtip_kodu: e.target.value }))} placeholder="8427.20" style={girdiStili} />
           </Alan>
         </div>
         <Alan etiket="Açıklama">
@@ -125,7 +139,7 @@ export default function StokSayfasi() {
           <table>
             <thead>
               <tr style={{ background: 'var(--zemin)' }}>
-                {['ID', 'Marka', 'Model', 'Birim Ağırlık'].map((b) => (
+                {['ID', 'Marka', 'Model', 'Birim Ağırlık', 'Menşei', 'GTİP'].map((b) => (
                   <th key={b} style={{ textAlign: 'left', padding: '8px 16px', fontSize: 12, color: 'var(--metin-ikincil)' }}>{b}</th>
                 ))}
               </tr>
@@ -137,6 +151,8 @@ export default function StokSayfasi() {
                   <td style={{ padding: '8px 16px' }}>{sk.marka}</td>
                   <td style={{ padding: '8px 16px' }}>{sk.model}</td>
                   <td style={{ padding: '8px 16px' }}>{sk.birim_agirlik_kg ? `${sk.birim_agirlik_kg} kg` : '—'}</td>
+                  <td style={{ padding: '8px 16px' }}>{sk.mense_ulke || '—'}</td>
+                  <td style={{ padding: '8px 16px' }}>{sk.gtip_kodu || '—'}</td>
                 </tr>
               ))}
             </tbody>
