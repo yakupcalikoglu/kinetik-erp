@@ -3,7 +3,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select
  
 from app.db.session import get_db
-from app.core.deps import aktif_sirket_id_getir, izin_gerektir
+from app.core.deps import aktif_sirket_id_getir, izin_gerektir, aktif_kullanici_getir
+from app.models.auth import Kullanici
 from app.models.akreditif import Akreditif, AkreditifKalemi, AkreditifDurum
 from app.models.stok import Siparis
 from app.models.banka import BankaHesabi
@@ -11,6 +12,7 @@ from app.schemas.akreditif import (
     AkreditifOlusturIstegi, AkreditifYanit, AkreditifDurumGuncelleIstegi,
     AkreditifKalemEkleIstegi, AkreditifKalemOdeIstegi,
 )
+from app.services.para_hareketi import para_hareketi_olustur
  
 router = APIRouter(prefix="/akreditifler", tags=["Akreditif"])
  
@@ -136,6 +138,7 @@ def akreditif_kalemi_ode(
     kalem_id: int,
     istek: AkreditifKalemOdeIstegi,
     sirket_id: int = Depends(aktif_sirket_id_getir),
+    kullanici: Kullanici = Depends(aktif_kullanici_getir),
     db: Session = Depends(get_db),
 ):
     kalem = db.get(AkreditifKalemi, kalem_id)
@@ -148,6 +151,14 @@ def akreditif_kalemi_ode(
  
     kalem.odendi_mi = True
     kalem.odeme_tarihi = istek.odeme_tarihi
+ 
+    para_hareketi_olustur(
+        db, sirket_id, kullanici.id, "CIKIS", kalem.tutar,
+        istek.odeme_yontemi, istek.banka_hesap_id,
+        aciklama=f"Akreditif {akreditif.akreditif_no or ''} - {kalem.tip.value}",
+        kaynak_tablo="AKREDITIF_KALEMI", kaynak_id=kalem.id,
+    )
+ 
     _durumu_yeniden_hesapla(db, akreditif)
     db.commit()
     return {"odendi": True}
