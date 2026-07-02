@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, hataMesajiCikar } from '../api/client';
 import {
-  Kart, SayfaBasligi, Buton, Etiket, Alan, girdiStili, BosDurum, HataMesaji, paraFormat,
+  Kart, SayfaBasligi, Buton, Etiket, Alan, girdiStili, BosDurum, HataMesaji, paraFormat, eylemChipStili,
 } from '../components/Ortak';
 
 const TIP_ETIKET = {
@@ -12,10 +12,20 @@ const TIP_ETIKET = {
   DIGER: { metin: 'Diğer', ton: 'notr' },
 };
 
-function YeniCariFormu({ onKaydedildi, onVazgec }) {
-  const [form, setForm] = useState({
-    tip: 'TEDARIKCI', vergi_no: '', unvan: '', vergi_dairesi: '', adres: '', telefon: '', email: '',
-  });
+function CariFormu({ duzenlenenCari, onKaydedildi, onVazgec }) {
+  const duzenlemeModu = !!duzenlenenCari;
+  const [form, setForm] = useState(() => duzenlenenCari
+    ? {
+        tip: duzenlenenCari.tip,
+        vergi_no: duzenlenenCari.vergi_no || '',
+        unvan: duzenlenenCari.unvan || '',
+        vergi_dairesi: duzenlenenCari.vergi_dairesi || '',
+        adres: duzenlenenCari.adres || '',
+        telefon: duzenlenenCari.telefon || '',
+        email: duzenlenenCari.email || '',
+      }
+    : { tip: 'TEDARIKCI', vergi_no: '', unvan: '', vergi_dairesi: '', adres: '', telefon: '', email: '' }
+  );
   const [sorgulaniyor, setSorgulaniyor] = useState(false);
   const [sorguSonucu, setSorguSonucu] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
@@ -54,7 +64,11 @@ function YeniCariFormu({ onKaydedildi, onVazgec }) {
     setKaydediliyor(true);
     setHata(null);
     try {
-      await api.post('/cariler', { ...form, otomatik_dolduruldu: !!sorguSonucu?.bulundu });
+      if (duzenlemeModu) {
+        await api.put(`/cariler/${duzenlenenCari.id}`, form);
+      } else {
+        await api.post('/cariler', { ...form, otomatik_dolduruldu: !!sorguSonucu?.bulundu });
+      }
       onKaydedildi();
     } catch (err) {
       setHata(hataMesajiCikar(err));
@@ -66,7 +80,9 @@ function YeniCariFormu({ onKaydedildi, onVazgec }) {
   return (
     <Kart style={{ marginBottom: 20 }}>
       <form onSubmit={kaydet}>
-        <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 16 }}>Yeni cari kartı</div>
+        <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 16 }}>
+          {duzenlemeModu ? `Cariyi düzenle — ${duzenlenenCari.unvan}` : 'Yeni cari kartı'}
+        </div>
         <HataMesaji>{hata}</HataMesaji>
 
         <Alan etiket="Cari tipi">
@@ -87,9 +103,11 @@ function YeniCariFormu({ onKaydedildi, onVazgec }) {
               placeholder="1234567890"
               style={girdiStili}
             />
-            <Buton type="button" variant="ikincil" onClick={vergiNoSorgula} disabled={sorgulaniyor}>
-              {sorgulaniyor ? 'Sorgulanıyor...' : 'Sorgula'}
-            </Buton>
+            {!duzenlemeModu && (
+              <Buton type="button" variant="ikincil" onClick={vergiNoSorgula} disabled={sorgulaniyor}>
+                {sorgulaniyor ? 'Sorgulanıyor...' : 'Sorgula'}
+              </Buton>
+            )}
           </div>
           {sorguSonucu && (
             <div style={{ marginTop: 6 }}>
@@ -149,7 +167,7 @@ function YeniCariFormu({ onKaydedildi, onVazgec }) {
 
         <div style={{ display: 'flex', gap: 8, marginTop: 18 }}>
           <Buton type="submit" disabled={kaydediliyor}>
-            {kaydediliyor ? 'Kaydediliyor...' : 'Cariyi kaydet'}
+            {kaydediliyor ? 'Kaydediliyor...' : duzenlemeModu ? 'Değişiklikleri kaydet' : 'Cariyi kaydet'}
           </Buton>
           <Buton type="button" variant="ikincil" onClick={onVazgec}>Vazgeç</Buton>
         </div>
@@ -163,6 +181,7 @@ export default function CarilerSayfasi() {
   const [yukleniyor, setYukleniyor] = useState(true);
   const [hata, setHata] = useState(null);
   const [formAcik, setFormAcik] = useState(false);
+  const [duzenlenenCari, setDuzenlenenCari] = useState(null);
   const [arama, setArama] = useState('');
 
   function listeyiYukle() {
@@ -175,20 +194,46 @@ export default function CarilerSayfasi() {
 
   useEffect(() => { listeyiYukle(); }, []); // eslint-disable-line
 
+  function yeniCariAc() {
+    setDuzenlenenCari(null);
+    setFormAcik(true);
+  }
+
+  function duzenle(cari) {
+    setDuzenlenenCari(cari);
+    setFormAcik(true);
+  }
+
+  function formuKapat() {
+    setFormAcik(false);
+    setDuzenlenenCari(null);
+  }
+
+  async function cariyiSil(cari) {
+    if (!window.confirm(`${cari.unvan} adlı cariyi silmek istediğinize emin misiniz?`)) return;
+    try {
+      await api.delete(`/cariler/${cari.id}`);
+      listeyiYukle();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    }
+  }
+
   return (
     <div>
       <SayfaBasligi
         baslik="Cari hesaplar"
         aciklama="Müşteri, tedarikçi, personel ve ortak kayıtları"
-        eylem={!formAcik && <Buton onClick={() => setFormAcik(true)}>+ Yeni cari</Buton>}
+        eylem={!formAcik && <Buton onClick={yeniCariAc}>+ Yeni cari</Buton>}
       />
 
       <HataMesaji>{hata}</HataMesaji>
 
       {formAcik && (
-        <YeniCariFormu
-          onKaydedildi={() => { setFormAcik(false); listeyiYukle(); }}
-          onVazgec={() => setFormAcik(false)}
+        <CariFormu
+          duzenlenenCari={duzenlenenCari}
+          onKaydedildi={() => { formuKapat(); listeyiYukle(); }}
+          onVazgec={formuKapat}
         />
       )}
 
@@ -211,7 +256,7 @@ export default function CarilerSayfasi() {
           <table>
             <thead>
               <tr style={{ background: 'var(--zemin)' }}>
-                {['Unvan', 'Tip', 'Vergi No', 'Telefon', 'Bakiye (TL)', 'Bakiye (USD)'].map((b) => (
+                {['Unvan', 'Tip', 'Vergi No', 'Telefon', 'Bakiye (TL)', 'Bakiye (USD)', 'İşlem'].map((b) => (
                   <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>
                     {b}
                   </th>
@@ -229,6 +274,12 @@ export default function CarilerSayfasi() {
                   <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>{c.telefon || '—'}</td>
                   <td style={{ padding: '12px 16px' }}>{paraFormat(c.bakiye_try, 'TRY')}</td>
                   <td style={{ padding: '12px 16px' }}>{paraFormat(c.bakiye_usd, 'USD')}</td>
+                  <td style={{ padding: '12px 16px' }}>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button onClick={() => duzenle(c)} style={eylemChipStili('lacivert')}>Düzenle</button>
+                      <button onClick={() => cariyiSil(c)} style={eylemChipStili('kirmizi')}>Sil</button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
