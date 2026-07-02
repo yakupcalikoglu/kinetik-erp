@@ -69,6 +69,11 @@ export default function GirisSayfasi() {
         <Buton type="submit" disabled={yukleniyor} style={{ width: '100%', marginTop: 6, padding: '10px 0' }}>
           {yukleniyor ? 'Giriş yapılıyor...' : 'Giriş yap'}
         </Buton>
+        <div style={{ marginTop: 14, textAlign: 'center' }}>
+          <Link to="/sifremi-unuttum" style={{ fontSize: 13, color: 'var(--metin-ikincil)' }}>
+            Şifremi unuttum
+          </Link>
+        </div>
       </form>
     </div>
   );
