@@ -157,3 +157,28 @@ export function paraFormat(deger, paraBirimi = 'TRY') {
   const sembol = { TRY: '₺', USD: '$', EUR: '€', ALTIN: 'gr' }[paraBirimi] || '';
   return `${Number(deger).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${sembol}`;
 }
+// Küçük, renkli "chip" tarzı işlem butonu/linki.
+// ton: 'lacivert' | 'yesil' | 'kirmizi' | 'notr'
+const EYLEM_CHIP_RENK = {
+  lacivert: { bg: '#e8edf7', renk: '#1e3a6e' },
+  yesil: { bg: '#e3f5e9', renk: '#1c7c4c' },
+  kirmizi: { bg: '#fdeaea', renk: '#c0392b' },
+  notr: { bg: '#f1f2f4', renk: '#5a6472' },
+};
+
+export function eylemChipStili(ton = 'notr') {
+  const { bg, renk } = EYLEM_CHIP_RENK[ton] || EYLEM_CHIP_RENK.notr;
+  return {
+    background: bg,
+    color: renk,
+    border: 'none',
+    borderRadius: 6,
+    padding: '5px 10px',
+    fontSize: 12.5,
+    fontWeight: 500,
+    cursor: 'pointer',
+    textDecoration: 'none',
+    display: 'inline-block',
+    lineHeight: 1.4,
+  };
+}
