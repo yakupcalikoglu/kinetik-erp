@@ -13,6 +13,31 @@ const DURUM_METIN = {
   TESLIM_ALINDI: 'Teslim Alındı', TAMAMLANDI: 'Tamamlandı', IPTAL: 'İptal',
 };
 
+// Küçük, renkli "chip" tarzı işlem butonu. ton: 'lacivert' | 'yesil' | 'kirmizi' | 'notr'
+const CHIP_RENK = {
+  lacivert: { bg: 'var(--lacivert-acik, #e8edf7)', renk: 'var(--lacivert)' },
+  yesil: { bg: 'var(--yesil-acik)', renk: 'var(--yesil)' },
+  kirmizi: { bg: 'var(--kirmizi-acik, #fdeaea)', renk: 'var(--kirmizi)' },
+  notr: { bg: 'var(--zemin)', renk: 'var(--metin-ikincil)' },
+};
+
+function eylemChipStili(ton) {
+  const { bg, renk } = CHIP_RENK[ton] || CHIP_RENK.notr;
+  return {
+    background: bg,
+    color: renk,
+    border: 'none',
+    borderRadius: 6,
+    padding: '5px 10px',
+    fontSize: 12.5,
+    fontWeight: 500,
+    cursor: 'pointer',
+    textDecoration: 'none',
+    display: 'inline-block',
+    lineHeight: 1.4,
+  };
+}
+
 export default function SiparislerSayfasi() {
   const location = useLocation();
   const [siparisler, setSiparisler] = useState([]);
@@ -128,39 +153,32 @@ export default function SiparislerSayfasi() {
                     </td>
                     <td style={{ padding: '12px 16px' }}>{paraFormat(toplam, s.para_birimi)}</td>
                     <td style={{ padding: '12px 16px' }}>
-                      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                         {s.durum === 'TASLAK' && (
                           <>
-                            <button onClick={() => durumDegistir(s.id, 'ONAYLANDI')}
-                              style={{ background: 'none', border: 'none', color: 'var(--lacivert)', fontSize: 13, fontWeight: 500 }}>
+                            <button onClick={() => durumDegistir(s.id, 'ONAYLANDI')} style={eylemChipStili('lacivert')}>
                               Onayla
                             </button>
-                            <Link to={`/siparisler/${s.id}/duzenle`}
-                              style={{ color: 'var(--lacivert)', fontSize: 13, fontWeight: 500 }}>
+                            <Link to={`/siparisler/${s.id}/duzenle`} style={eylemChipStili('lacivert')}>
                               Düzenle
                             </Link>
-                            <button onClick={() => siparisiSil(s.id, s.siparis_no)}
-                              style={{ background: 'none', border: 'none', color: 'var(--kirmizi)', fontSize: 13 }}>
+                            <button onClick={() => siparisiSil(s.id, s.siparis_no)} style={eylemChipStili('kirmizi')}>
                               Sil
                             </button>
                           </>
                         )}
                         {(s.durum === 'ONAYLANDI' || s.durum === 'YOLDA' || s.durum === 'GUMRUKTE') && (
-                          <Link to={`/siparisler/${s.id}/teslim-al`}
-                            style={{ color: 'var(--yesil)', fontSize: 13, fontWeight: 500 }}>
+                          <Link to={`/siparisler/${s.id}/teslim-al`} style={eylemChipStili('yesil')}>
                             Teslim al
                           </Link>
                         )}
-                        <button onClick={() => pdfIndir(s.id, s.siparis_no, 'ic')}
-                          style={{ background: 'none', border: 'none', color: 'var(--lacivert)', fontSize: 13 }}>
+                        <button onClick={() => pdfIndir(s.id, s.siparis_no, 'ic')} style={eylemChipStili('notr')}>
                           PDF (şirket içi)
                         </button>
-                        <button onClick={() => pdfIndir(s.id, s.siparis_no, 'tedarikci')}
-                          style={{ background: 'none', border: 'none', color: 'var(--lacivert)', fontSize: 13 }}>
+                        <button onClick={() => pdfIndir(s.id, s.siparis_no, 'tedarikci')} style={eylemChipStili('notr')}>
                           PDF (tedarikçi)
                         </button>
-                        <button onClick={() => kopyala(s.id)}
-                          style={{ background: 'none', border: 'none', color: 'var(--metin-ikincil)', fontSize: 13 }}>
+                        <button onClick={() => kopyala(s.id)} style={eylemChipStili('notr')}>
                           Kopyala
                         </button>
                       </div>
