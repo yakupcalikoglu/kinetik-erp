@@ -18,9 +18,13 @@ export default function SiparislerSayfasi() {
   const [siparisler, setSiparisler] = useState([]);
   const [yukleniyor, setYukleniyor] = useState(true);
   const [hata, setHata] = useState(null);
-  const [bilgiMesaji, setBilgiMesaji] = useState(location.state?.yeniSiparisNo
-    ? `${location.state.yeniSiparisNo} numaralı sipariş oluşturuldu.`
-    : null);
+  const [bilgiMesaji, setBilgiMesaji] = useState(
+    location.state?.yeniSiparisNo
+      ? location.state.guncellendiMi
+        ? `${location.state.yeniSiparisNo} numaralı sipariş güncellendi.`
+        : `${location.state.yeniSiparisNo} numaralı sipariş oluşturuldu.`
+      : null
+  );
 
   function listeyiYukle() {
     setYukleniyor(true);
@@ -35,6 +39,17 @@ export default function SiparislerSayfasi() {
   async function durumDegistir(siparisId, yeniDurum) {
     try {
       await api.put(`/siparisler/${siparisId}/durum`, { durum: yeniDurum });
+      listeyiYukle();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    }
+  }
+
+  async function siparisiSil(siparisId, siparisNo) {
+    if (!window.confirm(`${siparisNo} numaralı siparişi silmek istediğinize emin misiniz?`)) return;
+    try {
+      await api.delete(`/siparisler/${siparisId}`);
+      setBilgiMesaji(`${siparisNo} numaralı sipariş silindi.`);
       listeyiYukle();
     } catch (err) {
       setHata(hataMesajiCikar(err));
@@ -115,10 +130,20 @@ export default function SiparislerSayfasi() {
                     <td style={{ padding: '12px 16px' }}>
                       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                         {s.durum === 'TASLAK' && (
-                          <button onClick={() => durumDegistir(s.id, 'ONAYLANDI')}
-                            style={{ background: 'none', border: 'none', color: 'var(--lacivert)', fontSize: 13, fontWeight: 500 }}>
-                            Onayla
-                          </button>
+                          <>
+                            <button onClick={() => durumDegistir(s.id, 'ONAYLANDI')}
+                              style={{ background: 'none', border: 'none', color: 'var(--lacivert)', fontSize: 13, fontWeight: 500 }}>
+                              Onayla
+                            </button>
+                            <Link to={`/siparisler/${s.id}/duzenle`}
+                              style={{ color: 'var(--lacivert)', fontSize: 13, fontWeight: 500 }}>
+                              Düzenle
+                            </Link>
+                            <button onClick={() => siparisiSil(s.id, s.siparis_no)}
+                              style={{ background: 'none', border: 'none', color: 'var(--kirmizi)', fontSize: 13 }}>
+                              Sil
+                            </button>
+                          </>
                         )}
                         {(s.durum === 'ONAYLANDI' || s.durum === 'YOLDA' || s.durum === 'GUMRUKTE') && (
                           <Link to={`/siparisler/${s.id}/teslim-al`}
