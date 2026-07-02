@@ -113,8 +113,17 @@ class SiparisOlusturIstegi(BaseModel):
     urunler: list[SiparisUrunIstegi]
 
 
-class SiparisDurumGuncelleIstegi(BaseModel):
-    durum: SiparisDurum
+class SiparisGuncelleIstegi(BaseModel):
+    siparis_no: str
+    tedarikci_cari_id: int
+    kaynak: StokKaynak
+    siparis_tarihi: date
+    tahmini_teslim_tarihi: date | None = None
+    para_birimi: ParaBirimi
+    cikis_limani: str | None = None
+    varis_limani: str | None = None
+    notlar: str | None = None
+    urunler: list[SiparisUrunIstegi]
 
 
 class SiparisUrunYanit(BaseModel):
