@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { api, hataMesajiCikar } from '../api/client';
-import { Kart, SayfaBasligi, Buton, Etiket, BosDurum, HataMesaji, paraFormat } from '../components/Ortak';
+import { Kart, SayfaBasligi, Buton, Etiket, BosDurum, HataMesaji, paraFormat, eylemChipStili } from '../components/Ortak';
 
 const DURUM_ETIKET = {
   TASLAK: 'notr', ONAYLANDI: 'amber', YOLDA: 'amber', GUMRUKTE: 'amber',
@@ -12,31 +12,6 @@ const DURUM_METIN = {
   TASLAK: 'Taslak', ONAYLANDI: 'Onaylandı', YOLDA: 'Yolda', GUMRUKTE: 'Gümrükte',
   TESLIM_ALINDI: 'Teslim Alındı', TAMAMLANDI: 'Tamamlandı', IPTAL: 'İptal',
 };
-
-// Küçük, renkli "chip" tarzı işlem butonu. ton: 'lacivert' | 'yesil' | 'kirmizi' | 'notr'
-const CHIP_RENK = {
-  lacivert: { bg: '#e8edf7', renk: '#1e3a6e' },
-  yesil: { bg: '#e3f5e9', renk: '#1c7c4c' },
-  kirmizi: { bg: '#fdeaea', renk: '#c0392b' },
-  notr: { bg: '#f1f2f4', renk: '#5a6472' },
-};
-
-function eylemChipStili(ton) {
-  const { bg, renk } = CHIP_RENK[ton] || CHIP_RENK.notr;
-  return {
-    background: bg,
-    color: renk,
-    border: 'none',
-    borderRadius: 6,
-    padding: '5px 10px',
-    fontSize: 12.5,
-    fontWeight: 500,
-    cursor: 'pointer',
-    textDecoration: 'none',
-    display: 'inline-block',
-    lineHeight: 1.4,
-  };
-}
 
 export default function SiparislerSayfasi() {
   const location = useLocation();
