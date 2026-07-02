@@ -13,7 +13,7 @@ const DURUM_METIN = {
 };
 
 function YeniStokKartiFormu({ onKaydedildi, onVazgec }) {
-  const [form, setForm] = useState({ marka: '', model: '', birim: 'ADET', birim_agirlik_kg: '', aciklama: '' });
+  const [form, setForm] = useState({ marka: '', model: '', birim: 'ADET', birim_agirlik_kg: '', aciklama: '', mense_ulke: '', gtip_kodu: '' });
   const [hata, setHata] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
   const [olusturulanId, setOlusturulanId] = useState(null);
