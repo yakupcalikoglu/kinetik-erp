@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { api, hataMesajiCikar } from '../api/client';
 import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji } from '../components/Ortak';
 
@@ -9,6 +9,9 @@ function bosUrunSatiri() {
 
 export default function SiparisOlusturSayfasi() {
   const navigate = useNavigate();
+  const { siparisId } = useParams();
+  const duzenlemeModu = !!siparisId;
+
   const [form, setForm] = useState({
     siparis_no: '',
     tedarikci_cari_id: '',
@@ -21,8 +24,51 @@ export default function SiparisOlusturSayfasi() {
     notlar: '',
   });
   const [urunler, setUrunler] = useState([bosUrunSatiri()]);
+  const [tedarikciler, setTedarikciler] = useState([]);
+  const [stokKartlari, setStokKartlari] = useState([]);
   const [kaydediliyor, setKaydediliyor] = useState(false);
+  const [yukleniyor, setYukleniyor] = useState(duzenlemeModu);
   const [hata, setHata] = useState(null);
+
+  useEffect(() => {
+    api.get('/cariler', { params: { tip: 'TEDARIKCI' } })
+      .then((res) => setTedarikciler(res.data))
+      .catch(() => {});
+    api.get('/stok-kartlari')
+      .then((res) => setStokKartlari(res.data))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!duzenlemeModu) return;
+    api.get(`/siparisler/${siparisId}`)
+      .then((res) => {
+        const s = res.data;
+        setForm({
+          siparis_no: s.siparis_no,
+          tedarikci_cari_id: String(s.tedarikci_cari_id),
+          kaynak: s.kaynak,
+          siparis_tarihi: s.siparis_tarihi,
+          tahmini_teslim_tarihi: s.tahmini_teslim_tarihi || '',
+          para_birimi: s.para_birimi,
+          cikis_limani: s.cikis_limani || '',
+          varis_limani: s.varis_limani || '',
+          notlar: s.notlar || '',
+        });
+        setUrunler(
+          (s.urunler || []).map((u) => ({
+            stok_karti_id: String(u.stok_karti_id),
+            miktar: u.miktar,
+            birim_fiyat: u.birim_fiyat,
+            para_birimi: u.para_birimi,
+            birim_agirlik_kg: u.birim_agirlik_kg ?? '',
+            aciklama: u.aciklama ?? '',
+          }))
+        );
+      })
+      .catch((err) => setHata(hataMesajiCikar(err)))
+      .finally(() => setYukleniyor(false));
+  }, [siparisId, duzenlemeModu]);
 
   function alaniGuncelle(alan, deger) {
     setForm((f) => ({ ...f, [alan]: deger }));
@@ -49,8 +95,12 @@ export default function SiparisOlusturSayfasi() {
     e.preventDefault();
     setHata(null);
 
+    if (!form.tedarikci_cari_id) {
+      setHata('Tedarikçi seçilmelidir.');
+      return;
+    }
     if (urunler.some((u) => !u.stok_karti_id || !u.birim_fiyat)) {
-      setHata('Her ürün satırında stok kartı ID ve birim fiyat girilmelidir.');
+      setHata('Her ürün satırında stok kartı ve birim fiyat seçilmelidir.');
       return;
     }
 
@@ -69,8 +119,14 @@ export default function SiparisOlusturSayfasi() {
           aciklama: u.aciklama || null,
         })),
       };
-      const { data } = await api.post('/siparisler', govde);
-      navigate('/siparisler', { state: { yeniSiparisNo: data.siparis_no } });
+
+      if (duzenlemeModu) {
+        await api.put(`/siparisler/${siparisId}`, govde);
+        navigate('/siparisler', { state: { yeniSiparisNo: govde.siparis_no, guncellendiMi: true } });
+      } else {
+        const { data } = await api.post('/siparisler', govde);
+        navigate('/siparisler', { state: { yeniSiparisNo: data.siparis_no } });
+      }
     } catch (err) {
       setHata(hataMesajiCikar(err));
     } finally {
@@ -78,9 +134,21 @@ export default function SiparisOlusturSayfasi() {
     }
   }
 
+  function stokKartiEtiketi(kart) {
+    const parcalar = [kart.marka, kart.model].filter(Boolean);
+    return `#${kart.id} — ${parcalar.join(' ') || 'İsimsiz'}`;
+  }
+
+  if (yukleniyor) {
+    return <div style={{ padding: 20, color: 'var(--metin-soluk)' }}>Yükleniyor...</div>;
+  }
+
   return (
     <div>
-      <SayfaBasligi baslik="Yeni sipariş" aciklama="İthalat veya yurtiçi alım siparişi oluştur" />
+      <SayfaBasligi
+        baslik={duzenlemeModu ? `Siparişi düzenle — ${form.siparis_no}` : 'Yeni sipariş'}
+        aciklama="İthalat veya yurtiçi alım siparişi oluştur"
+      />
 
       <form onSubmit={kaydet}>
         <HataMesaji>{hata}</HataMesaji>
@@ -91,9 +159,14 @@ export default function SiparisOlusturSayfasi() {
               <input required value={form.siparis_no} onChange={(e) => alaniGuncelle('siparis_no', e.target.value)}
                 placeholder="SP-2026-00150" style={girdiStili} />
             </Alan>
-            <Alan etiket="Tedarikçi cari ID">
-              <input required type="number" value={form.tedarikci_cari_id}
-                onChange={(e) => alaniGuncelle('tedarikci_cari_id', e.target.value)} style={girdiStili} />
+            <Alan etiket="Tedarikçi">
+              <select required value={form.tedarikci_cari_id}
+                onChange={(e) => alaniGuncelle('tedarikci_cari_id', e.target.value)} style={girdiStili}>
+                <option value="">Seçiniz...</option>
+                {tedarikciler.map((t) => (
+                  <option key={t.id} value={t.id}>{t.unvan}</option>
+                ))}
+              </select>
             </Alan>
             <Alan etiket="Kaynak">
               <select value={form.kaynak} onChange={(e) => alaniGuncelle('kaynak', e.target.value)} style={girdiStili}>
@@ -138,7 +211,7 @@ export default function SiparisOlusturSayfasi() {
           <table>
             <thead>
               <tr style={{ background: 'var(--zemin)' }}>
-                {['Stok Kartı ID', 'Miktar', 'Birim Fiyat', 'Birim Ağırlık (kg)', 'Açıklama', ''].map((b) => (
+                {['Stok Kartı', 'Miktar', 'Birim Fiyat', 'Birim Ağırlık (kg)', 'Açıklama', ''].map((b) => (
                   <th key={b} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
                 ))}
               </tr>
@@ -147,8 +220,13 @@ export default function SiparisOlusturSayfasi() {
               {urunler.map((u, i) => (
                 <tr key={i} style={{ borderTop: '1px solid var(--kenarlik)' }}>
                   <td style={{ padding: 8 }}>
-                    <input type="number" value={u.stok_karti_id} onChange={(e) => urunGuncelle(i, 'stok_karti_id', e.target.value)}
-                      style={{ ...girdiStili, width: 100 }} />
+                    <select required value={u.stok_karti_id} onChange={(e) => urunGuncelle(i, 'stok_karti_id', e.target.value)}
+                      style={{ ...girdiStili, width: 220 }}>
+                      <option value="">Seçiniz...</option>
+                      {stokKartlari.map((sk) => (
+                        <option key={sk.id} value={sk.id}>{stokKartiEtiketi(sk)}</option>
+                      ))}
+                    </select>
                   </td>
                   <td style={{ padding: 8 }}>
                     <input type="number" min="1" value={u.miktar} onChange={(e) => urunGuncelle(i, 'miktar', e.target.value)}
@@ -192,7 +270,7 @@ export default function SiparisOlusturSayfasi() {
 
         <div style={{ display: 'flex', gap: 8 }}>
           <Buton type="submit" disabled={kaydediliyor}>
-            {kaydediliyor ? 'Kaydediliyor...' : 'Siparişi oluştur'}
+            {kaydediliyor ? 'Kaydediliyor...' : duzenlemeModu ? 'Değişiklikleri kaydet' : 'Siparişi oluştur'}
           </Buton>
           <Buton type="button" variant="ikincil" onClick={() => navigate('/siparisler')}>Vazgeç</Buton>
         </div>
