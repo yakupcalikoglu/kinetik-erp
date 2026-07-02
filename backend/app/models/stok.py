@@ -71,7 +71,6 @@ class StokKarti(Base):
     aciklama = Column(Text)
     birim = Column(String(20), default="ADET")
     birim_agirlik_kg = Column(Numeric(10, 2))
-  birim_agirlik_kg = Column(Numeric(10, 2))
     mense_ulke = Column(String(100))
     gtip_kodu = Column(String(20))
     olusturma_tarihi = Column(DateTime, server_default=func.now())
@@ -106,7 +105,6 @@ class StokSeriNo(Base):
     musteri_cari_id = Column(BigInteger, ForeignKey("cari_hesaplar.id"))
 
     giris_tarihi = Column(Date)
-  giris_tarihi = Column(Date)
     garanti_bitis_tarihi = Column(Date)
     barkod = Column(String(100))
     olusturma_tarihi = Column(DateTime, server_default=func.now())
