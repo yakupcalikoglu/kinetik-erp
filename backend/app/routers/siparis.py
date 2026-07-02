@@ -9,7 +9,7 @@ from app.models.stok import (Siparis, SiparisDetay, StokSeriNo, StokDurum,
                               SiparisDurum, StokKarti)
 from app.models.auth import Sirket
 from app.models.cari import CariHesap
-from app.schemas.stok import (SiparisOlusturIstegi, SiparisYanit,
+from app.schemas.stok import (SiparisOlusturIstegi, SiparisGuncelleIstegi, SiparisYanit,
                                SiparisDurumGuncelleIstegi, TeslimAlIstegi)
 from app.services import siparis_pdf
 
@@ -21,6 +21,25 @@ def _siparis_getir_veya_404(db: Session, siparis_id: int, sirket_id: int) -> Sip
     if kayit is None or kayit.sirket_id != sirket_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Sipariş bulunamadı.")
     return kayit
+
+
+def _tedarikci_dogrula(db: Session, tedarikci_cari_id: int, sirket_id: int) -> None:
+    cari = db.get(CariHesap, tedarikci_cari_id)
+    if cari is None or cari.sirket_id != sirket_id:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Tedarikçi cari kaydı bulunamadı (ID={tedarikci_cari_id})."
+        )
+
+
+def _urunleri_dogrula(db: Session, urunler: list, sirket_id: int) -> None:
+    for urun in urunler:
+        kart = db.get(StokKarti, urun.stok_karti_id)
+        if kart is None or kart.sirket_id != sirket_id:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"Stok kartı bulunamadı (ID={urun.stok_karti_id})."
+            )
 
 
 @router.post("", response_model=SiparisYanit,
@@ -35,6 +54,9 @@ def siparis_olustur(
     ).scalar_one_or_none()
     if mevcut is not None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bu sipariş numarası zaten kullanılıyor.")
+
+    _tedarikci_dogrula(db, istek.tedarikci_cari_id, sirket_id)
+    _urunleri_dogrula(db, istek.urunler, sirket_id)
 
     yeni = Siparis(
         sirket_id=sirket_id,
@@ -97,6 +119,96 @@ def siparis_getir(
         select(SiparisDetay).where(SiparisDetay.siparis_id == siparis.id)
     ).scalars())
     return siparis
+
+
+@router.put("/{siparis_id}", response_model=SiparisYanit,
+            dependencies=[Depends(izin_gerektir("SIPARIS_DUZENLE"))])
+def siparis_guncelle(
+    siparis_id: int,
+    istek: SiparisGuncelleIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Bir siparisin tum bilgilerini ve urun satirlarini gunceller.
+    Sadece TASLAK durumundaki siparisler duzenlenebilir; onaylanmis/
+    teslim alinmis siparislerde stok kayitlari zaten olusmus olabilir,
+    bu yuzden veri tutarliligini korumak icin duzenleme kapatilir.
+    """
+    siparis = _siparis_getir_veya_404(db, siparis_id, sirket_id)
+
+    if siparis.durum != SiparisDurum.TASLAK:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Sadece taslak durumundaki siparişler düzenlenebilir."
+        )
+
+    if istek.siparis_no != siparis.siparis_no:
+        cakisan = db.execute(
+            select(Siparis).where(Siparis.siparis_no == istek.siparis_no, Siparis.id != siparis_id)
+        ).scalar_one_or_none()
+        if cakisan is not None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bu sipariş numarası zaten kullanılıyor.")
+
+    _tedarikci_dogrula(db, istek.tedarikci_cari_id, sirket_id)
+    _urunleri_dogrula(db, istek.urunler, sirket_id)
+
+    siparis.siparis_no = istek.siparis_no
+    siparis.tedarikci_cari_id = istek.tedarikci_cari_id
+    siparis.kaynak = istek.kaynak
+    siparis.siparis_tarihi = istek.siparis_tarihi
+    siparis.tahmini_teslim_tarihi = istek.tahmini_teslim_tarihi
+    siparis.para_birimi = istek.para_birimi
+    siparis.cikis_limani = istek.cikis_limani
+    siparis.varis_limani = istek.varis_limani
+    siparis.notlar = istek.notlar
+
+    # Eski urun satirlarini sil, yenilerini ekle.
+    eski_detaylar = db.execute(
+        select(SiparisDetay).where(SiparisDetay.siparis_id == siparis.id)
+    ).scalars()
+    for eski in eski_detaylar:
+        db.delete(eski)
+    db.flush()
+
+    for urun in istek.urunler:
+        db.add(SiparisDetay(siparis_id=siparis.id, **urun.model_dump()))
+
+    db.commit()
+    db.refresh(siparis)
+    return _siparis_detayli_getir(db, siparis.id)
+
+
+@router.delete("/{siparis_id}",
+               dependencies=[Depends(izin_gerektir("SIPARIS_DUZENLE"))])
+def siparis_sil(
+    siparis_id: int,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Sadece TASLAK durumundaki siparisler silinebilir. Onaylanmis veya
+    teslim alinmis siparislerde stok/mali kayitlar olusmus olabileceginden
+    silme yerine IPTAL durumuna cekilmesi onerilir (durum guncelle endpoint'i).
+    """
+    siparis = _siparis_getir_veya_404(db, siparis_id, sirket_id)
+
+    if siparis.durum != SiparisDurum.TASLAK:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Sadece taslak durumundaki siparişler silinebilir. "
+            "Diğer siparişler için durumu 'İptal' olarak güncelleyin."
+        )
+
+    eski_detaylar = db.execute(
+        select(SiparisDetay).where(SiparisDetay.siparis_id == siparis.id)
+    ).scalars()
+    for eski in eski_detaylar:
+        db.delete(eski)
+
+    db.delete(siparis)
+    db.commit()
+    return {"silindi": True}
 
 
 @router.put("/{siparis_id}/durum", response_model=SiparisYanit,
@@ -194,9 +306,6 @@ def siparis_teslim_al(
                 f"siparis_detay_id={urun.siparis_detay_id} bu siparişe ait değil."
             )
 
-        # birim fiyati TRY'ye gerceklestirmiyoruz burada (kur entegrasyonu
-        # ayri bir is); su an satinalma maliyetini siparis para biriminde
-        # oldugu gibi kaydediyoruz, gercek ortamda kur tablosundan cevrim yapilir.
         yeni_stok = StokSeriNo(
             sirket_id=sirket_id,
             stok_karti_id=detay.stok_karti_id,
