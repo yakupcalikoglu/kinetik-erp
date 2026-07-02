@@ -9,7 +9,7 @@ export default function SifremiUnuttumSayfasi() {
   const [hata, setHata] = useState(null);
   const [gonderildi, setGonderildi] = useState(false);
 
-  async function gonder(e) {
+  async function gonder(e)
     e.preventDefault();
     setYukleniyor(true);
     setHata(null);
