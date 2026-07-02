@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Buton, Alan, girdiStili, HataMesaji } from '../components/Ortak';
+import { Link, useNavigate } from 'react-router-dom';
 
 export default function GirisSayfasi() {
   const { girisYap, yukleniyor, hata } = useAuth();
