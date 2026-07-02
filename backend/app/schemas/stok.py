@@ -5,13 +5,15 @@ from app.models.stok import StokKaynak, StokDurum, MaliyetTip, SiparisDurum, Par
 
 
 # ---------------------------------------------------------------- Stok kartı
-class StokKartiOlusturIstegi(BaseModel):
+    class StokKartiOlusturIstegi(BaseModel):
     kategori_id: int | None = None
     marka: str | None = None
     model: str | None = None
     aciklama: str | None = None
     birim: str = "ADET"
     birim_agirlik_kg: Decimal | None = None
+    mense_ulke: str | None = None
+    gtip_kodu: str | None = None
 
 
 class StokKartiYanit(BaseModel):
