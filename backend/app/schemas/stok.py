@@ -124,7 +124,7 @@ class SiparisGuncelleIstegi(BaseModel):
     varis_limani: str | None = None
     notlar: str | None = None
     urunler: list[SiparisUrunIstegi]
-
+    
 
 class SiparisUrunYanit(BaseModel):
     id: int
