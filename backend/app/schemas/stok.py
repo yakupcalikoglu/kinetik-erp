@@ -5,7 +5,7 @@ from app.models.stok import StokKaynak, StokDurum, MaliyetTip, SiparisDurum, Par
 
 
 # ---------------------------------------------------------------- Stok kartı
-    class StokKartiOlusturIstegi(BaseModel):
+class StokKartiOlusturIstegi(BaseModel):
     kategori_id: int | None = None
     marka: str | None = None
     model: str | None = None
@@ -25,7 +25,7 @@ class StokKartiYanit(BaseModel):
     birim_agirlik_kg: Decimal | None
     mense_ulke: str | None
     gtip_kodu: str | None
-    
+
     class Config:
         from_attributes = True
 
