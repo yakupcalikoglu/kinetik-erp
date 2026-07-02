@@ -23,7 +23,9 @@ class StokKartiYanit(BaseModel):
     model: str | None
     birim: str
     birim_agirlik_kg: Decimal | None
-
+    mense_ulke: str | None
+    gtip_kodu: str | None
+    
     class Config:
         from_attributes = True
 
@@ -48,6 +50,8 @@ class StokSeriNoYanit(BaseModel):
     satis_fiyati_try: Decimal | None
     satis_tarihi: date | None
     musteri_cari_id: int | None
+    garanti_bitis_tarihi: date | None
+    barkod: str | None
 
     class Config:
         from_attributes = True
@@ -148,6 +152,8 @@ class TeslimAlinanUrun(BaseModel):
     seri_no: str
     sasi_no: str | None = None
     uretim_yili: int | None = None
+    garanti_bitis_tarihi: date | None = None
+    barkod: str | None = None
 
 
 class TeslimAlIstegi(BaseModel):
