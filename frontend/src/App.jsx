@@ -2,6 +2,8 @@ import { Navigate, Route, BrowserRouter, Routes } from 'react-router-dom';
 import { AuthSaglayici, useAuth } from './context/AuthContext';
 import AnaDuzen from './components/AnaDuzen';
 import GirisSayfasi from './pages/GirisSayfasi';
+import SifremiUnuttumSayfasi from './pages/SifremiUnuttumSayfasi';
+import SifreSifirlaSayfasi from './pages/SifreSifirlaSayfasi';
 import GenelBakisSayfasi from './pages/GenelBakisSayfasi';
 import CarilerSayfasi from './pages/CarilerSayfasi';
 import StokSayfasi from './pages/StokSayfasi';
@@ -26,6 +28,8 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/giris" element={<GirisSayfasi />} />
+          <Route path="/sifremi-unuttum" element={<SifremiUnuttumSayfasi />} />
+          <Route path="/sifre-sifirla" element={<SifreSifirlaSayfasi />} />
           <Route
             path="/"
             element={
