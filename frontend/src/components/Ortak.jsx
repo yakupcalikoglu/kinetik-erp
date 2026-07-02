@@ -182,3 +182,20 @@ export function eylemChipStili(ton = 'notr') {
     lineHeight: 1.4,
   };
 }
+
+export function eylemChipStili(ton = 'notr') {
+  const { bg, renk } = EYLEM_CHIP_RENK[ton] || EYLEM_CHIP_RENK.notr;
+  return {
+    background: bg,
+    color: renk,
+    border: 'none',
+    borderRadius: 6,
+    padding: '5px 10px',
+    fontSize: 12.5,
+    fontWeight: 500,
+    cursor: 'pointer',
+    textDecoration: 'none',
+    display: 'inline-block',
+    lineHeight: 1.4,
+  };
+}
