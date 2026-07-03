@@ -130,13 +130,15 @@ export default function GenelBakisSayfasi() {
       {veri && (
         <>
           <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
-            <MetrikKart
+           <MetrikKart
               etiket="Ana kasa bakiyesi"
               deger={paraFormat(veri.ana_kasa_bakiye_try)}
               ton={veri.ana_kasa_bakiye_try >= 0 ? 'yesil' : 'kirmizi'}
             />
-            <MetrikKart etiket="Depodaki ürün sayısı" deger={veri.depodaki_urun_sayisi} />
-            <MetrikKart etiket="Depo toplam değeri (maliyet)" deger={paraFormat(depoToplamDeger)} />
+            <MetrikKart
+              etiket="Depodaki ürün sayısı / değeri"
+              deger={`${veri.depodaki_urun_sayisi} adet · ${paraFormat(depoToplamDeger)}`}
+            />
             <MetrikKart etiket="Aktif kiralama sayısı" deger={veri.aktif_kiralama_sayisi} />
           </div>
           <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
