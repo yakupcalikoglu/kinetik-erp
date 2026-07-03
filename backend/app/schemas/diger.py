@@ -46,6 +46,8 @@ class PersonelOdemeYanit(BaseModel):
 
 class OdeIstegi(BaseModel):
     odeme_tarihi: date
+    odeme_yontemi: str  # "NAKIT" | "BANKA"
+    banka_hesap_id: int | None = None
 
 
 # ------------------------------------------------------------ Sabit Giderler
@@ -107,6 +109,8 @@ class BorcOdemeOlusturIstegi(BaseModel):
     tarih: date
     tutar: Decimal
     aciklama: str | None = None
+    odeme_yontemi: str  # "NAKIT" | "BANKA"
+    banka_hesap_id: int | None = None
 
 
 class BorcOdemeYanit(BaseModel):
