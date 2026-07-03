@@ -1,7 +1,7 @@
-from sqlalchemy.exc import IntegrityError
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func, case
+from sqlalchemy.exc import IntegrityError
 
 from app.db.session import get_db
 from app.core.deps import aktif_sirket_id_getir, izin_gerektir, aktif_kullanici_getir
@@ -31,7 +31,14 @@ def banka_hesabi_olustur(
     sirket_id: int = Depends(aktif_sirket_id_getir),
     db: Session = Depends(get_db),
 ):
-    @router.put("/banka-hesaplari/{hesap_id}", response_model=BankaHesabiYanit,
+    yeni = BankaHesabi(sirket_id=sirket_id, **istek.model_dump())
+    db.add(yeni)
+    db.commit()
+    db.refresh(yeni)
+    return yeni
+
+
+@router.put("/banka-hesaplari/{hesap_id}", response_model=BankaHesabiYanit,
             dependencies=[Depends(izin_gerektir("BANKA_DUZENLE"))])
 def banka_hesabi_guncelle(
     hesap_id: int,
@@ -69,11 +76,6 @@ def banka_hesabi_sil(
             "Bu banka hesabında hareketler olduğu için silinemiyor. Hesabı pasif hale getirmeyi düşünebilirsiniz."
         )
     return {"silindi": True}
-    yeni = BankaHesabi(sirket_id=sirket_id, **istek.model_dump())
-    db.add(yeni)
-    db.commit()
-    db.refresh(yeni)
-    return yeni
 
 
 @router.get("/banka-hesaplari", response_model=list[BankaHesabiYanit],
