@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react';
 import { api, hataMesajiCikar } from '../api/client';
-import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat, eylemChipStili } from '../components/Ortak';
+import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat, eylemChipStili, Sekmeler } from '../components/Ortak';
+
+const SEKMELER = [
+  { deger: 'hesaplar', etiket: 'Hesaplar' },
+  { deger: 'hareketler', etiket: 'Hareketler' },
+];
 
 function bosHesapForm() {
   return { banka_adi: '', hesap_adi: '', iban: '', para_birimi: 'TRY' };
@@ -75,108 +80,14 @@ function HesapFormu({ duzenlenenHesap, onKaydedildi, onVazgec }) {
   );
 }
 
-function YeniHareketFormu({ hesaplar, onKaydedildi, onVazgec }) {
-  const [form, setForm] = useState({
-    banka_hesap_id: '', tarih: new Date().toISOString().slice(0, 10), tip: 'GIRIS',
-    tutar: '', aciklama: '', karsi_hesap_id: '', kullanilan_kur: '',
-  });
-  const [hata, setHata] = useState(null);
-  const [kaydediliyor, setKaydediliyor] = useState(false);
-
-  const ciftTarafli = ['HESAPLAR_ARASI_TRANSFER', 'DOVIZ_ALIM', 'DOVIZ_SATIM'].includes(form.tip);
-
-  async function kaydet(e) {
-    e.preventDefault();
-    setHata(null);
-    setKaydediliyor(true);
-    try {
-      await api.post('/banka-hareketleri', {
-        banka_hesap_id: Number(form.banka_hesap_id),
-        tarih: form.tarih,
-        tip: form.tip,
-        tutar: Number(form.tutar),
-        aciklama: form.aciklama || null,
-        karsi_hesap_id: form.karsi_hesap_id ? Number(form.karsi_hesap_id) : null,
-        kullanilan_kur: form.kullanilan_kur ? Number(form.kullanilan_kur) : null,
-      });
-      onKaydedildi();
-    } catch (err) {
-      setHata(hataMesajiCikar(err));
-    } finally {
-      setKaydediliyor(false);
-    }
-  }
-
-  return (
-    <Kart style={{ marginBottom: 16 }}>
-      <form onSubmit={kaydet}>
-        <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 14 }}>Yeni banka hareketi</div>
-        <HataMesaji>{hata}</HataMesaji>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-          <Alan etiket="Hesap">
-            <select required value={form.banka_hesap_id} onChange={(e) => setForm((f) => ({ ...f, banka_hesap_id: e.target.value }))} style={girdiStili}>
-              <option value="">Seçin...</option>
-              {hesaplar.map((h) => (
-                <option key={h.banka_hesap_id} value={h.banka_hesap_id}>
-                  {h.banka_adi} — {h.hesap_adi || h.para_birimi}
-                </option>
-              ))}
-            </select>
-          </Alan>
-          <Alan etiket="İşlem türü">
-            <select value={form.tip} onChange={(e) => setForm((f) => ({ ...f, tip: e.target.value }))} style={girdiStili}>
-              <option value="GIRIS">Giriş</option>
-              <option value="CIKIS">Çıkış</option>
-              <option value="HESAPLAR_ARASI_TRANSFER">Hesaplar Arası Transfer</option>
-              <option value="DOVIZ_ALIM">Döviz Alım</option>
-              <option value="DOVIZ_SATIM">Döviz Satım</option>
-            </select>
-          </Alan>
-          <Alan etiket="Tarih">
-            <input required type="date" value={form.tarih} onChange={(e) => setForm((f) => ({ ...f, tarih: e.target.value }))} style={girdiStili} />
-          </Alan>
-          <Alan etiket={ciftTarafli ? 'Tutar (kaynaktan çıkan, negatif girin)' : 'Tutar'}>
-            <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))}
-              placeholder={ciftTarafli ? 'Örn: -10000' : ''} style={girdiStili} />
-          </Alan>
-          {ciftTarafli && (
-            <>
-              <Alan etiket="Karşı hesap">
-                <select required value={form.karsi_hesap_id} onChange={(e) => setForm((f) => ({ ...f, karsi_hesap_id: e.target.value }))} style={girdiStili}>
-                  <option value="">Seçin...</option>
-                  {hesaplar.filter((h) => String(h.banka_hesap_id) !== form.banka_hesap_id).map((h) => (
-                    <option key={h.banka_hesap_id} value={h.banka_hesap_id}>
-                      {h.banka_adi} — {h.hesap_adi || h.para_birimi}
-                    </option>
-                  ))}
-                </select>
-              </Alan>
-              <Alan etiket="Kullanılan kur">
-                <input required type="number" step="0.0001" value={form.kullanilan_kur} onChange={(e) => setForm((f) => ({ ...f, kullanilan_kur: e.target.value }))} style={girdiStili} />
-              </Alan>
-            </>
-          )}
-          <Alan etiket="Açıklama">
-            <input value={form.aciklama} onChange={(e) => setForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
-          </Alan>
-        </div>
-        <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-          <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Kaydediliyor...' : 'Hareketi kaydet'}</Buton>
-          <Buton type="button" variant="ikincil" onClick={onVazgec}>Vazgeç</Buton>
-        </div>
-      </form>
-    </Kart>
-  );
-}
-
-export default function BankaKasaSayfasi() {
+// ============================================================== HESAPLAR SEKMESİ
+function HesaplarSekmesi() {
   const [bakiyeler, setBakiyeler] = useState([]);
   const [kasaBakiye, setKasaBakiye] = useState(null);
   const [hata, setHata] = useState(null);
   const [yukleniyor, setYukleniyor] = useState(true);
   const [hesapFormuAcik, setHesapFormuAcik] = useState(false);
   const [duzenlenenHesap, setDuzenlenenHesap] = useState(null);
-  const [hareketFormuAcik, setHareketFormuAcik] = useState(false);
 
   function yukle() {
     setYukleniyor(true);
@@ -200,7 +111,6 @@ export default function BankaKasaSayfasi() {
   }
 
   function duzenle(hesap) {
-    // banka-bakiyeleri satirlari 'banka_hesap_id' kullanir, formumuz 'id' bekliyor.
     setDuzenlenenHesap({ id: hesap.banka_hesap_id, banka_adi: hesap.banka_adi, hesap_adi: hesap.hesap_adi, para_birimi: hesap.para_birimi });
     setHesapFormuAcik(true);
   }
@@ -222,16 +132,11 @@ export default function BankaKasaSayfasi() {
 
   return (
     <div>
-      <SayfaBasligi
-        baslik="Banka / Ana Kasa"
-        aciklama="Banka hesap bakiyeleri ve ana kasa net durumu"
-        eylem={
-          <div style={{ display: 'flex', gap: 8 }}>
-            <Buton variant="ikincil" onClick={yeniHesapAc}>+ Yeni hesap</Buton>
-            <Buton onClick={() => setHareketFormuAcik((a) => !a)}>+ Yeni hareket</Buton>
-          </div>
-        }
-      />
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+        <Buton onClick={() => (hesapFormuAcik ? hesapFormunuKapat() : yeniHesapAc())}>
+          {hesapFormuAcik ? 'Kapat' : '+ Yeni hesap'}
+        </Buton>
+      </div>
       <HataMesaji>{hata}</HataMesaji>
 
       {hesapFormuAcik && (
@@ -240,9 +145,6 @@ export default function BankaKasaSayfasi() {
           onKaydedildi={() => { hesapFormunuKapat(); yukle(); }}
           onVazgec={hesapFormunuKapat}
         />
-      )}
-      {hareketFormuAcik && (
-        <YeniHareketFormu hesaplar={bakiyeler} onKaydedildi={() => { setHareketFormuAcik(false); yukle(); }} onVazgec={() => setHareketFormuAcik(false)} />
       )}
 
       {yukleniyor ? (
@@ -294,9 +196,3 @@ export default function BankaKasaSayfasi() {
                 </tbody>
               </table>
             )}
-          </Kart>
-        </>
-      )}
-    </div>
-  );
-}
