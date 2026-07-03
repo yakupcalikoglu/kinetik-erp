@@ -4,10 +4,11 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select, func
 
 from app.db.session import get_db
-from app.core.deps import aktif_sirket_id_getir, izin_gerektir
+from app.core.deps import aktif_sirket_id_getir, izin_gerektir, aktif_kullanici_getir
+from app.models.auth import Kullanici
 from app.models.diger import (
     Personel, PersonelOdeme, SabitGiderKategori, SabitGider,
-    Borc, BorcOdeme, ProformaFatura, ProformaDetay, Fatura, FaturaDetay,
+    Borc, BorcOdeme, BorcTip, ProformaFatura, ProformaDetay, Fatura, FaturaDetay,
 )
 from app.schemas.diger import (
     PersonelOlusturIstegi, PersonelYanit, PersonelOdemeOlusturIstegi, PersonelOdemeYanit, OdeIstegi,
@@ -15,6 +16,7 @@ from app.schemas.diger import (
     BorcOlusturIstegi, BorcYanit, BorcOdemeOlusturIstegi, BorcOdemeYanit, BorcBakiyeYanit,
     ProformaOlusturIstegi, ProformaYanit, FaturayaCevirYaniti, FaturaYanit,
 )
+from app.services.para_hareketi import para_hareketi_olustur
 
 router = APIRouter(tags=["Personel, Giderler, Borç, Fatura"])
 
@@ -70,12 +72,28 @@ def personel_odemelerini_listele(personel_id: int, db: Session = Depends(get_db)
 
 @router.put("/personel-odemeleri/{odeme_id}/ode", response_model=PersonelOdemeYanit,
             dependencies=[Depends(izin_gerektir("PERSONEL_DUZENLE"))])
-def personel_odemesi_yap(odeme_id: int, istek: OdeIstegi, db: Session = Depends(get_db)):
+def personel_odemesi_yap(
+    odeme_id: int, istek: OdeIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    kullanici: Kullanici = Depends(aktif_kullanici_getir),
+    db: Session = Depends(get_db),
+):
     odeme = db.get(PersonelOdeme, odeme_id)
     if odeme is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Ödeme kaydı bulunamadı.")
+
+    personel = db.get(Personel, odeme.personel_id)
+
     odeme.odendi_mi = True
     odeme.odeme_tarihi = istek.odeme_tarihi
+
+    para_hareketi_olustur(
+        db, sirket_id, kullanici.id, "CIKIS", odeme.tutar,
+        istek.odeme_yontemi, istek.banka_hesap_id,
+        aciklama=f"{personel.ad_soyad if personel else 'Personel'} - {odeme.tip.value}",
+        kaynak_tablo="PERSONEL_ODEME", kaynak_id=odeme.id,
+    )
+
     db.commit()
     db.refresh(odeme)
     return odeme
@@ -108,12 +126,26 @@ def sabit_giderleri_listele(
 
 @router.put("/sabit-giderler/{gider_id}/ode", response_model=SabitGiderYanit,
             dependencies=[Depends(izin_gerektir("GIDER_DUZENLE"))])
-def sabit_gider_ode(gider_id: int, istek: OdeIstegi, db: Session = Depends(get_db)):
+def sabit_gider_ode(
+    gider_id: int, istek: OdeIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    kullanici: Kullanici = Depends(aktif_kullanici_getir),
+    db: Session = Depends(get_db),
+):
     gider = db.get(SabitGider, gider_id)
     if gider is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Gider kaydı bulunamadı.")
+
     gider.odendi_mi = True
     gider.odeme_tarihi = istek.odeme_tarihi
+
+    para_hareketi_olustur(
+        db, sirket_id, kullanici.id, "CIKIS", gider.tutar,
+        istek.odeme_yontemi, istek.banka_hesap_id,
+        aciklama=gider.aciklama or "Sabit gider ödemesi",
+        kaynak_tablo="SABIT_GIDER", kaynak_id=gider.id,
+    )
+
     db.commit()
     db.refresh(gider)
     return gider
@@ -143,13 +175,30 @@ def borclari_listele(
              dependencies=[Depends(izin_gerektir("BORC_DUZENLE"))])
 def borc_odemesi_ekle(
     borc_id: int, istek: BorcOdemeOlusturIstegi,
-    sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    kullanici: Kullanici = Depends(aktif_kullanici_getir),
+    db: Session = Depends(get_db),
 ):
+    """
+    ORTAKTAN_ALINAN / DISARIDAN_ALINAN: bu borcu biz odedigimiz icin CIKIS.
+    ORTAGA_VERILEN: ortaga verdigimiz para bize geri geldigi icin GIRIS.
+    """
     borc = db.get(Borc, borc_id)
     if borc is None or borc.sirket_id != sirket_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Borç kaydı bulunamadı.")
-    yeni = BorcOdeme(borc_id=borc_id, **istek.model_dump())
+
+    yeni = BorcOdeme(borc_id=borc_id, tarih=istek.tarih, tutar=istek.tutar, aciklama=istek.aciklama)
     db.add(yeni)
+    db.flush()
+
+    yon = "GIRIS" if borc.tip == BorcTip.ORTAGA_VERILEN else "CIKIS"
+    para_hareketi_olustur(
+        db, sirket_id, kullanici.id, yon, istek.tutar,
+        istek.odeme_yontemi, istek.banka_hesap_id,
+        aciklama=istek.aciklama or f"Borç ödemesi - {borc.tip.value}",
+        kaynak_tablo="BORC_ODEME", kaynak_id=yeni.id, cari_id=borc.cari_id,
+    )
+
     db.commit()
     db.refresh(yeni)
     return yeni
