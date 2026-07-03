@@ -198,6 +198,8 @@ class BakimOlusturIstegi(BaseModel):
     ilgili_cari_id: int | None = None
     tutar: Decimal
     para_birimi: ParaBirimi = ParaBirimi.TRY
+    odeme_yontemi: str  # "NAKIT" | "BANKA"
+    banka_hesap_id: int | None = None
 
 
 class BakimYanit(BaseModel):
