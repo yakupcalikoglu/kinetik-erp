@@ -136,3 +136,103 @@ export default function GenelBakisSayfasi() {
               ton={veri.ana_kasa_bakiye_try >= 0 ? 'yesil' : 'kirmizi'}
             />
             <MetrikKart etiket="Depodaki ürün sayısı" deger={veri.depodaki_urun_sayisi} />
+            <MetrikKart etiket="Depo toplam değeri (maliyet)" deger={paraFormat(depoToplamDeger)} />
+            <MetrikKart etiket="Aktif kiralama sayısı" deger={veri.aktif_kiralama_sayisi} />
+          </div>
+          <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
+            <MetrikKart
+              etiket="Vadesi yaklaşan çek (7 gün)"
+              deger={`${veri.vadesi_yaklasan_cek_sayisi} adet · ${paraFormat(veri.vadesi_yaklasan_cek_toplami)}`}
+              ton={veri.vadesi_yaklasan_cek_sayisi > 0 ? 'amber' : 'notr'}
+            />
+            <MetrikKart
+              etiket="Geciken taksit"
+              deger={`${veri.geciken_taksit_sayisi} adet · ${paraFormat(veri.geciken_taksit_toplami)}`}
+              ton={veri.geciken_taksit_sayisi > 0 ? 'kirmizi' : 'notr'}
+            />
+          </div>
+
+          {vadeler && (
+            <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
+              <VadeListesi
+                baslik="Önümüzdeki 30 gün — Ödemeler"
+                satirlar={vadeler.odemeler}
+                toplam={vadeler.odemeler_toplam}
+                bosMesaj="Önümüzdeki 30 günde vadesi gelen ödeme yok."
+              />
+              <VadeListesi
+                baslik="Önümüzdeki 30 gün — Tahsilatlar"
+                satirlar={vadeler.tahsilatlar}
+                toplam={vadeler.tahsilatlar_toplam}
+                bosMesaj="Önümüzdeki 30 günde vadesi gelen tahsilat yok."
+              />
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 16, marginBottom: 16, alignItems: 'flex-start' }}>
+            <BasitListeKart
+              baslik="Depodaki ürünler (ürün türüne göre)"
+              bos={!depoEnvanteri || depoEnvanteri.length === 0}
+              bosMesaj="Depoda ürün bulunmuyor."
+            >
+              {depoEnvanteri && depoEnvanteri.map((d, i) => (
+                <div key={d.stok_karti_id} style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  padding: '10px 16px', borderTop: i > 0 ? '1px solid var(--kenarlik)' : 'none',
+                }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 500 }}>{d.marka} {d.model}</div>
+                    <div style={{ fontSize: 11.5, color: 'var(--metin-soluk)' }}>{d.adet} {d.birim}</div>
+                  </div>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>{paraFormat(d.toplam_deger_try)}</div>
+                </div>
+              ))}
+            </BasitListeKart>
+
+            <BasitListeKart
+              baslik="Banka hesap bakiyeleri"
+              bos={!bankaBakiyeleri || bankaBakiyeleri.length === 0}
+              bosMesaj="Henüz banka hesabı yok."
+            >
+              {bankaBakiyeleri && bankaBakiyeleri.map((b, i) => (
+                <div key={b.banka_hesap_id} style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  padding: '10px 16px', borderTop: i > 0 ? '1px solid var(--kenarlik)' : 'none',
+                }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 500 }}>{b.banka_adi}</div>
+                    <div style={{ fontSize: 11.5, color: 'var(--metin-soluk)' }}>{b.hesap_adi || b.para_birimi}</div>
+                  </div>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>{paraFormat(b.bakiye, b.para_birimi)}</div>
+                </div>
+              ))}
+            </BasitListeKart>
+          </div>
+
+          <BasitListeKart
+            baslik="Aktif kiralamalar"
+            bos={!aktifKiralamalar || aktifKiralamalar.length === 0}
+            bosMesaj="Aktif kiralama bulunmuyor."
+          >
+            {aktifKiralamalar && aktifKiralamalar.map((k, i) => (
+              <div key={k.stok_seri_no_id} style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                padding: '10px 16px', borderTop: i > 0 ? '1px solid var(--kenarlik)' : 'none',
+              }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 500 }}>{k.marka} {k.model} — {k.seri_no}</div>
+                  <div style={{ fontSize: 11.5, color: 'var(--metin-soluk)' }}>Kiracı: {k.kiraci_unvan || '—'}</div>
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{paraFormat(k.aylik_kira_tutari, k.para_birimi)} / ay</div>
+              </div>
+            ))}
+          </BasitListeKart>
+
+          <Kart style={{ marginTop: 16 }}>
+            <div style={{ fontSize: 12.5, color: 'var(--metin-soluk)' }}>{veri.banka_toplam_try_karsiligi_not}</div>
+          </Kart>
+        </>
+      )}
+    </div>
+  );
+}
