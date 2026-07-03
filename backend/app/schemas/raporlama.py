@@ -69,3 +69,20 @@ class YaklasanVadelerYaniti(BaseModel):
     odemeler_toplam: Decimal
     tahsilatlar: list[YaklasanVadeSatiri]
     tahsilatlar_toplam: Decimal
+class DepoEnvanterSatiri(BaseModel):
+    stok_karti_id: int
+    marka: str | None
+    model: str | None
+    birim: str
+    adet: int
+    toplam_deger_try: Decimal
+
+
+class AktifKiralamaSatiri(BaseModel):
+    stok_seri_no_id: int
+    marka: str | None
+    model: str | None
+    seri_no: str
+    kiraci_unvan: str | None
+    aylik_kira_tutari: Decimal
+    para_birimi: str
