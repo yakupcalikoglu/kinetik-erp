@@ -208,6 +208,21 @@ def banka_hareketi_olustur(
     return ana_hareket
 
 
+@router.get("/banka-hareketleri", response_model=list[BankaHareketiYanit],
+            dependencies=[Depends(izin_gerektir("BANKA_GORUNTULE"))])
+def tum_banka_hareketlerini_listele(
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """Sirketin tum banka hesaplarindaki hareketleri tek listede, en yeniden eskiye dogru getirir."""
+    sorgu = (
+        select(BankaHareketi)
+        .where(BankaHareketi.sirket_id == sirket_id)
+        .order_by(BankaHareketi.tarih.desc())
+    )
+    return list(db.execute(sorgu).scalars())
+
+
 # --------------------------------------------------------------- Ana Kasa
 @router.post("/kasa-hareketleri", response_model=KasaHareketiYanit,
              dependencies=[Depends(izin_gerektir("KASA_DUZENLE"))])
