@@ -9,6 +9,7 @@ const MODULLER = [
   { yol: '/stok', ad: 'Stok', simge: '◫' },
   { yol: '/siparisler', ad: 'Siparişler', simge: '⇄' },
   { yol: '/banka', ad: 'Banka', simge: '◈' },
+  { yol: '/virman', ad: 'Virman', simge: '⇌' },
   { yol: '/kasa', ad: 'Ana Kasa', simge: '▤' },
   { yol: '/finansal', ad: 'Finansal Takip', simge: '◇' },
   { yol: '/proforma-fatura', ad: 'Proforma / Fatura', simge: '▭' },
