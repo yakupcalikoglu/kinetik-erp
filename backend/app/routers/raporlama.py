@@ -17,6 +17,7 @@ from app.models.diger import PersonelOdeme, Personel, SabitGider, BorcOdeme, Bor
 from app.schemas.raporlama import (
     SeriNoRaporYaniti, HareketTuruRaporYaniti, HareketTuruSatiri,
     AnaKasaOzetYaniti, GenelBakisYaniti, YaklasanVadeSatiri, YaklasanVadelerYaniti,
+    DepoEnvanterSatiri, AktifKiralamaSatiri,
 )
 
 router = APIRouter(prefix="/raporlar", tags=["Raporlama"])
@@ -423,3 +424,64 @@ def yaklasan_vadeler(
         tahsilatlar=tahsilatlar,
         tahsilatlar_toplam=sum((s.tutar for s in tahsilatlar), Decimal("0")),
     )
+
+
+@router.get("/depo-envanteri", response_model=list[DepoEnvanterSatiri],
+            dependencies=[Depends(izin_gerektir("RAPOR_GORUNTULE"))])
+def depo_envanteri(
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Depodaki (durum=DEPODA) urunleri stok karti bazinda gruplar; her grup
+    icin adet ve toplam maliyet degerini hesaplar. Genel Bakis ekraninda
+    'urun turune gore depo degeri' gorunumu icin kullanilir.
+    """
+    kayitlar = list(db.execute(
+        select(StokSeriNo, StokKarti)
+        .join(StokKarti, StokKarti.id == StokSeriNo.stok_karti_id)
+        .where(StokSeriNo.sirket_id == sirket_id, StokSeriNo.durum == StokDurum.DEPODA)
+    ).all())
+
+    gruplar: dict[int, dict] = {}
+    for seri, kart in kayitlar:
+        toplam = (seri.satinalma_maliyeti_try + seri.nakliye_maliyeti_try +
+                  seri.gumruk_maliyeti_try + seri.antrepo_maliyeti_try +
+                  seri.millilestirme_maliyeti_try + seri.leasing_maliyeti_try +
+                  seri.diger_maliyet_try)
+        grup = gruplar.setdefault(kart.id, {
+            "stok_karti_id": kart.id, "marka": kart.marka, "model": kart.model,
+            "birim": kart.birim, "adet": 0, "toplam_deger_try": Decimal("0"),
+        })
+        grup["adet"] += 1
+        grup["toplam_deger_try"] += toplam
+
+    return [DepoEnvanterSatiri(**g) for g in gruplar.values()]
+
+
+@router.get("/aktif-kiralamalar", response_model=list[AktifKiralamaSatiri],
+            dependencies=[Depends(izin_gerektir("RAPOR_GORUNTULE"))])
+def aktif_kiralamalar(
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Aktif kiralama sozlesmelerini urun bilgisi ve kiraci unvaniyla birlikte
+    getirir. Genel Bakis ekraninda 'kime kiralandi, ne kadara' gorunumu icin.
+    """
+    kayitlar = list(db.execute(
+        select(KiralamaSozlesme, StokSeriNo, StokKarti, CariHesap)
+        .join(StokSeriNo, StokSeriNo.id == KiralamaSozlesme.stok_seri_no_id)
+        .join(StokKarti, StokKarti.id == StokSeriNo.stok_karti_id)
+        .join(CariHesap, CariHesap.id == KiralamaSozlesme.kiraci_cari_id)
+        .where(KiralamaSozlesme.sirket_id == sirket_id, KiralamaSozlesme.durum == "AKTIF")
+    ).all())
+
+    return [
+        AktifKiralamaSatiri(
+            stok_seri_no_id=seri.id, marka=kart.marka, model=kart.model, seri_no=seri.seri_no,
+            kiraci_unvan=cari.unvan, aylik_kira_tutari=sozlesme.aylik_kira_tutari,
+            para_birimi=sozlesme.para_birimi.value,
+        )
+        for sozlesme, seri, kart, cari in kayitlar
+    ]
