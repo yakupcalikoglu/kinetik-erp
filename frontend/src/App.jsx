@@ -46,7 +46,8 @@ function App() {
             <Route path="siparisler/:siparisId/duzenle" element={<SiparisOlusturSayfasi />} />
             <Route path="siparisler/yeni" element={<SiparisOlusturSayfasi />} />
             <Route path="siparisler/:siparisId/teslim-al" element={<SiparisTeslimAlSayfasi />} />
-            <Route path="banka-kasa" element={<BankaKasaSayfasi />} />
+            <Route path="banka" element={<BankaSayfasi />} />
+            <Route path="kasa" element={<KasaSayfasi />} />
             <Route path="finansal" element={<FinansalTakipSayfasi />} />
             <Route path="proforma-fatura" element={<ProformaFaturaSayfasi />} />
             <Route path="raporlar" element={<RaporlarSayfasi />} />
