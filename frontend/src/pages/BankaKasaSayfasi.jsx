@@ -1,9 +1,22 @@
 import { useEffect, useState } from 'react';
 import { api, hataMesajiCikar } from '../api/client';
-import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat } from '../components/Ortak';
+import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat, eylemChipStili } from '../components/Ortak';
 
-function YeniHesapFormu({ onKaydedildi, onVazgec }) {
-  const [form, setForm] = useState({ banka_adi: '', hesap_adi: '', iban: '', para_birimi: 'TRY' });
+function bosHesapForm() {
+  return { banka_adi: '', hesap_adi: '', iban: '', para_birimi: 'TRY' };
+}
+
+function HesapFormu({ duzenlenenHesap, onKaydedildi, onVazgec }) {
+  const duzenlemeModu = !!duzenlenenHesap;
+  const [form, setForm] = useState(() => duzenlenenHesap
+    ? {
+        banka_adi: duzenlenenHesap.banka_adi || '',
+        hesap_adi: duzenlenenHesap.hesap_adi || '',
+        iban: duzenlenenHesap.iban || '',
+        para_birimi: duzenlenenHesap.para_birimi || 'TRY',
+      }
+    : bosHesapForm()
+  );
   const [hata, setHata] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
 
@@ -12,7 +25,11 @@ function YeniHesapFormu({ onKaydedildi, onVazgec }) {
     setHata(null);
     setKaydediliyor(true);
     try {
-      await api.post('/banka-hesaplari', form);
+      if (duzenlemeModu) {
+        await api.put(`/banka-hesaplari/${duzenlenenHesap.id}`, form);
+      } else {
+        await api.post('/banka-hesaplari', form);
+      }
       onKaydedildi();
     } catch (err) {
       setHata(hataMesajiCikar(err));
@@ -24,7 +41,9 @@ function YeniHesapFormu({ onKaydedildi, onVazgec }) {
   return (
     <Kart style={{ marginBottom: 16 }}>
       <form onSubmit={kaydet}>
-        <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 14 }}>Yeni banka hesabı</div>
+        <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 14 }}>
+          {duzenlemeModu ? `Hesabı düzenle — ${duzenlenenHesap.banka_adi}` : 'Yeni banka hesabı'}
+        </div>
         <HataMesaji>{hata}</HataMesaji>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12 }}>
           <Alan etiket="Banka adı">
@@ -46,7 +65,9 @@ function YeniHesapFormu({ onKaydedildi, onVazgec }) {
           </Alan>
         </div>
         <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-          <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Kaydediliyor...' : 'Hesabı kaydet'}</Buton>
+          <Buton type="submit" disabled={kaydediliyor}>
+            {kaydediliyor ? 'Kaydediliyor...' : duzenlemeModu ? 'Değişiklikleri kaydet' : 'Hesabı kaydet'}
+          </Buton>
           <Buton type="button" variant="ikincil" onClick={onVazgec}>Vazgeç</Buton>
         </div>
       </form>
@@ -154,6 +175,7 @@ export default function BankaKasaSayfasi() {
   const [hata, setHata] = useState(null);
   const [yukleniyor, setYukleniyor] = useState(true);
   const [hesapFormuAcik, setHesapFormuAcik] = useState(false);
+  const [duzenlenenHesap, setDuzenlenenHesap] = useState(null);
   const [hareketFormuAcik, setHareketFormuAcik] = useState(false);
 
   function yukle() {
@@ -172,6 +194,32 @@ export default function BankaKasaSayfasi() {
 
   useEffect(yukle, []);
 
+  function yeniHesapAc() {
+    setDuzenlenenHesap(null);
+    setHesapFormuAcik(true);
+  }
+
+  function duzenle(hesap) {
+    // banka-bakiyeleri satirlari 'banka_hesap_id' kullanir, formumuz 'id' bekliyor.
+    setDuzenlenenHesap({ id: hesap.banka_hesap_id, banka_adi: hesap.banka_adi, hesap_adi: hesap.hesap_adi, para_birimi: hesap.para_birimi });
+    setHesapFormuAcik(true);
+  }
+
+  function hesapFormunuKapat() {
+    setHesapFormuAcik(false);
+    setDuzenlenenHesap(null);
+  }
+
+  async function hesabiSil(hesap) {
+    if (!window.confirm(`${hesap.banka_adi} hesabını silmek istediğinize emin misiniz?`)) return;
+    try {
+      await api.delete(`/banka-hesaplari/${hesap.banka_hesap_id}`);
+      yukle();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    }
+  }
+
   return (
     <div>
       <SayfaBasligi
@@ -179,7 +227,7 @@ export default function BankaKasaSayfasi() {
         aciklama="Banka hesap bakiyeleri ve ana kasa net durumu"
         eylem={
           <div style={{ display: 'flex', gap: 8 }}>
-            <Buton variant="ikincil" onClick={() => setHesapFormuAcik((a) => !a)}>+ Yeni hesap</Buton>
+            <Buton variant="ikincil" onClick={yeniHesapAc}>+ Yeni hesap</Buton>
             <Buton onClick={() => setHareketFormuAcik((a) => !a)}>+ Yeni hareket</Buton>
           </div>
         }
@@ -187,7 +235,11 @@ export default function BankaKasaSayfasi() {
       <HataMesaji>{hata}</HataMesaji>
 
       {hesapFormuAcik && (
-        <YeniHesapFormu onKaydedildi={() => { setHesapFormuAcik(false); yukle(); }} onVazgec={() => setHesapFormuAcik(false)} />
+        <HesapFormu
+          duzenlenenHesap={duzenlenenHesap}
+          onKaydedildi={() => { hesapFormunuKapat(); yukle(); }}
+          onVazgec={hesapFormunuKapat}
+        />
       )}
       {hareketFormuAcik && (
         <YeniHareketFormu hesaplar={bakiyeler} onKaydedildi={() => { setHareketFormuAcik(false); yukle(); }} onVazgec={() => setHareketFormuAcik(false)} />
@@ -219,7 +271,7 @@ export default function BankaKasaSayfasi() {
               <table>
                 <thead>
                   <tr style={{ background: 'var(--zemin)' }}>
-                    {['Banka', 'Hesap', 'Para Birimi', 'Bakiye'].map((b) => (
+                    {['Banka', 'Hesap', 'Para Birimi', 'Bakiye', 'İşlem'].map((b) => (
                       <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
                     ))}
                   </tr>
@@ -231,6 +283,12 @@ export default function BankaKasaSayfasi() {
                       <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>{b.hesap_adi || '—'}</td>
                       <td style={{ padding: '12px 16px' }}>{b.para_birimi}</td>
                       <td style={{ padding: '12px 16px', fontWeight: 500 }}>{paraFormat(b.bakiye, b.para_birimi)}</td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button onClick={() => duzenle(b)} style={eylemChipStili('lacivert')}>Düzenle</button>
+                          <button onClick={() => hesabiSil(b)} style={eylemChipStili('kirmizi')}>Sil</button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
