@@ -1,3 +1,4 @@
+from sqlalchemy.exc import IntegrityError
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func, case
@@ -30,6 +31,44 @@ def banka_hesabi_olustur(
     sirket_id: int = Depends(aktif_sirket_id_getir),
     db: Session = Depends(get_db),
 ):
+    @router.put("/banka-hesaplari/{hesap_id}", response_model=BankaHesabiYanit,
+            dependencies=[Depends(izin_gerektir("BANKA_DUZENLE"))])
+def banka_hesabi_guncelle(
+    hesap_id: int,
+    istek: BankaHesabiOlusturIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    hesap = db.get(BankaHesabi, hesap_id)
+    if hesap is None or hesap.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Banka hesabı bulunamadı.")
+    for alan, deger in istek.model_dump().items():
+        setattr(hesap, alan, deger)
+    db.commit()
+    db.refresh(hesap)
+    return hesap
+
+
+@router.delete("/banka-hesaplari/{hesap_id}",
+               dependencies=[Depends(izin_gerektir("BANKA_DUZENLE"))])
+def banka_hesabi_sil(
+    hesap_id: int,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    hesap = db.get(BankaHesabi, hesap_id)
+    if hesap is None or hesap.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Banka hesabı bulunamadı.")
+    try:
+        db.delete(hesap)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Bu banka hesabında hareketler olduğu için silinemiyor. Hesabı pasif hale getirmeyi düşünebilirsiniz."
+        )
+    return {"silindi": True}
     yeni = BankaHesabi(sirket_id=sirket_id, **istek.model_dump())
     db.add(yeni)
     db.commit()
