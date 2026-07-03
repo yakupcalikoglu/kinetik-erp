@@ -16,6 +16,7 @@ import RaporlarSayfasi from './pages/RaporlarSayfasi';
 import FinansalTakipSayfasi from './pages/FinansalTakipSayfasi';
 import ProformaFaturaSayfasi from './pages/ProformaFaturaSayfasi';
 import YoneticiPaneliSayfasi from './pages/YoneticiPaneliSayfasi';
+import VirmanSayfasi from './pages/VirmanSayfasi';
 
 function KorumaliRota({ children }) {
   const { oturum } = useAuth();
@@ -48,6 +49,7 @@ function App() {
             <Route path="siparisler/:siparisId/teslim-al" element={<SiparisTeslimAlSayfasi />} />
             <Route path="banka" element={<BankaSayfasi />} />
             <Route path="kasa" element={<KasaSayfasi />} />
+            <Route path="virman" element={<VirmanSayfasi />} />
             <Route path="finansal" element={<FinansalTakipSayfasi />} />
             <Route path="proforma-fatura" element={<ProformaFaturaSayfasi />} />
             <Route path="raporlar" element={<RaporlarSayfasi />} />
