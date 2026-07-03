@@ -135,4 +135,4 @@ export default function GenelBakisSayfasi() {
               deger={paraFormat(veri.ana_kasa_bakiye_try)}
               ton={veri.ana_kasa_bakiye_try >= 0 ? 'yesil' : 'kirmizi'}
             />
-            <MetrikKart etiket="Depodaki
+            <MetrikKart etiket="Depodaki ürün sayısı" deger={veri.depodaki_urun_sayisi} />
