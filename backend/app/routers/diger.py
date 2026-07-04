@@ -17,6 +17,7 @@ from app.schemas.diger import (
     ProformaOlusturIstegi, ProformaYanit, FaturayaCevirYaniti, FaturaYanit,
 )
 from app.services.para_hareketi import para_hareketi_olustur
+para_birimi=borc.para_birimi.value, kur=istek.kur,
 
 router = APIRouter(tags=["Personel, Giderler, Borç, Fatura"])
 
