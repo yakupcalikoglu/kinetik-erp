@@ -4,12 +4,14 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.db.session import get_db
-from app.core.deps import aktif_sirket_id_getir, izin_gerektir
+from app.core.deps import aktif_sirket_id_getir, izin_gerektir, aktif_kullanici_getir
+from app.models.auth import Kullanici
 from app.models.stok import (StokKarti, StokSeriNo, StokMaliyetKalemi,
                               MALIYET_TIP_SUTUN_ESLEME, StokDurum)
 from app.schemas.stok import (StokKartiOlusturIstegi, StokKartiYanit,
                                StokSeriNoYanit, StokDurumGuncelleIstegi,
-                               MaliyetKalemiEkleIstegi, KarRaporuYanit)
+                               MaliyetKalemiEkleIstegi, KarRaporuYanit, StokSatisIstegi)
+from app.services.para_hareketi import para_hareketi_olustur
 
 router = APIRouter(tags=["Stok"])
 
@@ -134,6 +136,41 @@ def stok_durum_guncelle(
         kayit.satis_fiyati_try = istek.satis_fiyati_try
     if istek.satis_tarihi is not None:
         kayit.satis_tarihi = istek.satis_tarihi
+
+    db.commit()
+    db.refresh(kayit)
+    return kayit
+
+
+@router.post("/stok-seri-no/{seri_id}/satis", response_model=StokSeriNoYanit,
+             dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
+def stok_satisi_yap(
+    seri_id: int,
+    istek: StokSatisIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    kullanici: Kullanici = Depends(aktif_kullanici_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Depoda veya antrepoda olan bir urunu PESIN satar: durumu SATILDI yapar
+    ve satis tutarini es zamanli olarak Kasa/Banka'ya (GIRIS) yansitir.
+    Vadeli/taksitli satislar icin Finansal Takip > Taksitli Satis kullanilmalidir.
+    """
+    kayit = _seri_no_getir_veya_404(db, seri_id, sirket_id)
+    if kayit.durum == StokDurum.SATILDI:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bu ürün zaten satılmış.")
+
+    kayit.durum = StokDurum.SATILDI
+    kayit.musteri_cari_id = istek.musteri_cari_id
+    kayit.satis_fiyati_try = istek.satis_fiyati_try
+    kayit.satis_tarihi = istek.satis_tarihi
+
+    para_hareketi_olustur(
+        db, sirket_id, kullanici.id, "GIRIS", istek.satis_fiyati_try,
+        istek.odeme_yontemi, istek.banka_hesap_id,
+        aciklama=f"Stok satışı - Seri No {kayit.seri_no}",
+        kaynak_tablo="STOK_SATIS", kaynak_id=kayit.id, cari_id=istek.musteri_cari_id,
+    )
 
     db.commit()
     db.refresh(kayit)
