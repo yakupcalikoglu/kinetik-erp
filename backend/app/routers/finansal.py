@@ -55,11 +55,6 @@ def cek_durum_guncelle(
     kullanici: Kullanici = Depends(aktif_kullanici_getir),
     db: Session = Depends(get_db),
 ):
-    """
-    Durum TAHSIL_EDILDI (ALINAN cek bankaya tahsile verildi) veya ODENDI
-    (VERILEN cek karsilandi) yapilirken odeme_yontemi zorunludur; bu durumda
-    otomatik olarak Ana Kasa'ya veya secilen banka hesabina bir hareket acilir.
-    """
     cek = db.get(Cek, cek_id)
     if cek is None or cek.sirket_id != sirket_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Çek bulunamadı.")
@@ -82,7 +77,6 @@ def cek_durum_guncelle(
         cek.ciro_tarihi = date.today()
 
     if istek.yeni_durum in para_hareketi_gereken_durumlar:
-        # ALINAN cek tahsil edilince GIRIS, VERILEN cek odenince CIKIS.
         yon = "GIRIS" if cek.tip == CekTip.ALINAN else "CIKIS"
         para_hareketi_olustur(
             db, sirket_id, kullanici.id, yon, cek.tutar,
@@ -118,7 +112,6 @@ def cek_gecmisi(cek_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db
 def leasing_olustur(
     istek: LeasingOlusturIstegi, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
 ):
-    """Sozlesme olusturulurken taksit_sayisi'na gore odeme plani OTOMATIK uretilir (esit taksitler)."""
     yeni = LeasingSozlesme(sirket_id=sirket_id, **istek.model_dump())
     db.add(yeni)
     db.flush()
@@ -126,7 +119,6 @@ def leasing_olustur(
     taksit_tutari = round(istek.toplam_tutar / istek.taksit_sayisi, 2)
     for i in range(1, istek.taksit_sayisi + 1):
         vade = istek.baslangic_tarihi + relativedelta(months=i)
-        # son taksitte yuvarlama farkini kapat
         tutar = taksit_tutari
         if i == istek.taksit_sayisi:
             tutar = istek.toplam_tutar - taksit_tutari * (istek.taksit_sayisi - 1)
@@ -192,7 +184,6 @@ def leasing_odeme_yap(
 def taksitli_satis_olustur(
     istek: TaksitliSatisOlusturIstegi, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
 ):
-    """Plan olusturulunca (toplam_tutar - pesinat) taksit_sayisi'na bolunup taksit_detay OTOMATIK uretilir."""
     yeni = TaksitliSatisPlani(sirket_id=sirket_id, **istek.model_dump())
     db.add(yeni)
     db.flush()
@@ -372,10 +363,6 @@ def bakim_kaydi_olustur(
     kullanici: Kullanici = Depends(aktif_kullanici_getir),
     db: Session = Depends(get_db),
 ):
-    """
-    Bakim kaydi olusturulurken es zamanli olarak Kasa/Banka'ya da yansitilir.
-    GELIR ise tahsilat (GIRIS), GIDER ise odeme (CIKIS) olarak islenir.
-    """
     veri = istek.model_dump(exclude={"odeme_yontemi", "banka_hesap_id", "kur"})
     yeni = BakimKaydi(sirket_id=sirket_id, odendi_tahsil_edildi_mi=True, **veri)
     db.add(yeni)
