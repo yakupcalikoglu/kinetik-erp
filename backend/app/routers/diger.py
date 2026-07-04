@@ -17,7 +17,6 @@ from app.schemas.diger import (
     ProformaOlusturIstegi, ProformaYanit, FaturayaCevirYaniti, FaturaYanit,
 )
 from app.services.para_hareketi import para_hareketi_olustur
-para_birimi=borc.para_birimi.value, kur=istek.kur,
 
 router = APIRouter(tags=["Personel, Giderler, Borç, Fatura"])
 
@@ -198,6 +197,7 @@ def borc_odemesi_ekle(
         istek.odeme_yontemi, istek.banka_hesap_id,
         aciklama=istek.aciklama or f"Borç ödemesi - {borc.tip.value}",
         kaynak_tablo="BORC_ODEME", kaynak_id=yeni.id, cari_id=borc.cari_id,
+        para_birimi=borc.para_birimi.value, kur=istek.kur,
     )
 
     db.commit()
