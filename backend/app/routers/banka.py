@@ -12,6 +12,15 @@ from app.schemas.banka import (
     BankaHareketiOlusturIstegi, BankaHareketiYanit,
     KasaHareketiOlusturIstegi, KasaHareketiYanit, KasaBakiyeYanit,
 )
+from app.services.kur_servisi import guncel_kur_getir
+
+@router.get("/kur/{para_birimi}")
+async def guncel_kur(para_birimi: str):
+    kur = await guncel_kur_getir(para_birimi)
+    if kur is None:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Kur bilgisi alınamadı, lütfen elle girin.")
+    from datetime import date
+    return {"para_birimi": para_birimi.upper(), "kur": str(kur), "tarih": str(date.today())}
 
 router = APIRouter(tags=["Banka ve Ana Kasa"])
 
