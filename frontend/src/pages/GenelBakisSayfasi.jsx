@@ -1,240 +1,203 @@
 import { useEffect, useState } from 'react';
 import { api, hataMesajiCikar } from '../api/client';
-import { Kart, SayfaBasligi, HataMesaji, paraFormat } from '../components/Ortak';
+import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat } from '../components/Ortak';
 
-function MetrikKart({ etiket, deger, ton = 'notr' }) {
-  const renkler = {
-    notr: 'var(--metin-birincil)',
-    yesil: 'var(--yesil)',
-    kirmizi: 'var(--kirmizi)',
-    amber: 'var(--amber)',
-  };
+function YeniKasaHareketiFormu({ onKaydedildi, onVazgec }) {
+  const [form, setForm] = useState({
+    tarih: new Date().toISOString().slice(0, 10), yon: 'GIRIS', tutar: '', para_birimi: 'TRY',
+    tutar_try_karsiligi: '', aciklama: '',
+  });
+  const [kurYukleniyor, setKurYukleniyor] = useState(false);
+  const [hata, setHata] = useState(null);
+  const [kaydediliyor, setKaydediliyor] = useState(false);
+
+  // Para birimi TRY disina degistiginde guncel kuru otomatik cek, kullanici isterse elle degistirebilir.
+  useEffect(() => {
+    if (form.para_birimi === 'TRY') {
+      setForm((f) => ({ ...f, tutar_try_karsiligi: '' }));
+      return;
+    }
+    if (form.para_birimi === 'ALTIN') return; // altin kuru otomatik cekilemiyor
+    setKurYukleniyor(true);
+    api.get(`/kur/${form.para_birimi}`)
+      .then((r) => {
+        const kur = Number(r.data.kur);
+        const tutarSayi = Number(form.tutar) || 0;
+        setForm((f) => ({ ...f, tutar_try_karsiligi: (tutarSayi * kur).toFixed(2) }));
+      })
+      .catch(() => {})
+      .finally(() => setKurYukleniyor(false));
+  }, [form.para_birimi]); // eslint-disable-line
+
+  async function kaydet(e) {
+    e.preventDefault();
+    setHata(null);
+    setKaydediliyor(true);
+    try {
+      await api.post('/kasa-hareketleri', {
+        ...form,
+        tutar: Number(form.tutar),
+        tutar_try_karsiligi: form.para_birimi === 'TRY' ? null : Number(form.tutar_try_karsiligi),
+      });
+      onKaydedildi();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setKaydediliyor(false);
+    }
+  }
+
   return (
-    <Kart style={{ flex: 1 }}>
-      <div style={{ fontSize: 12.5, color: 'var(--metin-ikincil)', marginBottom: 8 }}>{etiket}</div>
-      <div style={{ fontSize: 26, fontWeight: 600, color: renkler[ton] }}>{deger}</div>
-    </Kart>
-  );
-}
-
-const TUR_RENK = {
-  CEK: { bg: '#e8edf7', renk: '#1e3a6e', etiket: 'Çek' },
-  LEASING: { bg: '#f3e8fb', renk: '#7a2fa8', etiket: 'Leasing' },
-  AKREDITIF: { bg: '#fdf1e3', renk: '#b5670a', etiket: 'Akreditif' },
-  TAKSIT: { bg: '#e3f5e9', renk: '#1c7c4c', etiket: 'Taksit' },
-  KIRA: { bg: '#e3f0fb', renk: '#0b5fa8', etiket: 'Kira' },
-};
-
-function TurEtiketi({ tur }) {
-  const t = TUR_RENK[tur] || { bg: '#f1f2f4', renk: '#5a6472', etiket: tur };
-  return (
-    <span style={{
-      background: t.bg, color: t.renk, borderRadius: 5, padding: '2px 8px',
-      fontSize: 11.5, fontWeight: 600, whiteSpace: 'nowrap',
-    }}>
-      {t.etiket}
-    </span>
-  );
-}
-
-function VadeListesi({ baslik, satirlar, toplam, bosMesaj }) {
-  const gosterilecekler = satirlar.slice(0, 5);
-  return (
-    <Kart style={{ flex: 1, padding: 0 }}>
-      <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--kenarlik)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontWeight: 600, fontSize: 13.5 }}>{baslik}</span>
-        <span style={{ fontWeight: 600, fontSize: 13.5 }}>{paraFormat(toplam)}</span>
-      </div>
-      {satirlar.length === 0 ? (
-        <div style={{ padding: '16px', color: 'var(--metin-soluk)', fontSize: 13 }}>{bosMesaj}</div>
-      ) : (
-        <div>
-          {gosterilecekler.map((s, i) => (
-            <div key={i} style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              padding: '10px 16px', borderTop: i > 0 ? '1px solid var(--kenarlik)' : 'none', gap: 10,
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                <TurEtiketi tur={s.tur} />
-                <span style={{ fontSize: 13, color: 'var(--metin-ikincil)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {s.aciklama}
-                </span>
-              </div>
-              <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 500 }}>{paraFormat(s.tutar, s.para_birimi)}</div>
-                <div style={{ fontSize: 11, color: 'var(--metin-soluk)' }}>{s.tarih}</div>
-              </div>
-            </div>
-          ))}
-          {satirlar.length > 5 && (
-            <div style={{ padding: '8px 16px', fontSize: 12, color: 'var(--metin-soluk)', borderTop: '1px solid var(--kenarlik)' }}>
-              + {satirlar.length - 5} kayıt daha
-            </div>
+    <Kart style={{ marginBottom: 16 }}>
+      <form onSubmit={kaydet}>
+        <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 14 }}>Yeni kasa hareketi</div>
+        <HataMesaji>{hata}</HataMesaji>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12 }}>
+          <Alan etiket="Tarih">
+            <input required type="date" value={form.tarih} onChange={(e) => setForm((f) => ({ ...f, tarih: e.target.value }))} style={girdiStili} />
+          </Alan>
+          <Alan etiket="Yön">
+            <select value={form.yon} onChange={(e) => setForm((f) => ({ ...f, yon: e.target.value }))} style={girdiStili}>
+              <option value="GIRIS">Giriş</option>
+              <option value="CIKIS">Çıkış</option>
+            </select>
+          </Alan>
+          <Alan etiket="Para birimi">
+            <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={girdiStili}>
+              <option value="TRY">TRY</option>
+              <option value="USD">USD</option>
+              <option value="EUR">EUR</option>
+              <option value="ALTIN">ALTIN</option>
+            </select>
+          </Alan>
+          <Alan etiket="Tutar">
+            <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
+          </Alan>
+          {form.para_birimi !== 'TRY' && (
+            <Alan etiket={kurYukleniyor ? 'TL karşılığı (kur yükleniyor...)' : 'TL karşılığı (otomatik, elle değiştirilebilir)'}>
+              <input required type="number" step="0.01" value={form.tutar_try_karsiligi} onChange={(e) => setForm((f) => ({ ...f, tutar_try_karsiligi: e.target.value }))} style={girdiStili} />
+            </Alan>
           )}
+          <Alan etiket="Açıklama">
+            <input value={form.aciklama} onChange={(e) => setForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
+          </Alan>
         </div>
-      )}
+        <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+          <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Kaydediliyor...' : 'Hareketi kaydet'}</Buton>
+          <Buton type="button" variant="ikincil" onClick={onVazgec}>Vazgeç</Buton>
+        </div>
+      </form>
     </Kart>
   );
 }
 
-function BasitListeKart({ baslik, children, bos, bosMesaj }) {
-  return (
-    <Kart style={{ padding: 0, flex: 1 }}>
-      <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--kenarlik)', fontWeight: 600, fontSize: 13.5 }}>
-        {baslik}
-      </div>
-      {bos ? (
-        <div style={{ padding: 16, color: 'var(--metin-soluk)', fontSize: 13 }}>{bosMesaj}</div>
-      ) : children}
-    </Kart>
-  );
-}
-
-export default function GenelBakisSayfasi() {
-  const [veri, setVeri] = useState(null);
-  const [vadeler, setVadeler] = useState(null);
-  const [depoEnvanteri, setDepoEnvanteri] = useState(null);
-  const [bankaBakiyeleri, setBankaBakiyeleri] = useState(null);
-  const [aktifKiralamalar, setAktifKiralamalar] = useState(null);
+export default function KasaSayfasi() {
+  const [kasaBakiye, setKasaBakiye] = useState(null);
+  const [kasaHareketleri, setKasaHareketleri] = useState([]);
+  const [yonFiltre, setYonFiltre] = useState('');
+  const [paraBirimiFiltre, setParaBirimiFiltre] = useState('');
   const [hata, setHata] = useState(null);
   const [yukleniyor, setYukleniyor] = useState(true);
+  const [formAcik, setFormAcik] = useState(false);
 
-  useEffect(() => {
+  function yukle() {
+    setYukleniyor(true);
     Promise.all([
-      api.get('/raporlar/genel-bakis'),
-      api.get('/raporlar/yaklasan-vadeler', { params: { gun: 30 } }),
-      api.get('/raporlar/depo-envanteri'),
-      api.get('/banka-bakiyeleri'),
-      api.get('/raporlar/aktif-kiralamalar'),
+      api.get('/kasa-bakiye'),
+      api.get('/kasa-hareketleri'),
     ])
-      .then(([genelRes, vadeRes, depoRes, bankaRes, kiralamaRes]) => {
-        setVeri(genelRes.data);
-        setVadeler(vadeRes.data);
-        setDepoEnvanteri(depoRes.data);
-        setBankaBakiyeleri(bankaRes.data);
-        setAktifKiralamalar(kiralamaRes.data);
+      .then(([bakiyeRes, hareketRes]) => {
+        setKasaBakiye(bakiyeRes.data);
+        setKasaHareketleri(hareketRes.data);
       })
       .catch((err) => setHata(hataMesajiCikar(err)))
       .finally(() => setYukleniyor(false));
-  }, []);
+  }
 
-  const depoToplamDeger = depoEnvanteri
-    ? depoEnvanteri.reduce((t, d) => t + Number(d.toplam_deger_try), 0)
-    : 0;
+  useEffect(yukle, []);
+
+  let gosterilecekHareketler = kasaHareketleri;
+  if (yonFiltre) gosterilecekHareketler = gosterilecekHareketler.filter((h) => h.yon === yonFiltre);
+  if (paraBirimiFiltre) gosterilecekHareketler = gosterilecekHareketler.filter((h) => h.para_birimi === paraBirimiFiltre);
 
   return (
     <div>
-      <SayfaBasligi baslik="Genel bakış" aciklama="Ana kasa, çek vadeleri ve stok durumunun özeti" />
+      <SayfaBasligi baslik="Ana Kasa" aciklama="Nakit giriş/çıkış hareketleri (çoklu para birimi)" />
       <HataMesaji>{hata}</HataMesaji>
-      {yukleniyor && <div style={{ color: 'var(--metin-soluk)' }}>Yükleniyor...</div>}
-      {veri && (
-        <>
-          <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
-           <MetrikKart
-              etiket="Ana kasa bakiyesi"
-              deger={paraFormat(veri.ana_kasa_bakiye_try)}
-              ton={veri.ana_kasa_bakiye_try >= 0 ? 'yesil' : 'kirmizi'}
-            />
-            <MetrikKart
-              etiket="Depodaki ürün sayısı / değeri"
-              deger={`${veri.depodaki_urun_sayisi} adet · ${paraFormat(depoToplamDeger)}`}
-            />
-            <MetrikKart etiket="Aktif kiralama sayısı" deger={veri.aktif_kiralama_sayisi} />
-          </div>
-          <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
-            <MetrikKart
-              etiket="Vadesi yaklaşan çek (7 gün)"
-              deger={`${veri.vadesi_yaklasan_cek_sayisi} adet · ${paraFormat(veri.vadesi_yaklasan_cek_toplami)}`}
-              ton={veri.vadesi_yaklasan_cek_sayisi > 0 ? 'amber' : 'notr'}
-            />
-            <MetrikKart
-              etiket="Geciken taksit"
-              deger={`${veri.geciken_taksit_sayisi} adet · ${paraFormat(veri.geciken_taksit_toplami)}`}
-              ton={veri.geciken_taksit_sayisi > 0 ? 'kirmizi' : 'notr'}
-            />
-          </div>
 
-          {vadeler && (
-            <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
-              <VadeListesi
-                baslik="Önümüzdeki 30 gün — Ödemeler"
-                satirlar={vadeler.odemeler}
-                toplam={vadeler.odemeler_toplam}
-                bosMesaj="Önümüzdeki 30 günde vadesi gelen ödeme yok."
-              />
-              <VadeListesi
-                baslik="Önümüzdeki 30 gün — Tahsilatlar"
-                satirlar={vadeler.tahsilatlar}
-                toplam={vadeler.tahsilatlar_toplam}
-                bosMesaj="Önümüzdeki 30 günde vadesi gelen tahsilat yok."
-              />
-            </div>
-          )}
-
-          <div style={{ display: 'flex', gap: 16, marginBottom: 16, alignItems: 'flex-start' }}>
-            <BasitListeKart
-              baslik="Depodaki ürünler (ürün türüne göre)"
-              bos={!depoEnvanteri || depoEnvanteri.length === 0}
-              bosMesaj="Depoda ürün bulunmuyor."
-            >
-              {depoEnvanteri && depoEnvanteri.map((d, i) => (
-                <div key={d.stok_karti_id} style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  padding: '10px 16px', borderTop: i > 0 ? '1px solid var(--kenarlik)' : 'none',
-                }}>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 500 }}>{d.marka} {d.model}</div>
-                    <div style={{ fontSize: 11.5, color: 'var(--metin-soluk)' }}>{d.adet} {d.birim}</div>
-                  </div>
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>{paraFormat(d.toplam_deger_try)}</div>
-                </div>
-              ))}
-            </BasitListeKart>
-
-            <BasitListeKart
-              baslik="Banka hesap bakiyeleri"
-              bos={!bankaBakiyeleri || bankaBakiyeleri.length === 0}
-              bosMesaj="Henüz banka hesabı yok."
-            >
-              {bankaBakiyeleri && bankaBakiyeleri.map((b, i) => (
-                <div key={b.banka_hesap_id} style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  padding: '10px 16px', borderTop: i > 0 ? '1px solid var(--kenarlik)' : 'none',
-                }}>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 500 }}>{b.banka_adi}</div>
-                    <div style={{ fontSize: 11.5, color: 'var(--metin-soluk)' }}>{b.hesap_adi || b.para_birimi}</div>
-                  </div>
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>{paraFormat(b.bakiye, b.para_birimi)}</div>
-                </div>
-              ))}
-            </BasitListeKart>
-          </div>
-
-          <BasitListeKart
-            baslik="Aktif kiralamalar"
-            bos={!aktifKiralamalar || aktifKiralamalar.length === 0}
-            bosMesaj="Aktif kiralama bulunmuyor."
-          >
-            {aktifKiralamalar && aktifKiralamalar.map((k, i) => (
-              <div key={k.stok_seri_no_id} style={{
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                padding: '10px 16px', borderTop: i > 0 ? '1px solid var(--kenarlik)' : 'none',
-              }}>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 500 }}>{k.marka} {k.model} — {k.seri_no}</div>
-                  <div style={{ fontSize: 11.5, color: 'var(--metin-soluk)' }}>Kiracı: {k.kiraci_unvan || '—'}</div>
-                </div>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>{paraFormat(k.aylik_kira_tutari, k.para_birimi)} / ay</div>
-              </div>
-            ))}
-          </BasitListeKart>
-
-          <Kart style={{ marginTop: 16 }}>
-            <div style={{ fontSize: 12.5, color: 'var(--metin-soluk)' }}>{veri.banka_toplam_try_karsiligi_not}</div>
+      {kasaBakiye && (
+        <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+          {kasaBakiye.bakiyeler.map((b) => (
+            <Kart key={b.para_birimi} style={{ flex: '1 1 160px', background: 'var(--lacivert)', color: 'white' }}>
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', marginBottom: 4 }}>{b.para_birimi} bakiyesi</div>
+              <div style={{ fontSize: 22, fontWeight: 600 }}>{paraFormat(b.net_bakiye, b.para_birimi)}</div>
+            </Kart>
+          ))}
+          <Kart style={{ flex: '1 1 200px', background: 'var(--lacivert-koyu, #0f2340)', color: 'white' }}>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', marginBottom: 4 }}>Toplam (TL karşılığı)</div>
+            <div style={{ fontSize: 22, fontWeight: 600 }}>{paraFormat(kasaBakiye.net_bakiye_try_toplam)}</div>
           </Kart>
-        </>
+        </div>
       )}
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 12, gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <Alan etiket="Yöne göre filtrele">
+            <select value={yonFiltre} onChange={(e) => setYonFiltre(e.target.value)} style={{ ...girdiStili, minWidth: 150 }}>
+              <option value="">Tümü</option>
+              <option value="GIRIS">Giriş</option>
+              <option value="CIKIS">Çıkış</option>
+            </select>
+          </Alan>
+          <Alan etiket="Para birimine göre filtrele">
+            <select value={paraBirimiFiltre} onChange={(e) => setParaBirimiFiltre(e.target.value)} style={{ ...girdiStili, minWidth: 150 }}>
+              <option value="">Tümü</option>
+              <option value="TRY">TRY</option>
+              <option value="USD">USD</option>
+              <option value="EUR">EUR</option>
+              <option value="ALTIN">ALTIN</option>
+            </select>
+          </Alan>
+        </div>
+        <Buton onClick={() => setFormAcik((a) => !a)}>{formAcik ? 'Kapat' : '+ Yeni kasa hareketi'}</Buton>
+      </div>
+
+      {formAcik && (
+        <YeniKasaHareketiFormu onKaydedildi={() => { setFormAcik(false); yukle(); }} onVazgec={() => setFormAcik(false)} />
+      )}
+
+      <Kart style={{ padding: 0 }}>
+        {yukleniyor ? (
+          <div style={{ padding: 20, color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
+        ) : gosterilecekHareketler.length === 0 ? (
+          <div style={{ padding: 20, color: 'var(--metin-soluk)' }}>Bu filtrede kasa hareketi yok.</div>
+        ) : (
+          <table>
+            <thead>
+              <tr style={{ background: 'var(--zemin)' }}>
+                {['Tarih', 'Yön', 'Tutar', 'TL Karşılığı', 'Açıklama'].map((b) => (
+                  <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {gosterilecekHareketler.map((h) => (
+                <tr key={h.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                  <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{h.tarih}</td>
+                  <td style={{ padding: '10px 16px' }}>{h.yon === 'GIRIS' ? 'Giriş' : 'Çıkış'}</td>
+                  <td style={{ padding: '10px 16px', fontWeight: 500, color: h.yon === 'GIRIS' ? 'var(--yesil)' : 'var(--kirmizi)' }}>
+                    {paraFormat(h.tutar, h.para_birimi)}
+                  </td>
+                  <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>
+                    {h.tutar_try_karsiligi != null ? paraFormat(h.tutar_try_karsiligi) : '—'}
+                  </td>
+                  <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{h.aciklama || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Kart>
     </div>
   );
 }
