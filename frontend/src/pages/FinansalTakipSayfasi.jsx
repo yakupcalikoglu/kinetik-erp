@@ -54,15 +54,36 @@ function cariGoster(id, harita) {
   return unvan ? `#${id} — ${unvan}` : `#${id}`;
 }
 
-// Odeme/tahsilat islemlerinde nakit/banka secimini sorar.
-// Iptal edilirse null doner, secim yapilirsa { odeme_yontemi, banka_hesap_id } doner.
-function odemeYontemiSor() {
+// Odeme/tahsilat islemlerinde nakit/banka secimini sorar. TRY disi bir
+// para biriminde NAKIT secilirse, guncel kuru otomatik ceker ve kullaniciya
+// onaylatir/degistirtir (kasa'ya dogru TL karsiligiyla yazilmasi icin).
+// Iptal edilirse null doner, secim yapilirsa
+// { odeme_yontemi, banka_hesap_id, kur? } doner.
+async function odemeYontemiSor(paraBirimi = 'TRY') {
   const yanit = window.prompt('Ödeme yöntemi? "nakit" yazın ya da banka hesap ID girin:', 'nakit');
   if (yanit === null || yanit.trim() === '') return null;
   const temiz = yanit.trim().toLowerCase();
+
   if (temiz === 'nakit' || temiz === 'n') {
-    return { odeme_yontemi: 'NAKIT', banka_hesap_id: null };
+    if (paraBirimi === 'TRY') {
+      return { odeme_yontemi: 'NAKIT', banka_hesap_id: null };
+    }
+    let onerilenKur = '';
+    try {
+      const { data } = await api.get(`/kur/${paraBirimi}`);
+      onerilenKur = data.kur;
+    } catch (e) { /* kur alinamadi, kullanici elle girecek */ }
+    const girilenKur = window.prompt(
+      `${paraBirimi} nakit ödeme — TL karşılığı için güncel kur (gerekirse değiştirin):`,
+      onerilenKur
+    );
+    if (!girilenKur || Number.isNaN(Number(girilenKur))) {
+      window.alert('Geçerli bir kur girmediniz, işlem iptal edildi.');
+      return null;
+    }
+    return { odeme_yontemi: 'NAKIT', banka_hesap_id: null, kur: Number(girilenKur) };
   }
+
   const bankaId = Number(temiz);
   if (!bankaId || Number.isNaN(bankaId)) {
     window.alert('Geçersiz giriş. "nakit" yazın veya geçerli bir banka hesap ID girin.');
@@ -107,7 +128,7 @@ function CekSekmesi() {
   }
 
   async function tahsilEtVeyaOde(cek) {
-    const secim = odemeYontemiSor();
+    const secim = await odemeYontemiSor(cek.para_birimi);
     if (!secim) return;
     try {
       await api.put(`/cekler/${cek.id}/durum`, {
@@ -293,7 +314,7 @@ function AkreditifSekmesi() {
   }
 
   async function kalemOde(kalemId) {
-    const secim = odemeYontemiSor();
+    const secim = await odemeYontemiSor(seciliAkreditif.para_birimi);
     if (!secim) return;
     try {
       await api.put(`/akreditif-kalemleri/${kalemId}/ode`, { odeme_tarihi: new Date().toISOString().slice(0, 10), ...secim });
@@ -715,7 +736,8 @@ function LeasingSekmesi() {
   }
 
   async function odemeYap(odemeId) {
-    const secim = odemeYontemiSor();
+    const sozlesme = liste.find((l) => l.id === seciliPlan.id);
+    const secim = await odemeYontemiSor(sozlesme ? sozlesme.para_birimi : 'TRY');
     if (!secim) return;
     try {
       await api.put(`/leasing-odemeleri/${odemeId}/ode`, { odeme_tarihi: new Date().toISOString().slice(0, 10), ...secim });
@@ -822,7 +844,8 @@ function KiralamaSekmesi() {
   }
 
   async function tahsilEt(odemeId) {
-    const secim = odemeYontemiSor();
+    const sozlesme = liste.find((l) => l.id === seciliSozlesme);
+    const secim = await odemeYontemiSor(sozlesme ? sozlesme.para_birimi : 'TRY');
     if (!secim) return;
     try {
       await api.put(`/kiralama-odemeleri/${odemeId}/tahsil-et`, { odeme_tarihi: new Date().toISOString().slice(0, 10), ...secim });
@@ -958,7 +981,7 @@ function TaksitSekmesi() {
   }
 
   async function tahsilEt(taksitId) {
-    const secim = odemeYontemiSor();
+    const secim = await odemeYontemiSor(olusanPlan ? olusanPlan.para_birimi : 'TRY');
     if (!secim) return;
     try {
       await api.put(`/taksit-detay/${taksitId}/tahsil-et`, { odeme_tarihi: new Date().toISOString().slice(0, 10), ...secim });
@@ -1173,7 +1196,8 @@ function BorcSekmesi() {
   async function odemeEkle(borcId) {
     const tutar = window.prompt('Ödeme tutarı:');
     if (!tutar) return;
-    const secim = odemeYontemiSor();
+    const borc = liste.find((b) => b.id === borcId);
+    const secim = await odemeYontemiSor(borc ? borc.para_birimi : 'TRY');
     if (!secim) return;
     try {
       await api.post(`/borclar/${borcId}/odeme`, { tarih: new Date().toISOString().slice(0, 10), tutar: Number(tutar), ...secim });
