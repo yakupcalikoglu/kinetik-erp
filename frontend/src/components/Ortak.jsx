@@ -185,3 +185,23 @@ export function eylemChipStili(ton = 'notr') {
 export const BIRIM_SECENEKLERI = [
   'ADET', 'KG', 'LT', 'M', 'M2', 'M3', 'TON', 'PAKET', 'KUTU', 'ÇİFT', 'TAKIM',
 ];
+// Metin girerken birkac harf yazinca ya da acilir listeden secim yapilabilen
+// otomatik tamamlama girdisi. Native <datalist> kullanir; ekstra kutuphane
+// gerektirmez, klavye/mouse ile secim ve serbest metin girisi ikisini de destekler.
+export function OtomatikTamamlamaGirdisi({ value, onChange, secenekler, placeholder, listeId, required }) {
+  return (
+    <>
+      <input
+        required={required}
+        list={listeId}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        style={girdiStili}
+      />
+      <datalist id={listeId}>
+        {secenekler.map((s) => <option key={s} value={s} />)}
+      </datalist>
+    </>
+  );
+}
