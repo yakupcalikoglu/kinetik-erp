@@ -156,7 +156,13 @@ class SiparisYanit(BaseModel):
 
     class Config:
         from_attributes = True
-
+        
+class StokSatisIstegi(BaseModel):
+    musteri_cari_id: int
+    satis_fiyati_try: Decimal
+    satis_tarihi: date
+    odeme_yontemi: str  # "NAKIT" | "BANKA"
+    banka_hesap_id: int | None = None
 
 class TeslimAlinanUrun(BaseModel):
     siparis_detay_id: int
