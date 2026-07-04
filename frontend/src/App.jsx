@@ -55,6 +55,7 @@ function App() {
             <Route path="proforma-fatura" element={<ProformaFaturaSayfasi />} />
             <Route path="raporlar" element={<RaporlarSayfasi />} />
             <Route path="yonetici-paneli" element={<YoneticiPaneliSayfasi />} />
+            <Route path="harcama-turleri" element={<HarcamaTurleriSayfasi />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
