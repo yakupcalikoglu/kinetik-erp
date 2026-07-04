@@ -6,19 +6,18 @@ from sqlalchemy.exc import IntegrityError
 from app.db.session import get_db
 from app.core.deps import aktif_sirket_id_getir, izin_gerektir, aktif_kullanici_getir
 from app.models.auth import Kullanici
-from app.models.akreditif import Akreditif, AkreditifKalemi, AkreditifDurum
+from app.models.akreditif import Akreditif, AkreditifKalemi, AkreditifDurum, AkreditifKalemTip
 from app.models.stok import Siparis
 from app.models.banka import BankaHesabi
 from app.schemas.akreditif import (
     AkreditifOlusturIstegi, AkreditifYanit, AkreditifDurumGuncelleIstegi,
     AkreditifKalemEkleIstegi, AkreditifKalemOdeIstegi,
+    AkreditifMaliyetDagitIstegi, AkreditifMaliyetDagitYaniti,
 )
 from app.services.para_hareketi import para_hareketi_olustur
 
 router = APIRouter(prefix="/akreditifler", tags=["Akreditif"])
 
-# Kalem odeme endpoint'i /akreditifler prefix'inin disinda,
-# ayri bir router olarak tanimlaniyor (frontend /akreditif-kalemleri/{id}/ode cagiriyor).
 kalem_router = APIRouter(prefix="/akreditif-kalemleri", tags=["Akreditif"])
 
 
@@ -151,7 +150,6 @@ def akreditif_durum_guncelle(
 
 
 def _durumu_yeniden_hesapla(db: Session, akreditif: Akreditif) -> None:
-    """Tum kalemler odendiyse KAPANDI, en az biri odendiyse KISMI_ODENDI yapar."""
     kalemler = list(db.execute(
         select(AkreditifKalemi).where(AkreditifKalemi.akreditif_id == akreditif.id)
     ).scalars())
@@ -203,8 +201,64 @@ def akreditif_kalemi_ode(
         istek.odeme_yontemi, istek.banka_hesap_id,
         aciklama=f"Akreditif {akreditif.akreditif_no or ''} - {kalem.tip.value}",
         kaynak_tablo="AKREDITIF_KALEMI", kaynak_id=kalem.id,
+        para_birimi=akreditif.para_birimi, kur=istek.kur,
     )
 
     _durumu_yeniden_hesapla(db, akreditif)
     db.commit()
     return {"odendi": True}
+
+
+@router.post("/{akreditif_id}/maliyet-dagit", response_model=AkreditifMaliyetDagitYaniti,
+             dependencies=[Depends(izin_gerektir("AKREDITIF_DUZENLE"))])
+def akreditif_maliyet_dagit(
+    akreditif_id: int,
+    istek: AkreditifMaliyetDagitIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    akreditif = _akreditif_getir_veya_404(db, akreditif_id, sirket_id)
+
+    kalemler = list(db.execute(
+        select(AkreditifKalemi).where(
+            AkreditifKalemi.akreditif_id == akreditif_id,
+            AkreditifKalemi.tip.in_([AkreditifKalemTip.KOMISYON, AkreditifKalemTip.MASRAF]),
+        )
+    ).scalars())
+    if not kalemler:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Dağıtılacak komisyon/masraf kalemi bulunamadı.")
+
+    toplam_masraf = sum(k.tutar for k in kalemler)
+    toplam_masraf_try = toplam_masraf if akreditif.para_birimi == "TRY" else toplam_masraf * istek.kur
+
+    from app.models.stok import StokSeriNo
+    urunler = list(db.execute(
+        select(StokSeriNo).where(StokSeriNo.siparis_id == akreditif.siparis_id, StokSeriNo.sirket_id == sirket_id)
+    ).scalars())
+    if not urunler:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Bu siparişe ait ürün (seri no) bulunamadı; önce sipariş teslim alınmalı."
+        )
+
+    if istek.yontem == "ESIT":
+        pay = toplam_masraf_try / len(urunler)
+        for u in urunler:
+            u.diger_maliyet_try = (u.diger_maliyet_try or 0) + pay
+    elif istek.yontem == "AGIRLIKLI":
+        toplam_satinalma = sum(u.satinalma_maliyeti_try or 0 for u in urunler)
+        if toplam_satinalma == 0:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "Ürünlerin satınalma maliyeti girilmemiş, ağırlıklı dağıtım yapılamıyor."
+            )
+        for u in urunler:
+            oran = (u.satinalma_maliyeti_try or 0) / toplam_satinalma
+            u.diger_maliyet_try = (u.diger_maliyet_try or 0) + toplam_masraf_try * oran
+    else:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "yontem 'ESIT' veya 'AGIRLIKLI' olmalıdır.")
+
+    db.commit()
+    return AkreditifMaliyetDagitYaniti(
+        dagitilan_urun_sayisi=len(urunler), toplam_dagitilan_try=toplam_masraf_try,
+    )
