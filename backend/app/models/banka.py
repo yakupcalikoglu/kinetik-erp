@@ -30,7 +30,6 @@ class HareketYon(str, enum.Enum):
 
 class BankaHesabi(Base):
     __tablename__ = "banka_hesaplari"
-
     id = Column(BigInteger, primary_key=True)
     sirket_id = Column(BigInteger, ForeignKey("sirketler.id"), nullable=False)
     banka_adi = Column(String(150), nullable=False)
@@ -43,7 +42,6 @@ class BankaHesabi(Base):
 
 class BankaHareketi(Base):
     __tablename__ = "banka_hareketleri"
-
     id = Column(BigInteger, primary_key=True)
     sirket_id = Column(BigInteger, ForeignKey("sirketler.id"), nullable=False)
     banka_hesap_id = Column(BigInteger, ForeignKey("banka_hesaplari.id"), nullable=False)
@@ -61,13 +59,21 @@ class BankaHareketi(Base):
 
 
 class KasaHareketi(Base):
+    """
+    Ana Kasa artik coklu para birimi destekler (bankada islemlerin buyuk
+    kismi doviz oldugu, virmanlarin da doviz/TL olabildigi icin). `tutar`
+    hareketin kendi para biriminde tutulur; `tutar_try_karsiligi` ise o
+    gunku kur ile hesaplanmis TL karsiligidir ve raporlarda (Genel Bakis
+    net bakiye gibi) TEK bir TL toplami gostermek icin kullanilir.
+    """
     __tablename__ = "kasa_hareketleri"
-
     id = Column(BigInteger, primary_key=True)
     sirket_id = Column(BigInteger, ForeignKey("sirketler.id"), nullable=False)
     tarih = Column(Date, nullable=False)
     yon = Column(SAEnum(HareketYon, name="hareket_yon_t"), nullable=False)
-    tutar_try = Column(Numeric(18, 2), nullable=False)
+    para_birimi = Column(SAEnum(ParaBirimi, name="para_birimi_t"), nullable=False, default=ParaBirimi.TRY)
+    tutar = Column(Numeric(18, 2), nullable=False)
+    tutar_try_karsiligi = Column(Numeric(18, 2))
     aciklama = Column(String(500))
     kaynak_tablo = Column(String(50))
     kaynak_id = Column(BigInteger)
