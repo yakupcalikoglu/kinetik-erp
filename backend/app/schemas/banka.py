@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 from pydantic import BaseModel
 from app.models.banka import ParaBirimi, BankaHareketTip, HareketYon
@@ -64,7 +64,9 @@ class BankaHareketiYanit(BaseModel):
 class KasaHareketiOlusturIstegi(BaseModel):
     tarih: date
     yon: HareketYon
-    tutar_try: Decimal
+    tutar: Decimal
+    para_birimi: ParaBirimi = ParaBirimi.TRY
+    tutar_try_karsiligi: Decimal | None = None  # TRY disi para biriminde zorunlu (kur ile hesaplanir)
     aciklama: str | None = None
 
 
@@ -72,7 +74,9 @@ class KasaHareketiYanit(BaseModel):
     id: int
     tarih: date
     yon: HareketYon
-    tutar_try: Decimal
+    tutar: Decimal
+    para_birimi: ParaBirimi
+    tutar_try_karsiligi: Decimal | None
     aciklama: str | None
     kaynak_tablo: str | None
 
@@ -80,5 +84,11 @@ class KasaHareketiYanit(BaseModel):
         from_attributes = True
 
 
+class KasaBakiyeSatiri(BaseModel):
+    para_birimi: ParaBirimi
+    net_bakiye: Decimal
+
+
 class KasaBakiyeYanit(BaseModel):
-    net_bakiye_try: Decimal
+    bakiyeler: list[KasaBakiyeSatiri]
+    net_bakiye_try_toplam: Decimal  # tum para birimlerinin TL karsiligi toplami
