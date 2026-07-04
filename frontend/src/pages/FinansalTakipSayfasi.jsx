@@ -216,6 +216,148 @@ const AKREDITIF_DURUM_TON = { ACIK: 'amber', KISMI_ODENDI: 'amber', KAPANDI: 'ye
 const AKREDITIF_DURUM_METIN = { ACIK: 'Açık', KISMI_ODENDI: 'Kısmi Ödendi', KAPANDI: 'Kapandı', IPTAL: 'İptal' };
 const AKREDITIF_KALEM_TIP_METIN = { ODEME: 'Ödeme', KOMISYON: 'Komisyon', MASRAF: 'Masraf' };
 
+function MaliyetDagitimFormu({ akreditif, onKapat, onTamamlandi }) {
+  const [urunler, setUrunler] = useState([]);
+  const [seciliUrunIdleri, setSeciliUrunIdleri] = useState([]);
+  const [yontem, setYontem] = useState('ESIT');
+  const [kur, setKur] = useState('1');
+  const [gecmis, setGecmis] = useState([]);
+  const [hata, setHata] = useState(null);
+  const [kaydediliyor, setKaydediliyor] = useState(false);
+
+  function gecmisiYukle() {
+    api.get(`/akreditifler/${akreditif.id}/maliyet-dagitimlari`).then((r) => setGecmis(r.data)).catch(() => {});
+  }
+
+  useEffect(() => {
+    api.get(`/akreditifler/${akreditif.id}/urun-secenekleri`)
+      .then((r) => {
+        setUrunler(r.data);
+        setSeciliUrunIdleri(r.data.map((u) => u.stok_seri_no_id));
+      })
+      .catch((e) => setHata(hataMesajiCikar(e)));
+    gecmisiYukle();
+    if (akreditif.para_birimi !== 'TRY') {
+      api.get(`/kur/${akreditif.para_birimi}`).then((r) => setKur(r.data.kur)).catch(() => {});
+    }
+  }, [akreditif.id]); // eslint-disable-line
+
+  function urunSecimDegistir(id) {
+    setSeciliUrunIdleri((mevcut) => (mevcut.includes(id) ? mevcut.filter((x) => x !== id) : [...mevcut, id]));
+  }
+
+  async function dagit(e) {
+    e.preventDefault();
+    setHata(null);
+    setKaydediliyor(true);
+    try {
+      const { data } = await api.post(`/akreditifler/${akreditif.id}/maliyet-dagit`, {
+        yontem, kur: Number(kur), stok_seri_no_idleri: seciliUrunIdleri,
+      });
+      window.alert(`${data.dagitilan_urun_sayisi} ürüne toplam ${paraFormat(data.toplam_dagitilan_try)} dağıtıldı.`);
+      gecmisiYukle();
+      onTamamlandi();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setKaydediliyor(false);
+    }
+  }
+
+  async function geriAl(dagitimId) {
+    if (!window.confirm('Bu dağıtımı geri almak istediğinize emin misiniz? Tutar, ürünün maliyetinden düşülecek.')) return;
+    try {
+      await api.delete(`/akreditif-maliyet-dagitimlari/${dagitimId}`);
+      gecmisiYukle();
+      onTamamlandi();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    }
+  }
+
+  return (
+    <Kart style={{ marginBottom: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        <div style={{ fontSize: 14.5, fontWeight: 600 }}>Komisyon/masrafı ürünlere dağıt</div>
+        <Buton variant="ikincil" onClick={onKapat}>Kapat</Buton>
+      </div>
+      <HataMesaji>{hata}</HataMesaji>
+
+      <form onSubmit={dagit}>
+        <div style={{ display: 'grid', gridTemplateColumns: akreditif.para_birimi !== 'TRY' ? '1fr 1fr' : '1fr', gap: 12, marginBottom: 14 }}>
+          <Alan etiket="Dağıtım yöntemi">
+            <select value={yontem} onChange={(e) => setYontem(e.target.value)} style={girdiStili}>
+              <option value="ESIT">Eşit (ürün adedine göre)</option>
+              <option value="AGIRLIKLI">Ağırlıklı (satınalma maliyetine göre)</option>
+            </select>
+          </Alan>
+          {akreditif.para_birimi !== 'TRY' && (
+            <Alan etiket={`${akreditif.para_birimi} için TL kuru (otomatik, elle değiştirilebilir)`}>
+              <input type="number" step="0.0001" value={kur} onChange={(e) => setKur(e.target.value)} style={girdiStili} />
+            </Alan>
+          )}
+        </div>
+
+        <div style={{ marginBottom: 6, fontSize: 12.5, color: 'var(--metin-ikincil)' }}>
+          Dağıtılacak ürünler (varsayılan: tümü seçili)
+        </div>
+        <div style={{ border: '1px solid var(--kenarlik)', borderRadius: 7, maxHeight: 220, overflowY: 'auto', marginBottom: 14 }}>
+          {urunler.length === 0 ? (
+            <div style={{ padding: 14, color: 'var(--metin-soluk)', fontSize: 13 }}>Bu siparişe ait ürün bulunamadı.</div>
+          ) : (
+            urunler.map((u) => (
+              <label key={u.stok_seri_no_id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--kenarlik)', fontSize: 13 }}>
+                <input
+                  type="checkbox"
+                  checked={seciliUrunIdleri.includes(u.stok_seri_no_id)}
+                  onChange={() => urunSecimDegistir(u.stok_seri_no_id)}
+                />
+                <span style={{ fontFamily: 'var(--font-mono)' }}>{u.seri_no}</span>
+                <span style={{ color: 'var(--metin-ikincil)', marginLeft: 'auto' }}>
+                  Satınalma: {u.satinalma_maliyeti_try != null ? paraFormat(u.satinalma_maliyeti_try) : '—'}
+                  {u.mevcut_diger_maliyet_try ? ` · Mevcut diğer maliyet: ${paraFormat(u.mevcut_diger_maliyet_try)}` : ''}
+                </span>
+              </label>
+            ))
+          )}
+        </div>
+
+        <Buton type="submit" disabled={kaydediliyor || seciliUrunIdleri.length === 0}>
+          {kaydediliyor ? 'Dağıtılıyor...' : 'Dağıt'}
+        </Buton>
+      </form>
+
+      {gecmis.length > 0 && (
+        <div style={{ marginTop: 20 }}>
+          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Dağıtım geçmişi</div>
+          <table>
+            <thead>
+              <tr style={{ background: 'var(--zemin)' }}>
+                {['Ürün', 'Yöntem', 'Kur', 'Tutar (TL)', 'Tarih', ''].map((b) => (
+                  <th key={b} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 12, color: 'var(--metin-ikincil)' }}>{b}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {gecmis.map((g) => (
+                <tr key={g.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                  <td style={{ padding: '8px 12px', fontFamily: 'var(--font-mono)' }}>{g.seri_no || `#${g.stok_seri_no_id}`}</td>
+                  <td style={{ padding: '8px 12px' }}>{g.yontem === 'ESIT' ? 'Eşit' : 'Ağırlıklı'}</td>
+                  <td style={{ padding: '8px 12px' }}>{g.kur ?? '—'}</td>
+                  <td style={{ padding: '8px 12px', fontWeight: 500 }}>{paraFormat(g.tutar_try)}</td>
+                  <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{g.olusturma_tarihi ? g.olusturma_tarihi.slice(0, 10) : '—'}</td>
+                  <td style={{ padding: '8px 12px' }}>
+                    <button onClick={() => geriAl(g.id)} style={eylemChipStili('kirmizi')}>Geri Al</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Kart>
+  );
+}
 function AkreditifSekmesi() {
   const [liste, setListe] = useState([]);
   const [siparisler, setSiparisler] = useState([]);
