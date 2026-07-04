@@ -7,18 +7,22 @@ from app.db.session import get_db
 from app.core.deps import aktif_sirket_id_getir, izin_gerektir, aktif_kullanici_getir
 from app.models.auth import Kullanici
 from app.models.akreditif import Akreditif, AkreditifKalemi, AkreditifDurum, AkreditifKalemTip
-from app.models.stok import Siparis
+from app.models.akreditif_maliyet import AkreditifMaliyetDagitimi
+from app.models.stok import Siparis, StokSeriNo
 from app.models.banka import BankaHesabi
 from app.schemas.akreditif import (
     AkreditifOlusturIstegi, AkreditifYanit, AkreditifDurumGuncelleIstegi,
     AkreditifKalemEkleIstegi, AkreditifKalemOdeIstegi,
-    AkreditifMaliyetDagitIstegi, AkreditifMaliyetDagitYaniti,
+    AkreditifUrunSecenegi, AkreditifMaliyetDagitIstegi, AkreditifMaliyetDagitYaniti,
+    AkreditifMaliyetDagitimSatiri,
 )
 from app.services.para_hareketi import para_hareketi_olustur
 
 router = APIRouter(prefix="/akreditifler", tags=["Akreditif"])
 
 kalem_router = APIRouter(prefix="/akreditif-kalemleri", tags=["Akreditif"])
+
+dagitim_router = APIRouter(prefix="/akreditif-maliyet-dagitimlari", tags=["Akreditif"])
 
 
 def _akreditif_getir_veya_404(db: Session, akreditif_id: int, sirket_id: int) -> Akreditif:
@@ -209,6 +213,59 @@ def akreditif_kalemi_ode(
     return {"odendi": True}
 
 
+# --------------------------------------------------------- Maliyet Dağıtımı
+@router.get("/{akreditif_id}/urun-secenekleri", response_model=list[AkreditifUrunSecenegi],
+            dependencies=[Depends(izin_gerektir("AKREDITIF_GORUNTULE"))])
+def akreditif_urun_secenekleri(
+    akreditif_id: int,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    akreditif = _akreditif_getir_veya_404(db, akreditif_id, sirket_id)
+    urunler = list(db.execute(
+        select(StokSeriNo).where(StokSeriNo.siparis_id == akreditif.siparis_id, StokSeriNo.sirket_id == sirket_id)
+    ).scalars())
+    return [
+        AkreditifUrunSecenegi(
+            stok_seri_no_id=u.id, seri_no=u.seri_no,
+            satinalma_maliyeti_try=u.satinalma_maliyeti_try,
+            mevcut_diger_maliyet_try=u.diger_maliyet_try,
+        )
+        for u in urunler
+    ]
+
+
+@router.get("/{akreditif_id}/maliyet-dagitimlari", response_model=list[AkreditifMaliyetDagitimSatiri],
+            dependencies=[Depends(izin_gerektir("AKREDITIF_GORUNTULE"))])
+def akreditif_maliyet_dagitim_gecmisi(
+    akreditif_id: int,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    _akreditif_getir_veya_404(db, akreditif_id, sirket_id)
+    kayitlar = list(db.execute(
+        select(AkreditifMaliyetDagitimi)
+        .where(AkreditifMaliyetDagitimi.akreditif_id == akreditif_id)
+        .order_by(AkreditifMaliyetDagitimi.olusturma_tarihi.desc())
+    ).scalars())
+
+    seri_no_haritasi = {
+        u.id: u.seri_no for u in db.execute(
+            select(StokSeriNo).where(StokSeriNo.sirket_id == sirket_id)
+        ).scalars()
+    }
+
+    return [
+        AkreditifMaliyetDagitimSatiri(
+            id=k.id, stok_seri_no_id=k.stok_seri_no_id,
+            seri_no=seri_no_haritasi.get(k.stok_seri_no_id),
+            yontem=k.yontem, kur=k.kur, tutar_try=k.tutar_try,
+            olusturma_tarihi=k.olusturma_tarihi,
+        )
+        for k in kayitlar
+    ]
+
+
 @router.post("/{akreditif_id}/maliyet-dagit", response_model=AkreditifMaliyetDagitYaniti,
              dependencies=[Depends(izin_gerektir("AKREDITIF_DUZENLE"))])
 def akreditif_maliyet_dagit(
@@ -231,20 +288,30 @@ def akreditif_maliyet_dagit(
     toplam_masraf = sum(k.tutar for k in kalemler)
     toplam_masraf_try = toplam_masraf if akreditif.para_birimi == "TRY" else toplam_masraf * istek.kur
 
-    from app.models.stok import StokSeriNo
-    urunler = list(db.execute(
+    tum_urunler = list(db.execute(
         select(StokSeriNo).where(StokSeriNo.siparis_id == akreditif.siparis_id, StokSeriNo.sirket_id == sirket_id)
     ).scalars())
-    if not urunler:
+    if not tum_urunler:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             "Bu siparişe ait ürün (seri no) bulunamadı; önce sipariş teslim alınmalı."
         )
 
+    if istek.stok_seri_no_idleri:
+        urunler = [u for u in tum_urunler if u.id in istek.stok_seri_no_idleri]
+        if not urunler:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Seçilen ürünler bu siparişe ait değil.")
+    else:
+        urunler = tum_urunler
+
     if istek.yontem == "ESIT":
         pay = toplam_masraf_try / len(urunler)
         for u in urunler:
             u.diger_maliyet_try = (u.diger_maliyet_try or 0) + pay
+            db.add(AkreditifMaliyetDagitimi(
+                akreditif_id=akreditif_id, stok_seri_no_id=u.id,
+                yontem="ESIT", kur=istek.kur, tutar_try=pay,
+            ))
     elif istek.yontem == "AGIRLIKLI":
         toplam_satinalma = sum(u.satinalma_maliyeti_try or 0 for u in urunler)
         if toplam_satinalma == 0:
@@ -254,7 +321,12 @@ def akreditif_maliyet_dagit(
             )
         for u in urunler:
             oran = (u.satinalma_maliyeti_try or 0) / toplam_satinalma
-            u.diger_maliyet_try = (u.diger_maliyet_try or 0) + toplam_masraf_try * oran
+            pay = toplam_masraf_try * oran
+            u.diger_maliyet_try = (u.diger_maliyet_try or 0) + pay
+            db.add(AkreditifMaliyetDagitimi(
+                akreditif_id=akreditif_id, stok_seri_no_id=u.id,
+                yontem="AGIRLIKLI", kur=istek.kur, tutar_try=pay,
+            ))
     else:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "yontem 'ESIT' veya 'AGIRLIKLI' olmalıdır.")
 
@@ -262,3 +334,22 @@ def akreditif_maliyet_dagit(
     return AkreditifMaliyetDagitYaniti(
         dagitilan_urun_sayisi=len(urunler), toplam_dagitilan_try=toplam_masraf_try,
     )
+
+
+@dagitim_router.delete("/{dagitim_id}")
+def akreditif_maliyet_dagitimi_geri_al(
+    dagitim_id: int,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    kayit = db.get(AkreditifMaliyetDagitimi, dagitim_id)
+    if kayit is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Dağıtım kaydı bulunamadı.")
+
+    urun = db.get(StokSeriNo, kayit.stok_seri_no_id)
+    if urun is not None and urun.sirket_id == sirket_id:
+        urun.diger_maliyet_try = max((urun.diger_maliyet_try or 0) - kayit.tutar_try, 0)
+
+    db.delete(kayit)
+    db.commit()
+    return {"geri_alindi": True}
