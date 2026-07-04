@@ -40,6 +40,7 @@ app.include_router(yetki.router)
 app.include_router(akreditif.router)
 app.include_router(akreditif.kalem_router)
 app.include_router(virman.router)
+app.include_router(harcama_turu.router)
 
 @app.get("/")
 def saglik_kontrolu():
