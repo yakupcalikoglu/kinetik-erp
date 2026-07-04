@@ -258,7 +258,10 @@ def genel_bakis(
 
     tum_kasa = list(db.execute(select(KasaHareketi).where(KasaHareketi.sirket_id == sirket_id)).scalars())
     kasa_net = sum(
-        (h.tutar_try if h.yon.value == "GIRIS" else -h.tutar_try for h in tum_kasa), Decimal("0")
+        (
+            (h.tutar_try_karsiligi or 0) if h.yon.value == "GIRIS" else -(h.tutar_try_karsiligi or 0)
+            for h in tum_kasa
+        ), Decimal("0")
     )
 
     bugun = date.today()
