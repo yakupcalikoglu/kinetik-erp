@@ -1,6 +1,8 @@
+from datetime import date
+from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy import select, func, case
+from sqlalchemy import select, func
 from sqlalchemy.exc import IntegrityError
 
 from app.db.session import get_db
@@ -10,17 +12,9 @@ from app.models.banka import BankaHesabi, BankaHareketi, KasaHareketi, BankaHare
 from app.schemas.banka import (
     BankaHesabiOlusturIstegi, BankaHesabiYanit, BankaBakiyeYanit,
     BankaHareketiOlusturIstegi, BankaHareketiYanit,
-    KasaHareketiOlusturIstegi, KasaHareketiYanit, KasaBakiyeYanit,
+    KasaHareketiOlusturIstegi, KasaHareketiYanit, KasaBakiyeYanit, KasaBakiyeSatiri,
 )
 from app.services.kur_servisi import guncel_kur_getir
-
-@router.get("/kur/{para_birimi}")
-async def guncel_kur(para_birimi: str):
-    kur = await guncel_kur_getir(para_birimi)
-    if kur is None:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Kur bilgisi alınamadı, lütfen elle girin.")
-    from datetime import date
-    return {"para_birimi": para_birimi.upper(), "kur": str(kur), "tarih": str(date.today())}
 
 router = APIRouter(tags=["Banka ve Ana Kasa"])
 
@@ -30,6 +24,16 @@ _CIFT_TARAFLI_TIPLER = {
     BankaHareketTip.DOVIZ_ALIM,
     BankaHareketTip.DOVIZ_SATIM,
 }
+
+
+@router.get("/kur/{para_birimi}")
+async def guncel_kur(para_birimi: str):
+    """Guncel USD/EUR -> TRY kurunu doner (ucretsiz dis servisten). Frontend
+    formlari bu degeri varsayilan olarak doldurur; kullanici elle degistirebilir."""
+    kur = await guncel_kur_getir(para_birimi)
+    if kur is None:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Kur bilgisi alınamadı, lütfen elle girin.")
+    return {"para_birimi": para_birimi.upper(), "kur": str(kur), "tarih": str(date.today())}
 
 
 # ------------------------------------------------------------- Banka Hesabı
@@ -241,10 +245,22 @@ def kasa_hareketi_olustur(
     kullanici: Kullanici = Depends(aktif_kullanici_getir),
     db: Session = Depends(get_db),
 ):
+    if istek.para_birimi.value != "TRY" and istek.tutar_try_karsiligi is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "TRY dışı bir para birimi seçildiğinde tutar_try_karsiligi (kur ile hesaplanan TL karşılığı) zorunludur."
+        )
+    tutar_try_karsiligi = istek.tutar_try_karsiligi if istek.para_birimi.value != "TRY" else istek.tutar
+
     yeni = KasaHareketi(
         sirket_id=sirket_id,
         olusturan_kullanici_id=kullanici.id,
-        **istek.model_dump(),
+        tarih=istek.tarih,
+        yon=istek.yon,
+        para_birimi=istek.para_birimi,
+        tutar=istek.tutar,
+        tutar_try_karsiligi=tutar_try_karsiligi,
+        aciklama=istek.aciklama,
     )
     db.add(yeni)
     db.commit()
@@ -272,11 +288,26 @@ def kasa_bakiye(
     sirket_id: int = Depends(aktif_sirket_id_getir),
     db: Session = Depends(get_db),
 ):
-    sorgu = select(
-        func.coalesce(func.sum(
-            case((KasaHareketi.yon == "GIRIS", KasaHareketi.tutar_try),
-                 else_=-KasaHareketi.tutar_try)
-        ), 0)
-    ).where(KasaHareketi.sirket_id == sirket_id)
-    net = db.execute(sorgu).scalar_one()
-    return KasaBakiyeYanit(net_bakiye_try=net)
+    """
+    Her para birimi icin ayri net bakiye (TRY, USD, EUR, ALTIN) DONER,
+    ayrica hepsinin o gunku kur ile hesaplanmis TL karsiligi toplamini da verir.
+    """
+    hareketler = list(db.execute(
+        select(KasaHareketi).where(KasaHareketi.sirket_id == sirket_id)
+    ).scalars())
+
+    para_birimi_toplamlari: dict[str, Decimal] = {}
+    try_toplam = Decimal("0")
+    for h in hareketler:
+        isaret = 1 if h.yon.value == "GIRIS" else -1
+        pb = h.para_birimi.value
+        para_birimi_toplamlari[pb] = para_birimi_toplamlari.get(pb, Decimal("0")) + isaret * h.tutar
+        if h.tutar_try_karsiligi is not None:
+            try_toplam += isaret * h.tutar_try_karsiligi
+
+    bakiyeler = [
+        KasaBakiyeSatiri(para_birimi=pb, net_bakiye=tutar)
+        for pb, tutar in para_birimi_toplamlari.items()
+    ]
+
+    return KasaBakiyeYanit(bakiyeler=bakiyeler, net_bakiye_try_toplam=try_toplam)
