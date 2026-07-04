@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api, hataMesajiCikar } from '../api/client';
 import {
   Kart, SayfaBasligi, Buton, Etiket, Alan, girdiStili, BosDurum, HataMesaji, paraFormat, Sekmeler, eylemChipStili,
+  OtomatikTamamlamaGirdisi,
 } from '../components/Ortak';
 
 const SEKMELER = [
@@ -32,8 +33,6 @@ function BasitTablo({ basliklar, satirlar, render }) {
   );
 }
 
-// Cari ID -> unvan haritasi. Cari ID gorunen her yerde isim de gosterebilmek icin
-// carileri bir kere cekip id bazli bir haritaya donusturuyoruz.
 function useCariHaritasi() {
   const [harita, setHarita] = useState({});
   useEffect(() => {
@@ -48,17 +47,20 @@ function useCariHaritasi() {
   return harita;
 }
 
+function useHarcamaTurleri() {
+  const [turler, setTurler] = useState([]);
+  useEffect(() => {
+    api.get('/harcama-turleri').then((r) => setTurler(r.data.map((t) => t.ad))).catch(() => {});
+  }, []);
+  return turler;
+}
+
 function cariGoster(id, harita) {
   if (id === null || id === undefined || id === '') return '—';
   const unvan = harita[id];
   return unvan ? `#${id} — ${unvan}` : `#${id}`;
 }
 
-// Odeme/tahsilat islemlerinde nakit/banka secimini sorar. TRY disi bir
-// para biriminde NAKIT secilirse, guncel kuru otomatik ceker ve kullaniciya
-// onaylatir/degistirtir (kasa'ya dogru TL karsiligiyla yazilmasi icin).
-// Iptal edilirse null doner, secim yapilirsa
-// { odeme_yontemi, banka_hesap_id, kur? } doner.
 async function odemeYontemiSor(paraBirimi = 'TRY') {
   const yanit = window.prompt('Ödeme yöntemi? "nakit" yazın ya da banka hesap ID girin:', 'nakit');
   if (yanit === null || yanit.trim() === '') return null;
@@ -323,6 +325,34 @@ function AkreditifSekmesi() {
     } catch (err) { setHata(hataMesajiCikar(err)); }
   }
 
+  async function maliyetDagit() {
+    const yontem = window.prompt('Dağıtım yöntemi: "esit" veya "agirlikli" yazın:', 'esit');
+    if (!yontem) return;
+    const temizYontem = yontem.trim().toLowerCase() === 'agirlikli' ? 'AGIRLIKLI' : 'ESIT';
+
+    let kur = 1;
+    if (seciliAkreditif.para_birimi !== 'TRY') {
+      let onerilenKur = '';
+      try {
+        const { data } = await api.get(`/kur/${seciliAkreditif.para_birimi}`);
+        onerilenKur = data.kur;
+      } catch (e) { /* elle girilecek */ }
+      const girilenKur = window.prompt(`${seciliAkreditif.para_birimi} için TL kuru:`, onerilenKur);
+      if (!girilenKur || Number.isNaN(Number(girilenKur))) {
+        window.alert('Geçerli bir kur girilmedi, işlem iptal edildi.');
+        return;
+      }
+      kur = Number(girilenKur);
+    }
+
+    try {
+      const { data } = await api.post(`/akreditifler/${seciliAkreditif.id}/maliyet-dagit`, { yontem: temizYontem, kur });
+      window.alert(`${data.dagitilan_urun_sayisi} ürüne toplam ${paraFormat(data.toplam_dagitilan_try)} dağıtıldı.`);
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    }
+  }
+
   function siparisEtiketi(id) {
     const s = siparisler.find((x) => x.id === id);
     return s ? s.siparis_no : `#${id}`;
@@ -422,8 +452,13 @@ function AkreditifSekmesi() {
 
       {seciliAkreditif && (
         <Kart>
-          <div style={{ fontWeight: 600, fontSize: 13.5, marginBottom: 12 }}>
-            {seciliAkreditif.akreditif_no || `Akreditif #${seciliAkreditif.id}`} — ödeme/komisyon kalemleri
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <div style={{ fontWeight: 600, fontSize: 13.5 }}>
+              {seciliAkreditif.akreditif_no || `Akreditif #${seciliAkreditif.id}`} — ödeme/komisyon kalemleri
+            </div>
+            <button onClick={maliyetDagit} style={eylemChipStili('lacivert')}>
+              Komisyon/masrafı ürünlere dağıt
+            </button>
           </div>
 
           <form onSubmit={kalemEkle} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr auto', gap: 10, marginBottom: 14 }}>
@@ -620,6 +655,7 @@ function PersonelSekmesi() {
 function BakimSekmesi() {
   const [liste, setListe] = useState([]);
   const [bankaHesaplari, setBankaHesaplari] = useState([]);
+  const harcamaTurleri = useHarcamaTurleri();
   const [formAcik, setFormAcik] = useState(false);
   const [form, setForm] = useState({
     stok_seri_no_id: '', tarih: new Date().toISOString().slice(0, 10), tip: 'GIDER', aciklama: '', tutar: '',
@@ -673,7 +709,13 @@ function BakimSekmesi() {
               </select>
             </Alan>
             <Alan etiket="Açıklama">
-              <input value={form.aciklama} onChange={(e) => setForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
+              <OtomatikTamamlamaGirdisi
+                value={form.aciklama}
+                onChange={(v) => setForm((f) => ({ ...f, aciklama: v }))}
+                secenekler={harcamaTurleri}
+                listeId="harcama-turleri-bakim"
+                placeholder="Yazmaya başlayın veya listeden seçin"
+              />
             </Alan>
             <Alan etiket="Tutar (TL)">
               <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
@@ -718,7 +760,7 @@ function BakimSekmesi() {
   );
 }
 
-// ============================================================== LEASING (salt görüntüleme - olusturma siparis baglantili)
+// ============================================================== LEASING
 function LeasingSekmesi() {
   const [liste, setListe] = useState([]);
   const [hata, setHata] = useState(null);
@@ -1073,6 +1115,7 @@ function TaksitSekmesi() {
 function SabitGiderSekmesi() {
   const [liste, setListe] = useState([]);
   const [kategoriler, setKategoriler] = useState([]);
+  const harcamaTurleri = useHarcamaTurleri();
   const [formAcik, setFormAcik] = useState(false);
   const [form, setForm] = useState({ kategori_id: '', donem: new Date().toISOString().slice(0, 10), tutar: '', aciklama: '' });
   const [hata, setHata] = useState(null);
@@ -1129,7 +1172,13 @@ function SabitGiderSekmesi() {
               <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
             </Alan>
             <Alan etiket="Açıklama">
-              <input value={form.aciklama} onChange={(e) => setForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
+              <OtomatikTamamlamaGirdisi
+                value={form.aciklama}
+                onChange={(v) => setForm((f) => ({ ...f, aciklama: v }))}
+                secenekler={harcamaTurleri}
+                listeId="harcama-turleri-sabit-gider"
+                placeholder="Yazmaya başlayın veya listeden seçin"
+              />
             </Alan>
             <div style={{ alignSelf: 'end' }}><Buton type="submit">Kaydet</Buton></div>
           </form>
