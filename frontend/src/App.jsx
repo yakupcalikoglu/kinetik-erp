@@ -17,6 +17,7 @@ import FinansalTakipSayfasi from './pages/FinansalTakipSayfasi';
 import ProformaFaturaSayfasi from './pages/ProformaFaturaSayfasi';
 import YoneticiPaneliSayfasi from './pages/YoneticiPaneliSayfasi';
 import VirmanSayfasi from './pages/VirmanSayfasi';
+import HarcamaTurleriSayfasi from './pages/HarcamaTurleriSayfasi';
 
 function KorumaliRota({ children }) {
   const { oturum } = useAuth();
