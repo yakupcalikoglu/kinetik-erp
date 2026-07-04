@@ -373,6 +373,7 @@ function AkreditifSekmesi() {
   const [seciliAkreditif, setSeciliAkreditif] = useState(null);
   const [kalemler, setKalemler] = useState(null);
   const [kalemForm, setKalemForm] = useState({ tip: 'ODEME', aciklama: '', tutar: '', vade_tarihi: new Date().toISOString().slice(0, 10) });
+  const [dagitimFormuAcik, setDagitimFormuAcik] = useState(false);
 
   function yukle() {
     api.get('/akreditifler').then((r) => setListe(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
@@ -465,34 +466,6 @@ function AkreditifSekmesi() {
       kalemleriGoster(seciliAkreditif.id);
       yukle();
     } catch (err) { setHata(hataMesajiCikar(err)); }
-  }
-
-  async function maliyetDagit() {
-    const yontem = window.prompt('Dağıtım yöntemi: "esit" veya "agirlikli" yazın:', 'esit');
-    if (!yontem) return;
-    const temizYontem = yontem.trim().toLowerCase() === 'agirlikli' ? 'AGIRLIKLI' : 'ESIT';
-
-    let kur = 1;
-    if (seciliAkreditif.para_birimi !== 'TRY') {
-      let onerilenKur = '';
-      try {
-        const { data } = await api.get(`/kur/${seciliAkreditif.para_birimi}`);
-        onerilenKur = data.kur;
-      } catch (e) { /* elle girilecek */ }
-      const girilenKur = window.prompt(`${seciliAkreditif.para_birimi} için TL kuru:`, onerilenKur);
-      if (!girilenKur || Number.isNaN(Number(girilenKur))) {
-        window.alert('Geçerli bir kur girilmedi, işlem iptal edildi.');
-        return;
-      }
-      kur = Number(girilenKur);
-    }
-
-    try {
-      const { data } = await api.post(`/akreditifler/${seciliAkreditif.id}/maliyet-dagit`, { yontem: temizYontem, kur });
-      window.alert(`${data.dagitilan_urun_sayisi} ürüne toplam ${paraFormat(data.toplam_dagitilan_try)} dağıtıldı.`);
-    } catch (err) {
-      setHata(hataMesajiCikar(err));
-    }
   }
 
   function siparisEtiketi(id) {
@@ -598,10 +571,18 @@ function AkreditifSekmesi() {
             <div style={{ fontWeight: 600, fontSize: 13.5 }}>
               {seciliAkreditif.akreditif_no || `Akreditif #${seciliAkreditif.id}`} — ödeme/komisyon kalemleri
             </div>
-            <button onClick={maliyetDagit} style={eylemChipStili('lacivert')}>
-              Komisyon/masrafı ürünlere dağıt
+           <button onClick={() => setDagitimFormuAcik((a) => !a)} style={eylemChipStili('lacivert')}>
+              {dagitimFormuAcik ? 'Dağıtım formunu kapat' : 'Komisyon/masrafı ürünlere dağıt'}
             </button>
           </div>
+
+          {dagitimFormuAcik && (
+            <MaliyetDagitimFormu
+              akreditif={seciliAkreditif}
+              onKapat={() => setDagitimFormuAcik(false)}
+              onTamamlandi={() => kalemleriGoster(seciliAkreditif.id)}
+            />
+          )}
 
           <form onSubmit={kalemEkle} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr auto', gap: 10, marginBottom: 14 }}>
             <Alan etiket="Tip">
