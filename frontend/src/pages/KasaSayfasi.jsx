@@ -116,6 +116,80 @@ function YeniKasaHareketiFormu({ onKaydedildi, onVazgec }) {
   );
 }
 
+function KasaHareketiDuzenleFormu({ hareket, onKaydedildi, onVazgec }) {
+  const [form, setForm] = useState({
+    tarih: hareket.tarih, yon: hareket.yon, tutar: hareket.tutar, para_birimi: hareket.para_birimi,
+    tutar_try_karsiligi: hareket.tutar_try_karsiligi ?? '', aciklama: hareket.aciklama || '',
+  });
+  const [hata, setHata] = useState(null);
+  const [kaydediliyor, setKaydediliyor] = useState(false);
+
+  async function kaydet(e) {
+    e.preventDefault();
+    setHata(null);
+    setKaydediliyor(true);
+    try {
+      await api.put(`/kasa-hareketleri/${hareket.id}`, {
+        ...form,
+        tutar: Number(form.tutar),
+        tutar_try_karsiligi: form.para_birimi === 'TRY' ? null : Number(form.tutar_try_karsiligi),
+      });
+      onKaydedildi();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setKaydediliyor(false);
+    }
+  }
+
+  return (
+    <tr>
+      <td colSpan={5} style={{ padding: 0 }}>
+        <div style={{ padding: 16, background: 'var(--zemin)' }}>
+          <form onSubmit={kaydet}>
+            <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 12 }}>Hareketi düzenle</div>
+            <HataMesaji>{hata}</HataMesaji>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12 }}>
+              <Alan etiket="Tarih">
+                <input required type="date" value={form.tarih} onChange={(e) => setForm((f) => ({ ...f, tarih: e.target.value }))} style={girdiStili} />
+              </Alan>
+              <Alan etiket="Yön">
+                <select value={form.yon} onChange={(e) => setForm((f) => ({ ...f, yon: e.target.value }))} style={girdiStili}>
+                  <option value="GIRIS">Giriş</option>
+                  <option value="CIKIS">Çıkış</option>
+                </select>
+              </Alan>
+              <Alan etiket="Para birimi">
+                <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={girdiStili}>
+                  <option value="TRY">TRY</option>
+                  <option value="USD">USD</option>
+                  <option value="EUR">EUR</option>
+                  <option value="ALTIN">ALTIN</option>
+                </select>
+              </Alan>
+              <Alan etiket="Tutar">
+                <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
+              </Alan>
+              {form.para_birimi !== 'TRY' && (
+                <Alan etiket="TL karşılığı">
+                  <input required type="number" step="0.01" value={form.tutar_try_karsiligi} onChange={(e) => setForm((f) => ({ ...f, tutar_try_karsiligi: e.target.value }))} style={girdiStili} />
+                </Alan>
+              )}
+              <Alan etiket="Açıklama">
+                <input value={form.aciklama} onChange={(e) => setForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
+              </Alan>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Kaydediliyor...' : 'Değişiklikleri kaydet'}</Buton>
+              <Buton type="button" variant="ikincil" onClick={onVazgec}>Vazgeç</Buton>
+            </div>
+          </form>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 export default function KasaSayfasi() {
   const [kasaBakiye, setKasaBakiye] = useState(null);
   const [kasaHareketleri, setKasaHareketleri] = useState([]);
@@ -125,6 +199,7 @@ export default function KasaSayfasi() {
   const [yukleniyor, setYukleniyor] = useState(true);
   const [formAcik, setFormAcik] = useState(false);
   const [acikDetayId, setAcikDetayId] = useState(null);
+  const [duzenlenenId, setDuzenlenenId] = useState(null);
 
   function yukle() {
     setYukleniyor(true);
@@ -214,31 +289,50 @@ export default function KasaSayfasi() {
             <tbody>
               {gosterilecekHareketler.map((h) => {
                 const tiklanabilir = !!(h.kaynak_tablo && h.kaynak_id);
+                if (duzenlenenId === h.id) {
+                  return (
+                    <KasaHareketiDuzenleFormu
+                      key={h.id}
+                      hareket={h}
+                      onKaydedildi={() => { setDuzenlenenId(null); yukle(); }}
+                      onVazgec={() => setDuzenlenenId(null)}
+                    />
+                  );
+                }
                 return (
                   <Fragment key={h.id}>
                     <tr
-                      onClick={() => satiraTikla(h)}
                       style={{
                         borderTop: '1px solid var(--kenarlik)',
-                        cursor: tiklanabilir ? 'pointer' : 'default',
                         background: acikDetayId === h.id ? 'var(--zemin)' : 'transparent',
                       }}
                     >
-                      <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{h.tarih}</td>
-                      <td style={{ padding: '10px 16px' }}>{h.yon === 'GIRIS' ? 'Giriş' : 'Çıkış'}</td>
-                      <td style={{ padding: '10px 16px', fontWeight: 500, color: h.yon === 'GIRIS' ? 'var(--yesil)' : 'var(--kirmizi)' }}>
+                      <td onClick={() => satiraTikla(h)} style={{ padding: '10px 16px', color: 'var(--metin-ikincil)', cursor: tiklanabilir ? 'pointer' : 'default' }}>{h.tarih}</td>
+                      <td onClick={() => satiraTikla(h)} style={{ padding: '10px 16px', cursor: tiklanabilir ? 'pointer' : 'default' }}>{h.yon === 'GIRIS' ? 'Giriş' : 'Çıkış'}</td>
+                      <td onClick={() => satiraTikla(h)} style={{ padding: '10px 16px', fontWeight: 500, color: h.yon === 'GIRIS' ? 'var(--yesil)' : 'var(--kirmizi)', cursor: tiklanabilir ? 'pointer' : 'default' }}>
                         {paraFormat(h.tutar, h.para_birimi)}
                       </td>
-                      <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>
+                      <td onClick={() => satiraTikla(h)} style={{ padding: '10px 16px', color: 'var(--metin-ikincil)', cursor: tiklanabilir ? 'pointer' : 'default' }}>
                         {h.tutar_try_karsiligi != null ? paraFormat(h.tutar_try_karsiligi) : '—'}
                       </td>
                       <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>
-                        {h.aciklama || '—'}
-                        {tiklanabilir && (
-                          <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--lacivert)' }}>
-                            {acikDetayId === h.id ? '▲ detayı gizle' : '▼ detay göster'}
-                          </span>
-                        )}
+                        <span onClick={() => satiraTikla(h)} style={{ cursor: tiklanabilir ? 'pointer' : 'default' }}>
+                          {h.aciklama || '—'}
+                          {tiklanabilir && (
+                            <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--lacivert)' }}>
+                              {acikDetayId === h.id ? '▲ detayı gizle' : '▼ detay göster'}
+                            </span>
+                          )}
+                        </span>
+                        <button
+                          onClick={() => setDuzenlenenId(h.id)}
+                          style={{
+                            marginLeft: 10, fontSize: 11, color: 'var(--lacivert)', background: 'none',
+                            border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0,
+                          }}
+                        >
+                          Düzenle
+                        </button>
                       </td>
                     </tr>
                     {acikDetayId === h.id && (
