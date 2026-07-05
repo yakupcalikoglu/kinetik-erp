@@ -1,6 +1,14 @@
 import { useEffect, useState, Fragment } from 'react';
 import { api, hataMesajiCikar } from '../api/client';
-import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat, eylemChipStili, Sekmeler } from '../components/Ortak';
+import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat, eylemChipStili, Sekmeler, OtomatikTamamlamaGirdisi } from '../components/Ortak';
+
+function useHarcamaTurleri() {
+  const [turler, setTurler] = useState([]);
+  useEffect(() => {
+    api.get('/harcama-turleri').then((r) => setTurler(r.data.map((t) => t.ad))).catch(() => {});
+  }, []);
+  return turler;
+}
 
 const SEKMELER = [
   { deger: 'hareketler', etiket: 'Hareketler' },
@@ -217,6 +225,7 @@ function YeniBankaHareketiFormu({ hesaplar, onKaydedildi, onVazgec }) {
     banka_hesap_id: '', tarih: new Date().toISOString().slice(0, 10), tip: 'GIRIS',
     tutar: '', aciklama: '', karsi_hesap_id: '', kullanilan_kur: '',
   });
+  const harcamaTurleri = useHarcamaTurleri();
   const [hata, setHata] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
 
@@ -294,7 +303,13 @@ function YeniBankaHareketiFormu({ hesaplar, onKaydedildi, onVazgec }) {
             </>
           )}
           <Alan etiket="Açıklama">
-            <input value={form.aciklama} onChange={(e) => setForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
+            <OtomatikTamamlamaGirdisi
+              value={form.aciklama}
+              onChange={(v) => setForm((f) => ({ ...f, aciklama: v }))}
+              secenekler={harcamaTurleri}
+              listeId="harcama-turleri-yeni-banka"
+              placeholder="Yazmaya başlayın veya listeden seçin"
+            />
           </Alan>
         </div>
         <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
@@ -313,6 +328,7 @@ function BankaHareketiDuzenleFormu({ hareket, hesaplar, onKaydedildi, onVazgec }
     karsi_hesap_id: hareket.karsi_hesap_id ? String(hareket.karsi_hesap_id) : '',
     kullanilan_kur: hareket.kullanilan_kur ?? '',
   });
+  const harcamaTurleri = useHarcamaTurleri();
   const [hata, setHata] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
 
@@ -386,7 +402,13 @@ function BankaHareketiDuzenleFormu({ hareket, hesaplar, onKaydedildi, onVazgec }
                 </>
               )}
               <Alan etiket="Açıklama">
-                <input value={form.aciklama} onChange={(e) => setForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
+                <OtomatikTamamlamaGirdisi
+                  value={form.aciklama}
+                  onChange={(v) => setForm((f) => ({ ...f, aciklama: v }))}
+                  secenekler={harcamaTurleri}
+                  listeId="harcama-turleri-duzenle-banka"
+                  placeholder="Yazmaya başlayın veya listeden seçin"
+                />
               </Alan>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
