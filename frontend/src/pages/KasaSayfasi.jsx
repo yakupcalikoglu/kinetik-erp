@@ -1,6 +1,14 @@
 import { useEffect, useState, Fragment } from 'react';
 import { api, hataMesajiCikar } from '../api/client';
-import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat } from '../components/Ortak';
+import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat, OtomatikTamamlamaGirdisi } from '../components/Ortak';
+
+function useHarcamaTurleri() {
+  const [turler, setTurler] = useState([]);
+  useEffect(() => {
+    api.get('/harcama-turleri').then((r) => setTurler(r.data.map((t) => t.ad))).catch(() => {});
+  }, []);
+  return turler;
+}
 
 function KaynakDetayi({ kaynakTablo, kaynakId }) {
   const [detay, setDetay] = useState(null);
@@ -33,6 +41,7 @@ function YeniKasaHareketiFormu({ onKaydedildi, onVazgec }) {
     tarih: new Date().toISOString().slice(0, 10), yon: 'GIRIS', tutar: '', para_birimi: 'TRY',
     tutar_try_karsiligi: '', aciklama: '',
   });
+  const harcamaTurleri = useHarcamaTurleri();
   const [kurYukleniyor, setKurYukleniyor] = useState(false);
   const [hata, setHata] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
@@ -104,7 +113,13 @@ function YeniKasaHareketiFormu({ onKaydedildi, onVazgec }) {
             </Alan>
           )}
           <Alan etiket="Açıklama">
-            <input value={form.aciklama} onChange={(e) => setForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
+            <OtomatikTamamlamaGirdisi
+              value={form.aciklama}
+              onChange={(v) => setForm((f) => ({ ...f, aciklama: v }))}
+              secenekler={harcamaTurleri}
+              listeId="harcama-turleri-yeni-kasa"
+              placeholder="Yazmaya başlayın veya listeden seçin"
+            />
           </Alan>
         </div>
         <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
@@ -121,6 +136,7 @@ function KasaHareketiDuzenleFormu({ hareket, onKaydedildi, onVazgec }) {
     tarih: hareket.tarih, yon: hareket.yon, tutar: hareket.tutar, para_birimi: hareket.para_birimi,
     tutar_try_karsiligi: hareket.tutar_try_karsiligi ?? '', aciklama: hareket.aciklama || '',
   });
+  const harcamaTurleri = useHarcamaTurleri();
   const [hata, setHata] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
 
@@ -176,7 +192,13 @@ function KasaHareketiDuzenleFormu({ hareket, onKaydedildi, onVazgec }) {
                 </Alan>
               )}
               <Alan etiket="Açıklama">
-                <input value={form.aciklama} onChange={(e) => setForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
+                <OtomatikTamamlamaGirdisi
+                  value={form.aciklama}
+                  onChange={(v) => setForm((f) => ({ ...f, aciklama: v }))}
+                  secenekler={harcamaTurleri}
+                  listeId="harcama-turleri-duzenle-kasa"
+                  placeholder="Yazmaya başlayın veya listeden seçin"
+                />
               </Alan>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
