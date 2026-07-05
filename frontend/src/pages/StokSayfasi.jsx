@@ -15,6 +15,11 @@ const DURUM_METIN = {
   ANTREPODA: 'Antrepoda', SATILDI: 'Satıldı', KIRADA: 'Kirada', BAKIMDA: 'Bakımda', HURDA: 'Hurda',
 };
 
+const MALIYET_TIP_METIN = {
+  SATINALMA: 'Satınalma', NAKLIYE: 'Nakliye', GUMRUK: 'Gümrük', ANTREPO: 'Antrepo',
+  MILLILESTIRME: 'Millileştirme', LEASING: 'Leasing', DIGER: 'Diğer',
+};
+
 function bosStokKartiForm() {
   return { marka: '', model: '', birim: 'ADET', birim_agirlik_kg: '', aciklama: '', mense_ulke: '', gtip_kodu: '' };
 }
@@ -200,6 +205,151 @@ function SatisFormu({ urun, onKaydedildi, onVazgec }) {
   );
 }
 
+function MaliyetKalemiEkleFormu({ urun, onKaydedildi }) {
+  const [cariler, setCariler] = useState([]);
+  const [form, setForm] = useState({
+    tip: 'NAKLIYE', tutar: '', para_birimi: 'TRY', kur: '1',
+    tedarikci_cari_id: '', belge_no: '', tarih: new Date().toISOString().slice(0, 10), aciklama: '',
+  });
+  const [hata, setHata] = useState(null);
+  const [kaydediliyor, setKaydediliyor] = useState(false);
+
+  useEffect(() => {
+    api.get('/cariler').then((r) => setCariler(r.data)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (form.para_birimi === 'TRY') {
+      setForm((f) => ({ ...f, kur: '1' }));
+      return;
+    }
+    api.get(`/kur/${form.para_birimi}`).then((r) => setForm((f) => ({ ...f, kur: r.data.kur }))).catch(() => {});
+  }, [form.para_birimi]); // eslint-disable-line
+
+  async function kaydet(e) {
+    e.preventDefault();
+    setHata(null);
+    setKaydediliyor(true);
+    try {
+      await api.post(`/stok-seri-no/${urun.id}/maliyet-kalemi`, {
+        tip: form.tip,
+        tutar: Number(form.tutar),
+        para_birimi: form.para_birimi,
+        kur: Number(form.kur),
+        tedarikci_cari_id: form.tedarikci_cari_id ? Number(form.tedarikci_cari_id) : null,
+        belge_no: form.belge_no || null,
+        tarih: form.tarih,
+        aciklama: form.aciklama || null,
+      });
+      setForm((f) => ({ ...f, tutar: '', belge_no: '', aciklama: '' }));
+      onKaydedildi();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setKaydediliyor(false);
+    }
+  }
+
+  return (
+    <form onSubmit={kaydet} style={{ marginBottom: 16 }}>
+      <HataMesaji>{hata}</HataMesaji>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12 }}>
+        <Alan etiket="Maliyet tipi">
+          <select value={form.tip} onChange={(e) => setForm((f) => ({ ...f, tip: e.target.value }))} style={girdiStili}>
+            {Object.entries(MALIYET_TIP_METIN).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+        </Alan>
+        <Alan etiket="Para birimi">
+          <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={girdiStili}>
+            <option value="TRY">TRY</option>
+            <option value="USD">USD</option>
+            <option value="EUR">EUR</option>
+          </select>
+        </Alan>
+        <Alan etiket="Tutar">
+          <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
+        </Alan>
+        {form.para_birimi !== 'TRY' && (
+          <Alan etiket="Kur (otomatik, elle değiştirilebilir)">
+            <input required type="number" step="0.0001" value={form.kur} onChange={(e) => setForm((f) => ({ ...f, kur: e.target.value }))} style={girdiStili} />
+          </Alan>
+        )}
+        <Alan etiket="Tedarikçi/firma (opsiyonel)">
+          <select value={form.tedarikci_cari_id} onChange={(e) => setForm((f) => ({ ...f, tedarikci_cari_id: e.target.value }))} style={girdiStili}>
+            <option value="">Seçin...</option>
+            {cariler.map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
+          </select>
+        </Alan>
+        <Alan etiket="Belge/fatura no">
+          <input value={form.belge_no} onChange={(e) => setForm((f) => ({ ...f, belge_no: e.target.value }))} style={girdiStili} />
+        </Alan>
+        <Alan etiket="Tarih">
+          <input required type="date" value={form.tarih} onChange={(e) => setForm((f) => ({ ...f, tarih: e.target.value }))} style={girdiStili} />
+        </Alan>
+        <Alan etiket="Açıklama">
+          <input value={form.aciklama} onChange={(e) => setForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
+        </Alan>
+      </div>
+      <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Kaydediliyor...' : '+ Maliyet kalemi ekle'}</Buton>
+    </form>
+  );
+}
+
+function MaliyetDetayi({ urun, onKapat }) {
+  const [kalemler, setKalemler] = useState([]);
+  const [yukleniyor, setYukleniyor] = useState(true);
+  const [hata, setHata] = useState(null);
+
+  function yukle() {
+    setYukleniyor(true);
+    api.get(`/stok-seri-no/${urun.id}/maliyet-kalemleri`)
+      .then((r) => setKalemler(r.data))
+      .catch((e) => setHata(hataMesajiCikar(e)))
+      .finally(() => setYukleniyor(false));
+  }
+  useEffect(yukle, [urun.id]); // eslint-disable-line
+
+  return (
+    <Kart style={{ marginBottom: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        <div style={{ fontSize: 14.5, fontWeight: 600 }}>Maliyet detayı — Seri No: {urun.seri_no}</div>
+        <Buton variant="ikincil" onClick={onKapat}>Kapat</Buton>
+      </div>
+      <HataMesaji>{hata}</HataMesaji>
+
+      <MaliyetKalemiEkleFormu urun={urun} onKaydedildi={yukle} />
+
+      {yukleniyor ? (
+        <div style={{ padding: 20, color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
+      ) : kalemler.length === 0 ? (
+        <BosDurum baslik="Henüz maliyet kalemi eklenmemiş" />
+      ) : (
+        <table>
+          <thead>
+            <tr style={{ background: 'var(--zemin)' }}>
+              {['Tip', 'Tutar', 'TL Karşılığı', 'Belge No', 'Tarih', 'Açıklama'].map((b) => (
+                <th key={b} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {kalemler.map((k) => (
+              <tr key={k.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                <td style={{ padding: '8px 12px' }}><Etiket ton="notr">{MALIYET_TIP_METIN[k.tip] || k.tip}</Etiket></td>
+                <td style={{ padding: '8px 12px' }}>{paraFormat(k.tutar, k.para_birimi)}</td>
+                <td style={{ padding: '8px 12px', fontWeight: 500 }}>{paraFormat(k.tutar_try)}</td>
+                <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{k.belge_no || '—'}</td>
+                <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{k.tarih}</td>
+                <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{k.aciklama || '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </Kart>
+  );
+}
+
 export default function StokSayfasi() {
   const [urunler, setUrunler] = useState([]);
   const [stokKartlari, setStokKartlari] = useState([]);
@@ -210,6 +360,7 @@ export default function StokSayfasi() {
   const [formAcik, setFormAcik] = useState(false);
   const [duzenlenenKart, setDuzenlenenKart] = useState(null);
   const [satisYapilacakUrun, setSatisYapilacakUrun] = useState(null);
+  const [maliyetGosterilecekUrun, setMaliyetGosterilecekUrun] = useState(null);
 
   function urunleriYukle() {
     setYukleniyor(true);
@@ -331,6 +482,13 @@ export default function StokSayfasi() {
         />
       )}
 
+      {maliyetGosterilecekUrun && (
+        <MaliyetDetayi
+          urun={maliyetGosterilecekUrun}
+          onKapat={() => { setMaliyetGosterilecekUrun(null); urunleriYukle(); }}
+        />
+      )}
+
       <Kart style={{ padding: 0 }}>
         <div style={{ padding: 16, borderBottom: '1px solid var(--kenarlik)' }}>
           <select value={durumFiltre} onChange={(e) => setDurumFiltre(e.target.value)} style={{ ...girdiStili, maxWidth: 220 }}>
@@ -368,9 +526,12 @@ export default function StokSayfasi() {
                       {karZarar != null ? paraFormat(karZarar) : '—'}
                     </td>
                     <td style={{ padding: '12px 16px' }}>
-                      {satilabilir && (
-                        <button onClick={() => setSatisYapilacakUrun(u)} style={eylemChipStili('yesil')}>Satış yap</button>
-                      )}
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button onClick={() => setMaliyetGosterilecekUrun(u)} style={eylemChipStili('lacivert')}>Maliyet Detayı</button>
+                        {satilabilir && (
+                          <button onClick={() => setSatisYapilacakUrun(u)} style={eylemChipStili('yesil')}>Satış yap</button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
