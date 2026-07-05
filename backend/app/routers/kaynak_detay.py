@@ -145,6 +145,21 @@ def kaynak_detayi_getir(
                 ("Konum", "Stok"),
             ]
 
+    elif kaynak_tablo == "AKREDITIF_KALEM_TAKSIT":
+        from app.models.akreditif_taksit import AkreditifKalemTaksiti
+        from app.models.akreditif import AkreditifKalemi, Akreditif
+        taksit = db.get(AkreditifKalemTaksiti, kaynak_id)
+        if taksit is not None:
+            kalem = db.get(AkreditifKalemi, taksit.kalem_id)
+            akreditif = db.get(Akreditif, kalem.akreditif_id) if kalem else None
+            baslik = f"Akreditif Kalem Taksiti — {taksit.taksit_no}. taksit"
+            detaylar = [
+                ("Akreditif No", akreditif.akreditif_no or f"#{akreditif.id}" if akreditif else "—"),
+                ("Kalem Tipi", kalem.tip.value if kalem else "—"),
+                ("Vade Tarihi", str(taksit.vade_tarihi)),
+                ("Konum", "Finansal Takip → Akreditif → Kalemler → Taksitler"),
+            ]
+
     elif kaynak_tablo == "VIRMAN_CARI_CARI":
         baslik = "Cari Arası Virman (Borç Devri)"
         detaylar = [("Konum", "Virman → Cari → Cari")]
