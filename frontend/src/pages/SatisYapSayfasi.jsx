@@ -1,346 +1,234 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
-from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { api, hataMesajiCikar } from '../api/client';
+import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat } from '../components/Ortak';
 
-from app.db.session import get_db
-from app.core.deps import aktif_sirket_id_getir, izin_gerektir, aktif_kullanici_getir
-from app.models.auth import Kullanici
-from app.models.stok import (StokKarti, StokSeriNo, StokMaliyetKalemi,
-                              MALIYET_TIP_SUTUN_ESLEME, StokDurum)
-from app.schemas.stok import (StokKartiOlusturIstegi, StokKartiYanit,
-                               StokSeriNoYanit, StokDurumGuncelleIstegi,
-                               MaliyetKalemiEkleIstegi, KarRaporuYanit, StokSatisIstegi,
-                               StokMaliyetKalemiYanit, TopluDurumGuncelleIstegi,
-                               StokSeriNoDuzenleIstegi)
-from app.services.para_hareketi import para_hareketi_olustur
+const ODEME_TIPLERI = [
+  { deger: 'PESIN_NAKIT', etiket: 'Peşin — Nakit', aciklama: 'Para elden, Ana Kasa\'ya girer' },
+  { deger: 'PESIN_HAVALE', etiket: 'Peşin — Havale/EFT', aciklama: 'Para banka hesabına yatar' },
+  { deger: 'PESIN_KART', etiket: 'Peşin — Kredi Kartı (POS)', aciklama: 'POS cihazınızın bağlı olduğu banka hesabına yatar' },
+  { deger: 'TAKSITLI', etiket: 'Taksitli', aciklama: 'Müşteri, belirlediğiniz sayıda taksitle öder' },
+  { deger: 'LEASINGLI', etiket: 'Leasingli', aciklama: 'Bir leasing şirketi üzerinden taksitli ödeme' },
+  { deger: 'CEK', etiket: 'Çek ile', aciklama: 'Müşteriden çek alınır, vadesinde tahsil edilir' },
+];
 
-router = APIRouter(tags=["Stok"])
+export default function SatisYapSayfasi() {
+  const [searchParams] = useSearchParams();
+  const onSeciliUrunId = searchParams.get('urun');
 
+  const [urunler, setUrunler] = useState([]);
+  const [cariler, setCariler] = useState([]);
+  const [bankaHesaplari, setBankaHesaplari] = useState([]);
+  const [urunId, setUrunId] = useState(onSeciliUrunId || '');
+  const [musteriCariId, setMusteriCariId] = useState('');
+  const [odemeTipi, setOdemeTipi] = useState('');
+  const [tutar, setTutar] = useState('');
+  const [tarih, setTarih] = useState(new Date().toISOString().slice(0, 10));
+  const [bankaHesapId, setBankaHesapId] = useState('');
+  const [taksitSayisi, setTaksitSayisi] = useState(3);
+  const [pesinat, setPesinat] = useState('0');
+  const [cekNo, setCekNo] = useState('');
+  const [cekBankaAdi, setCekBankaAdi] = useState('');
+  const [cekVadeTarihi, setCekVadeTarihi] = useState('');
+  const [hata, setHata] = useState(null);
+  const [kaydediliyor, setKaydediliyor] = useState(false);
+  const [tamamlandi, setTamamlandi] = useState(false);
 
-@router.post("/stok-kartlari", response_model=StokKartiYanit,
-             dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
-def stok_karti_olustur(
-    istek: StokKartiOlusturIstegi,
-    sirket_id: int = Depends(aktif_sirket_id_getir),
-    db: Session = Depends(get_db),
-):
-    yeni = StokKarti(sirket_id=sirket_id, **istek.model_dump())
-    db.add(yeni)
-    db.commit()
-    db.refresh(yeni)
-    return yeni
+  useEffect(() => {
+    api.get('/stok-seri-no', { params: { durum: 'DEPODA' } }).then((r) => setUrunler((mevcut) => [...r.data]));
+    api.get('/stok-seri-no', { params: { durum: 'ANTREPODA' } }).then((r) => setUrunler((mevcut) => [...mevcut, ...r.data]));
+    api.get('/cariler').then((r) => setCariler(r.data)).catch(() => {});
+    api.get('/banka-bakiyeleri').then((r) => setBankaHesaplari(r.data)).catch(() => {});
+  }, []);
 
+  const seciliUrun = urunler.find((u) => String(u.id) === String(urunId));
+  const bankaGerekli = odemeTipi === 'PESIN_HAVALE' || odemeTipi === 'PESIN_KART' || odemeTipi === 'LEASINGLI';
 
-@router.put("/stok-kartlari/{stok_karti_id}", response_model=StokKartiYanit,
-            dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
-def stok_karti_guncelle(
-    stok_karti_id: int,
-    istek: StokKartiOlusturIstegi,
-    sirket_id: int = Depends(aktif_sirket_id_getir),
-    db: Session = Depends(get_db),
-):
-    kart = db.get(StokKarti, stok_karti_id)
-    if kart is None or kart.sirket_id != sirket_id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Stok kartı bulunamadı.")
-    for alan, deger in istek.model_dump().items():
-        setattr(kart, alan, deger)
-    db.commit()
-    db.refresh(kart)
-    return kart
+  async function satisiTamamla(e) {
+    e.preventDefault();
+    setHata(null);
 
+    if (!urunId) { setHata('Lütfen satılacak ürünü seçin.'); return; }
+    if (!musteriCariId) { setHata('Lütfen müşteriyi seçin.'); return; }
+    if (!odemeTipi) { setHata('Lütfen bir ödeme türü seçin.'); return; }
+    if (!tutar || Number(tutar) <= 0) { setHata('Lütfen geçerli bir tutar girin.'); return; }
 
-@router.delete("/stok-kartlari/{stok_karti_id}",
-               dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
-def stok_karti_sil(
-    stok_karti_id: int,
-    sirket_id: int = Depends(aktif_sirket_id_getir),
-    db: Session = Depends(get_db),
-):
-    kart = db.get(StokKarti, stok_karti_id)
-    if kart is None or kart.sirket_id != sirket_id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Stok kartı bulunamadı.")
-    try:
-        db.delete(kart)
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            "Bu stok kartı sipariş veya stok kayıtlarında kullanıldığı için silinemiyor."
-        )
-    return {"silindi": True}
+    setKaydediliyor(true);
+    try {
+      if (odemeTipi === 'PESIN_NAKIT') {
+        await api.post(`/stok-seri-no/${urunId}/satis`, {
+          musteri_cari_id: Number(musteriCariId), satis_fiyati_try: Number(tutar),
+          satis_tarihi: tarih, odeme_yontemi: 'NAKIT', banka_hesap_id: null,
+        });
+      } else if (odemeTipi === 'PESIN_HAVALE' || odemeTipi === 'PESIN_KART' || odemeTipi === 'LEASINGLI') {
+        if (!bankaHesapId) { setHata('Lütfen paranın yatacağı banka hesabını seçin.'); setKaydediliyor(false); return; }
+        await api.post(`/stok-seri-no/${urunId}/satis`, {
+          musteri_cari_id: Number(musteriCariId), satis_fiyati_try: Number(tutar),
+          satis_tarihi: tarih, odeme_yontemi: 'BANKA', banka_hesap_id: Number(bankaHesapId),
+        });
+      } else if (odemeTipi === 'TAKSITLI') {
+        await api.post('/taksitli-satis-planlari', {
+          musteri_cari_id: Number(musteriCariId), stok_seri_no_id: Number(urunId),
+          toplam_tutar: Number(tutar), pesinat: Number(pesinat || 0),
+          taksit_sayisi: Number(taksitSayisi), baslangic_tarihi: tarih, para_birimi: 'TRY',
+        });
+      } else if (odemeTipi === 'CEK') {
+        if (!cekVadeTarihi) { setHata('Lütfen çekin vade tarihini girin.'); setKaydediliyor(false); return; }
+        await api.put(`/stok-seri-no/${urunId}/durum`, {
+          durum: 'SATILDI', musteri_cari_id: Number(musteriCariId),
+          satis_fiyati_try: Number(tutar), satis_tarihi: tarih,
+        });
+        await api.post('/cekler', {
+          tip: 'ALINAN', cek_no: cekNo || null, banka_adi: cekBankaAdi || null,
+          cari_id: Number(musteriCariId), tutar: Number(tutar),
+          vade_tarihi: cekVadeTarihi, alinma_verilme_tarihi: tarih,
+        });
+      }
+      setTamamlandi(true);
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setKaydediliyor(false);
+    }
+  }
 
+  if (tamamlandi) {
+    return (
+      <div>
+        <SayfaBasligi baslik="Satış Yap" />
+        <Kart style={{ background: 'var(--yesil-acik)' }}>
+          <div style={{ color: 'var(--yesil)', fontWeight: 600, fontSize: 15, marginBottom: 8 }}>Satış tamamlandı ✓</div>
+          <div style={{ fontSize: 13.5, color: 'var(--metin-ikincil)', marginBottom: 16 }}>
+            Ürün "Satıldı" olarak işaretlendi ve ilgili para hareketi/kayıt oluşturuldu.
+          </div>
+          <Buton onClick={() => window.location.reload()}>Yeni satış yap</Buton>
+        </Kart>
+      </div>
+    );
+  }
 
-@router.get("/stok-kartlari", response_model=list[StokKartiYanit],
-            dependencies=[Depends(izin_gerektir("STOK_GORUNTULE"))])
-def stok_kartlarini_listele(
-    sirket_id: int = Depends(aktif_sirket_id_getir),
-    db: Session = Depends(get_db),
-):
-    sorgu = select(StokKarti).where(StokKarti.sirket_id == sirket_id)
-    return list(db.execute(sorgu).scalars())
+  return (
+    <div>
+      <SayfaBasligi baslik="Satış Yap" aciklama="Ürünü seçin, müşteriyi seçin, ödeme türünü belirleyin — satış otomatik olarak Kasa/Banka/Çek/Taksit kayıtlarına işlenir" />
+      <HataMesaji>{hata}</HataMesaji>
 
+      <form onSubmit={satisiTamamla}>
+        {/* ADIM 1 */}
+        <Kart style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>1. Hangi ürünü satıyorsunuz?</div>
+          <Alan etiket="Ürün (Depoda veya Antrepoda olanlar listelenir)">
+            <select required value={urunId} onChange={(e) => setUrunId(e.target.value)} style={girdiStili}>
+              <option value="">Seçin...</option>
+              {urunler.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.seri_no} — Maliyet: {paraFormat(u.toplam_maliyet_try)}
+                </option>
+              ))}
+            </select>
+          </Alan>
+          {urunler.length === 0 && (
+            <div style={{ fontSize: 13, color: 'var(--metin-soluk)' }}>Şu an satılabilir (Depoda/Antrepoda) ürün yok.</div>
+          )}
+        </Kart>
 
-@router.get("/stok-seri-no", response_model=list[StokSeriNoYanit],
-            dependencies=[Depends(izin_gerektir("STOK_GORUNTULE"))])
-def stok_seri_no_listele(
-    durum: StokDurum | None = None,
-    stok_karti_id: int | None = None,
-    sirket_id: int = Depends(aktif_sirket_id_getir),
-    db: Session = Depends(get_db),
-):
-    sorgu = select(StokSeriNo).where(StokSeriNo.sirket_id == sirket_id)
-    if durum:
-        sorgu = sorgu.where(StokSeriNo.durum == durum)
-    if stok_karti_id:
-        sorgu = sorgu.where(StokSeriNo.stok_karti_id == stok_karti_id)
-    return list(db.execute(sorgu).scalars())
+        {/* ADIM 2 */}
+        <Kart style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>2. Kime satıyorsunuz?</div>
+          <Alan etiket="Müşteri (Leasingli satışta leasing şirketini seçin)">
+            <select required value={musteriCariId} onChange={(e) => setMusteriCariId(e.target.value)} style={girdiStili}>
+              <option value="">Seçin...</option>
+              {cariler.map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
+            </select>
+          </Alan>
+        </Kart>
 
+        {/* ADIM 3 */}
+        <Kart style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>3. Ödeme nasıl yapılacak?</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+            {ODEME_TIPLERI.map((o) => (
+              <button
+                key={o.deger}
+                type="button"
+                onClick={() => setOdemeTipi(o.deger)}
+                style={{
+                  textAlign: 'left', padding: 14, borderRadius: 9, cursor: 'pointer',
+                  border: odemeTipi === o.deger ? '2px solid var(--lacivert)' : '1px solid var(--kenarlik)',
+                  background: odemeTipi === o.deger ? 'var(--zemin)' : 'white',
+                }}
+              >
+                <div style={{ fontWeight: 600, fontSize: 13.5, marginBottom: 3 }}>{o.etiket}</div>
+                <div style={{ fontSize: 12, color: 'var(--metin-ikincil)' }}>{o.aciklama}</div>
+              </button>
+            ))}
+          </div>
+        </Kart>
 
-def _seri_no_getir_veya_404(db: Session, seri_id: int, sirket_id: int) -> StokSeriNo:
-    kayit = db.get(StokSeriNo, seri_id)
-    if kayit is None or kayit.sirket_id != sirket_id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Seri numaralı stok kaydı bulunamadı.")
-    return kayit
+        {/* ADIM 4 - kosullu alanlar */}
+        {odemeTipi && (
+          <Kart style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>4. Tutar ve detaylar</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+              <Alan etiket={odemeTipi === 'TAKSITLI' || odemeTipi === 'LEASINGLI' ? 'Toplam satış tutarı (TL)' : 'Satış tutarı (TL)'}>
+                <input required type="number" step="0.01" value={tutar} onChange={(e) => setTutar(e.target.value)} style={girdiStili} />
+              </Alan>
+              <Alan etiket={odemeTipi === 'CEK' ? 'Satış tarihi' : 'Tarih'}>
+                <input required type="date" value={tarih} onChange={(e) => setTarih(e.target.value)} style={girdiStili} />
+              </Alan>
 
+              {bankaGerekli && (
+                <Alan etiket="Paranın yatacağı banka hesabı">
+                  <select required value={bankaHesapId} onChange={(e) => setBankaHesapId(e.target.value)} style={girdiStili}>
+                    <option value="">Seçin...</option>
+                    {bankaHesaplari.map((h) => (
+                      <option key={h.banka_hesap_id} value={h.banka_hesap_id}>{h.banka_adi} — {h.hesap_adi || h.para_birimi}</option>
+                    ))}
+                  </select>
+                </Alan>
+              )}
 
-@router.get("/stok-seri-no/{seri_id}", response_model=StokSeriNoYanit,
-            dependencies=[Depends(izin_gerektir("STOK_GORUNTULE"))])
-def stok_seri_no_getir(
-    seri_id: int,
-    sirket_id: int = Depends(aktif_sirket_id_getir),
-    db: Session = Depends(get_db),
-):
-    return _seri_no_getir_veya_404(db, seri_id, sirket_id)
+              {(odemeTipi === 'TAKSITLI' || odemeTipi === 'LEASINGLI') && (
+                <>
+                  <Alan etiket="Peşinat (TL) — yoksa 0 bırakın">
+                    <input type="number" step="0.01" value={pesinat} onChange={(e) => setPesinat(e.target.value)} style={girdiStili} />
+                  </Alan>
+                  <Alan etiket="Taksit sayısı">
+                    <input required type="number" min="2" value={taksitSayisi} onChange={(e) => setTaksitSayisi(e.target.value)} style={girdiStili} />
+                  </Alan>
+                </>
+              )}
 
+              {odemeTipi === 'CEK' && (
+                <>
+                  <Alan etiket="Çek no (opsiyonel)">
+                    <input value={cekNo} onChange={(e) => setCekNo(e.target.value)} style={girdiStili} />
+                  </Alan>
+                  <Alan etiket="Çekin bankası (opsiyonel)">
+                    <input value={cekBankaAdi} onChange={(e) => setCekBankaAdi(e.target.value)} style={girdiStili} />
+                  </Alan>
+                  <Alan etiket="Çek vade tarihi">
+                    <input required type="date" value={cekVadeTarihi} onChange={(e) => setCekVadeTarihi(e.target.value)} style={girdiStili} />
+                  </Alan>
+                </>
+              )}
+            </div>
 
-@router.put("/stok-seri-no/{seri_id}", response_model=StokSeriNoYanit,
-            dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
-def stok_seri_no_duzenle(
-    seri_id: int,
-    istek: StokSeriNoDuzenleIstegi,
-    sirket_id: int = Depends(aktif_sirket_id_getir),
-    db: Session = Depends(get_db),
-):
-    """Bir urunun seri numarasini veya hangi urun tanimina (stok karti) ait oldugunu duzeltir."""
-    kayit = _seri_no_getir_veya_404(db, seri_id, sirket_id)
+            {seciliUrun && tutar && (
+              <div style={{
+                marginTop: 8, padding: 10, borderRadius: 7, background: 'var(--zemin)', fontSize: 13,
+                color: Number(tutar) - seciliUrun.toplam_maliyet_try >= 0 ? 'var(--yesil)' : 'var(--kirmizi)',
+              }}>
+                Tahmini kâr/zarar: {paraFormat(Number(tutar) - seciliUrun.toplam_maliyet_try)}
+                <span style={{ color: 'var(--metin-soluk)' }}> (maliyet: {paraFormat(seciliUrun.toplam_maliyet_try)})</span>
+              </div>
+            )}
+          </Kart>
+        )}
 
-    yeni_kart = db.get(StokKarti, istek.stok_karti_id)
-    if yeni_kart is None or yeni_kart.sirket_id != sirket_id:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ürün tanımı bulunamadı.")
-
-    kayit.seri_no = istek.seri_no
-    kayit.stok_karti_id = istek.stok_karti_id
-    db.commit()
-    db.refresh(kayit)
-    return kayit
-
-
-@router.delete("/stok-seri-no/{seri_id}",
-               dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
-def stok_seri_no_sil(
-    seri_id: int,
-    sirket_id: int = Depends(aktif_sirket_id_getir),
-    db: Session = Depends(get_db),
-):
-    """
-    Bir urun kaydini siler. Satis gecmisini korumak icin SATILDI durumundaki
-    urunler silinemez - once (varsa) ilgili satis kaydi incelenmelidir.
-    Bagli maliyet kalemleri de birlikte silinir.
-    """
-    kayit = _seri_no_getir_veya_404(db, seri_id, sirket_id)
-    if kayit.durum == StokDurum.SATILDI:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            "Satılmış bir ürün silinemez (satış geçmişi korunur)."
-        )
-
-    for kalem in list(db.execute(
-        select(StokMaliyetKalemi).where(StokMaliyetKalemi.stok_seri_no_id == seri_id)
-    ).scalars()):
-        db.delete(kalem)
-
-    db.delete(kayit)
-    db.commit()
-    return {"silindi": True}
-
-
-@router.put("/stok-seri-no/{seri_id}/durum", response_model=StokSeriNoYanit,
-            dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
-def stok_durum_guncelle(
-    seri_id: int,
-    istek: StokDurumGuncelleIstegi,
-    sirket_id: int = Depends(aktif_sirket_id_getir),
-    db: Session = Depends(get_db),
-):
-    kayit = _seri_no_getir_veya_404(db, seri_id, sirket_id)
-
-    if istek.durum == StokDurum.SATILDI and istek.musteri_cari_id is None:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            "Durum SATILDI yapılırken musteri_cari_id belirtilmelidir."
-        )
-
-    kayit.durum = istek.durum
-    if istek.musteri_cari_id is not None:
-        kayit.musteri_cari_id = istek.musteri_cari_id
-    if istek.satis_fiyati_try is not None:
-        kayit.satis_fiyati_try = istek.satis_fiyati_try
-    if istek.satis_tarihi is not None:
-        kayit.satis_tarihi = istek.satis_tarihi
-
-    db.commit()
-    db.refresh(kayit)
-    return kayit
-
-
-@router.put("/stok-seri-no/toplu-durum-guncelle", response_model=list[StokSeriNoYanit],
-            dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
-def stok_toplu_durum_guncelle(
-    istek: TopluDurumGuncelleIstegi,
-    sirket_id: int = Depends(aktif_sirket_id_getir),
-    db: Session = Depends(get_db),
-):
-    """
-    Birden fazla urunun (seri no) durumunu TEK SEFERDE gunceller
-    (orn. gumrukten cikan 10 urunu birden 'Depoda' yapmak icin).
-    SATILDI durumu buradan YAPILAMAZ - odeme/kasa-banka takibinin dogru
-    islenmesi icin satislar tek tek "Satis yap" akisiyla yapilmalidir.
-    """
-    if istek.durum == StokDurum.SATILDI:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            "Toplu satış desteklenmiyor. Ödeme takibi için ürünleri tek tek 'Satış yap' ile işleyin."
-        )
-    if not istek.stok_seri_no_idleri:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "En az bir ürün seçmelisiniz.")
-
-    guncellenenler = []
-    for seri_id in istek.stok_seri_no_idleri:
-        kayit = db.get(StokSeriNo, seri_id)
-        if kayit is None or kayit.sirket_id != sirket_id:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Ürün bulunamadı (ID={seri_id}).")
-        kayit.durum = istek.durum
-        guncellenenler.append(kayit)
-
-    db.commit()
-    for k in guncellenenler:
-        db.refresh(k)
-    return guncellenenler
-
-
-@router.post("/stok-seri-no/{seri_id}/satis", response_model=StokSeriNoYanit,
-             dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
-def stok_satisi_yap(
-    seri_id: int,
-    istek: StokSatisIstegi,
-    sirket_id: int = Depends(aktif_sirket_id_getir),
-    kullanici: Kullanici = Depends(aktif_kullanici_getir),
-    db: Session = Depends(get_db),
-):
-    """
-    Depoda veya antrepoda olan bir urunu PESIN satar: durumu SATILDI yapar
-    ve satis tutarini es zamanli olarak Kasa/Banka'ya (GIRIS) yansitir.
-    Vadeli/taksitli satislar icin Finansal Takip > Taksitli Satis kullanilmalidir.
-    """
-    kayit = _seri_no_getir_veya_404(db, seri_id, sirket_id)
-    if kayit.durum == StokDurum.SATILDI:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bu ürün zaten satılmış.")
-
-    kayit.durum = StokDurum.SATILDI
-    kayit.musteri_cari_id = istek.musteri_cari_id
-    kayit.satis_fiyati_try = istek.satis_fiyati_try
-    kayit.satis_tarihi = istek.satis_tarihi
-
-    para_hareketi_olustur(
-        db, sirket_id, kullanici.id, "GIRIS", istek.satis_fiyati_try,
-        istek.odeme_yontemi, istek.banka_hesap_id,
-        aciklama=f"Stok satışı - Seri No {kayit.seri_no}",
-        kaynak_tablo="STOK_SATIS", kaynak_id=kayit.id, cari_id=istek.musteri_cari_id,
-    )
-
-    db.commit()
-    db.refresh(kayit)
-    return kayit
-
-
-@router.get("/stok-seri-no/{seri_id}/maliyet-kalemleri", response_model=list[StokMaliyetKalemiYanit],
-            dependencies=[Depends(izin_gerektir("STOK_GORUNTULE"))])
-def maliyet_kalemlerini_listele(
-    seri_id: int,
-    sirket_id: int = Depends(aktif_sirket_id_getir),
-    db: Session = Depends(get_db),
-):
-    """Bir urune eklenmis tum maliyet faturalarini (nakliye, gumruk, antrepo vb.) tarih sirasiyla doner."""
-    _seri_no_getir_veya_404(db, seri_id, sirket_id)
-    sorgu = (
-        select(StokMaliyetKalemi)
-        .where(StokMaliyetKalemi.stok_seri_no_id == seri_id)
-        .order_by(StokMaliyetKalemi.tarih.desc())
-    )
-    return list(db.execute(sorgu).scalars())
-
-
-@router.post("/stok-seri-no/{seri_id}/maliyet-kalemi", response_model=StokSeriNoYanit,
-             dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
-def maliyet_kalemi_ekle(
-    seri_id: int,
-    istek: MaliyetKalemiEkleIstegi,
-    sirket_id: int = Depends(aktif_sirket_id_getir),
-    db: Session = Depends(get_db),
-):
-    """
-    Yeni bir maliyet faturasi/kalemi ekler (nakliye, gumruk, antrepo, vb.).
-    Detay kayit stok_maliyet_kalemleri'ne dusuyor, ozet sutun da
-    (orn. nakliye_maliyeti_try) ayni anda guncelleniyor; PDF/rapor
-    ekranlari ozet sutunu okuyarak hizli calisir, detay sutun da
-    fatura bazinda izlenebilirlik saglar.
-    """
-    kayit = _seri_no_getir_veya_404(db, seri_id, sirket_id)
-
-    tutar_try = istek.tutar * istek.kur
-    yeni_kalem = StokMaliyetKalemi(
-        stok_seri_no_id=seri_id,
-        tip=istek.tip,
-        aciklama=istek.aciklama,
-        tedarikci_cari_id=istek.tedarikci_cari_id,
-        para_birimi=istek.para_birimi,
-        tutar=istek.tutar,
-        kur=istek.kur,
-        tutar_try=tutar_try,
-        belge_no=istek.belge_no,
-        tarih=istek.tarih,
-    )
-    db.add(yeni_kalem)
-
-    ozet_sutun = MALIYET_TIP_SUTUN_ESLEME[istek.tip]
-    mevcut_deger = getattr(kayit, ozet_sutun) or 0
-    setattr(kayit, ozet_sutun, mevcut_deger + tutar_try)
-
-    db.commit()
-    db.refresh(kayit)
-    return kayit
-
-
-@router.get("/stok-seri-no/{seri_id}/kar-raporu", response_model=KarRaporuYanit,
-            dependencies=[Depends(izin_gerektir("STOK_GORUNTULE"))])
-def kar_raporu(
-    seri_id: int,
-    sirket_id: int = Depends(aktif_sirket_id_getir),
-    db: Session = Depends(get_db),
-):
-    kayit = _seri_no_getir_veya_404(db, seri_id, sirket_id)
-    toplam = (kayit.satinalma_maliyeti_try + kayit.nakliye_maliyeti_try +
-              kayit.gumruk_maliyeti_try + kayit.antrepo_maliyeti_try +
-              kayit.millilestirme_maliyeti_try + kayit.leasing_maliyeti_try +
-              kayit.diger_maliyet_try)
-    kar_zarar = (kayit.satis_fiyati_try - toplam) if kayit.satis_fiyati_try is not None else None
-
-    return KarRaporuYanit(
-        seri_no=kayit.seri_no,
-        toplam_maliyet_try=toplam,
-        satis_fiyati_try=kayit.satis_fiyati_try,
-        kar_zarar_try=kar_zarar,
-        durum=kayit.durum,
-    )
+        <Buton type="submit" disabled={kaydediliyor || !odemeTipi}>
+          {kaydediliyor ? 'Kaydediliyor...' : 'Satışı Tamamla'}
+        </Buton>
+      </form>
+    </div>
+  );
+}
