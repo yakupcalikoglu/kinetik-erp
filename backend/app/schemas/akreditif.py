@@ -95,3 +95,27 @@ class AkreditifMaliyetDagitimSatiri(BaseModel):
 
     class Config:
         from_attributes = True
+        class AkreditifKalemTaksitlendirIstegi(BaseModel):
+    taksit_sayisi: int
+    ek_ucret: Decimal = Decimal("0")  # taksitlendirme hizmeti icin alinan ek ucret
+    ilk_vade_tarihi: date
+
+
+class AkreditifKalemTaksitiYanit(BaseModel):
+    id: int
+    kalem_id: int
+    taksit_no: int
+    vade_tarihi: date
+    tutar: Decimal
+    odendi_mi: bool
+    odeme_tarihi: date | None
+
+    class Config:
+        from_attributes = True
+
+
+class AkreditifKalemTaksitOdeIstegi(BaseModel):
+    odeme_tarihi: date
+    odeme_yontemi: str  # "NAKIT" | "BANKA"
+    banka_hesap_id: int | None = None
+    kur: Decimal | None = None
