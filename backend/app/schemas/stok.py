@@ -175,3 +175,18 @@ class TeslimAlinanUrun(BaseModel):
 
 class TeslimAlIstegi(BaseModel):
     urunler: list[TeslimAlinanUrun]
+
+class StokMaliyetKalemiYanit(BaseModel):
+    id: int
+    tip: str
+    aciklama: str | None
+    tedarikci_cari_id: int | None
+    para_birimi: str
+    tutar: Decimal
+    kur: Decimal
+    tutar_try: Decimal
+    belge_no: str | None
+    tarih: date
+
+    class Config:
+        from_attributes = True
