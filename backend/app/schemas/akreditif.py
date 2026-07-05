@@ -95,7 +95,10 @@ class AkreditifMaliyetDagitimSatiri(BaseModel):
 
     class Config:
         from_attributes = True
-        class AkreditifKalemTaksitlendirIstegi(BaseModel):
+
+
+# --------------------------------------------------------- Kalem Taksitlendirme
+class AkreditifKalemTaksitlendirIstegi(BaseModel):
     taksit_sayisi: int
     ek_ucret: Decimal = Decimal("0")  # taksitlendirme hizmeti icin alinan ek ucret
     ilk_vade_tarihi: date
