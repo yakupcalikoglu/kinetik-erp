@@ -18,6 +18,7 @@ import ProformaFaturaSayfasi from './pages/ProformaFaturaSayfasi';
 import YoneticiPaneliSayfasi from './pages/YoneticiPaneliSayfasi';
 import VirmanSayfasi from './pages/VirmanSayfasi';
 import UrunTanimlariSayfasi from './pages/UrunTanimlariSayfasi';
+import SatisYapSayfasi from './pages/SatisYapSayfasi';
 import HarcamaTurleriSayfasi from './pages/HarcamaTurleriSayfasi';
 
 function KorumaliRota({ children }) {
