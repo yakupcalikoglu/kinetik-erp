@@ -59,6 +59,7 @@ function App() {
             <Route path="urun-tanimlari" element={<UrunTanimlariSayfasi />} />
             <Route path="yonetici-paneli" element={<YoneticiPaneliSayfasi />} />
             <Route path="harcama-turleri" element={<HarcamaTurleriSayfasi />} />
+            <Route path="satis-yap" element={<SatisYapSayfasi />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
