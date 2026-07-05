@@ -66,6 +66,7 @@ class CariHareketYanit(BaseModel):
     tutar: Decimal
     tutar_try_karsiligi: Decimal | None
     kaynak_tablo: str | None
+    kaynak_id: int | None
     class Config:
         from_attributes = True
 
