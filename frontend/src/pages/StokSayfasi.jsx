@@ -361,6 +361,44 @@ export default function StokSayfasi() {
   const [duzenlenenKart, setDuzenlenenKart] = useState(null);
   const [satisYapilacakUrun, setSatisYapilacakUrun] = useState(null);
   const [maliyetGosterilecekUrun, setMaliyetGosterilecekUrun] = useState(null);
+  const [seciliIdler, setSeciliIdler] = useState([]);
+  const [topluDurum, setTopluDurum] = useState('DEPODA');
+  const [topluHata, setTopluHata] = useState(null);
+  const [topluIslemDevamEdiyor, setTopluIslemDevamEdiyor] = useState(false);
+
+  function seciliMi(id) {
+    return seciliIdler.includes(id);
+  }
+
+  function secimiDegistir(id) {
+    setSeciliIdler((mevcut) => (mevcut.includes(id) ? mevcut.filter((x) => x !== id) : [...mevcut, id]));
+  }
+
+  function tumunuSecVeyaKaldir() {
+    if (seciliIdler.length === urunler.length) {
+      setSeciliIdler([]);
+    } else {
+      setSeciliIdler(urunler.map((u) => u.id));
+    }
+  }
+
+  async function topluDurumGuncelle() {
+    setTopluHata(null);
+    setTopluIslemDevamEdiyor(true);
+    try {
+      await api.put('/stok-seri-no/toplu-durum-guncelle', {
+        stok_seri_no_idleri: seciliIdler,
+        durum: topluDurum,
+      });
+      setSeciliIdler([]);
+      urunleriYukle();
+      depodakiSayilariYukle();
+    } catch (err) {
+      setTopluHata(hataMesajiCikar(err));
+    } finally {
+      setTopluIslemDevamEdiyor(false);
+    }
+  }
 
   function urunleriYukle() {
     setYukleniyor(true);
@@ -489,6 +527,24 @@ export default function StokSayfasi() {
         />
       )}
 
+      {seciliIdler.length > 0 && (
+        <Kart style={{ marginBottom: 16, background: 'var(--lacivert)', color: 'white' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
+            <div style={{ fontSize: 13.5, fontWeight: 500 }}>{seciliIdler.length} ürün seçildi</div>
+            <Alan etiket="Yeni durum">
+              <select value={topluDurum} onChange={(e) => setTopluDurum(e.target.value)} style={{ ...girdiStili, minWidth: 180 }}>
+                {Object.entries(DURUM_METIN).filter(([k]) => k !== 'SATILDI').map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            </Alan>
+            <Buton onClick={topluDurumGuncelle} disabled={topluIslemDevamEdiyor} variant="ikincil">
+              {topluIslemDevamEdiyor ? 'Güncelleniyor...' : 'Seçilenlerin durumunu güncelle'}
+            </Buton>
+            <Buton variant="ikincil" onClick={() => setSeciliIdler([])}>Seçimi temizle</Buton>
+          </div>
+          {topluHata && <div style={{ marginTop: 8, fontSize: 13, color: '#ffd7d7' }}>{topluHata}</div>}
+        </Kart>
+      )}
+
       <Kart style={{ padding: 0 }}>
         <div style={{ padding: 16, borderBottom: '1px solid var(--kenarlik)' }}>
           <select value={durumFiltre} onChange={(e) => setDurumFiltre(e.target.value)} style={{ ...girdiStili, maxWidth: 220 }}>
@@ -505,6 +561,13 @@ export default function StokSayfasi() {
           <table>
             <thead>
               <tr style={{ background: 'var(--zemin)' }}>
+                <th style={{ padding: '10px 16px', width: 32 }}>
+                  <input
+                    type="checkbox"
+                    checked={urunler.length > 0 && seciliIdler.length === urunler.length}
+                    onChange={tumunuSecVeyaKaldir}
+                  />
+                </th>
                 {['Seri No', 'Durum', 'Toplam Maliyet', 'Satış Fiyatı', 'Kâr/Zarar', 'İşlem'].map((b) => (
                   <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
                 ))}
@@ -515,7 +578,10 @@ export default function StokSayfasi() {
                 const karZarar = u.satis_fiyati_try != null ? u.satis_fiyati_try - u.toplam_maliyet_try : null;
                 const satilabilir = u.durum === 'DEPODA' || u.durum === 'ANTREPODA';
                 return (
-                  <tr key={u.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                  <tr key={u.id} style={{ borderTop: '1px solid var(--kenarlik)', background: seciliMi(u.id) ? 'var(--zemin)' : 'transparent' }}>
+                    <td style={{ padding: '12px 16px' }}>
+                      <input type="checkbox" checked={seciliMi(u.id)} onChange={() => secimiDegistir(u.id)} />
+                    </td>
                     <td style={{ padding: '12px 16px', fontWeight: 500, fontFamily: 'var(--font-mono)' }}>{u.seri_no}</td>
                     <td style={{ padding: '12px 16px' }}>
                       <Etiket ton={DURUM_ETIKET[u.durum]}>{DURUM_METIN[u.durum]}</Etiket>
