@@ -6,7 +6,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers import auth, sirketler, cari, stok, siparis, banka, finansal, diger, raporlama, yetki, akreditif, virman, harcama_turu
-
 app = FastAPI(
     title="Kinetik ERP API",
     version="0.1.0",
