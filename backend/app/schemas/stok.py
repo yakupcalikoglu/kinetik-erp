@@ -62,7 +62,10 @@ class StokSeriNoYanit(BaseModel):
                 self.gumruk_maliyeti_try + self.antrepo_maliyeti_try +
                 self.millilestirme_maliyeti_try + self.leasing_maliyeti_try +
                 self.diger_maliyet_try)
-
+        
+class StokSeriNoDuzenleIstegi(BaseModel):
+    seri_no: str
+    stok_karti_id: int
 
 class StokDurumGuncelleIstegi(BaseModel):
     durum: StokDurum
