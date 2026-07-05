@@ -62,16 +62,19 @@ class StokSeriNoYanit(BaseModel):
                 self.gumruk_maliyeti_try + self.antrepo_maliyeti_try +
                 self.millilestirme_maliyeti_try + self.leasing_maliyeti_try +
                 self.diger_maliyet_try)
-        
+
+
 class StokSeriNoDuzenleIstegi(BaseModel):
     seri_no: str
     stok_karti_id: int
+
 
 class StokDurumGuncelleIstegi(BaseModel):
     durum: StokDurum
     musteri_cari_id: int | None = None
     satis_fiyati_try: Decimal | None = None
     satis_tarihi: date | None = None
+
 
 class MaliyetKalemiEkleIstegi(BaseModel):
     tip: MaliyetTip
@@ -127,9 +130,10 @@ class SiparisGuncelleIstegi(BaseModel):
     notlar: str | None = None
     urunler: list[SiparisUrunIstegi]
 
+
 class SiparisDurumGuncelleIstegi(BaseModel):
     durum: SiparisDurum
-    
+
 
 class SiparisUrunYanit(BaseModel):
     id: int
@@ -159,13 +163,15 @@ class SiparisYanit(BaseModel):
 
     class Config:
         from_attributes = True
-        
+
+
 class StokSatisIstegi(BaseModel):
     musteri_cari_id: int
     satis_fiyati_try: Decimal
     satis_tarihi: date
     odeme_yontemi: str  # "NAKIT" | "BANKA"
     banka_hesap_id: int | None = None
+
 
 class TeslimAlinanUrun(BaseModel):
     siparis_detay_id: int
@@ -178,6 +184,7 @@ class TeslimAlinanUrun(BaseModel):
 
 class TeslimAlIstegi(BaseModel):
     urunler: list[TeslimAlinanUrun]
+
 
 class StokMaliyetKalemiYanit(BaseModel):
     id: int
@@ -193,7 +200,8 @@ class StokMaliyetKalemiYanit(BaseModel):
 
     class Config:
         from_attributes = True
-        
-    class TopluDurumGuncelleIstegi(BaseModel):
+
+
+class TopluDurumGuncelleIstegi(BaseModel):
     stok_seri_no_idleri: list[int]
     durum: StokDurum
