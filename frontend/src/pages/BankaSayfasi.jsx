@@ -1,11 +1,37 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Fragment } from 'react';
 import { api, hataMesajiCikar } from '../api/client';
 import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat, eylemChipStili, Sekmeler } from '../components/Ortak';
 
 const SEKMELER = [
-  { deger: 'hesaplar', etiket: 'Hesaplar' },
   { deger: 'hareketler', etiket: 'Hareketler' },
+  { deger: 'hesaplar', etiket: 'Hesaplar' },
 ];
+
+function KaynakDetayi({ kaynakTablo, kaynakId }) {
+  const [detay, setDetay] = useState(null);
+  const [hata, setHata] = useState(null);
+
+  useEffect(() => {
+    api.get(`/kaynak-detay/${kaynakTablo}/${kaynakId}`)
+      .then((r) => setDetay(r.data))
+      .catch((e) => setHata(hataMesajiCikar(e)));
+  }, [kaynakTablo, kaynakId]);
+
+  if (hata) return <div style={{ padding: '10px 16px', fontSize: 12.5, color: 'var(--kirmizi)' }}>{hata}</div>;
+  if (!detay) return <div style={{ padding: '10px 16px', fontSize: 12.5, color: 'var(--metin-soluk)' }}>Yükleniyor...</div>;
+
+  return (
+    <div style={{ padding: '12px 16px', background: 'var(--zemin)', fontSize: 13 }}>
+      <div style={{ fontWeight: 600, marginBottom: 6 }}>{detay.baslik}</div>
+      {detay.detaylar.map(([etiket, deger]) => (
+        <div key={etiket} style={{ display: 'flex', gap: 8, color: 'var(--metin-ikincil)' }}>
+          <span style={{ minWidth: 130 }}>{etiket}:</span>
+          <span style={{ color: 'var(--metin-birincil)' }}>{deger}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function bosHesapForm() {
   return { banka_adi: '', hesap_adi: '', iban: '', para_birimi: 'TRY' };
@@ -287,6 +313,7 @@ function HareketlerSekmesi() {
   const [hata, setHata] = useState(null);
   const [yukleniyor, setYukleniyor] = useState(true);
   const [bankaFormuAcik, setBankaFormuAcik] = useState(false);
+  const [acikDetayId, setAcikDetayId] = useState(null);
 
   function yukle() {
     setYukleniyor(true);
@@ -307,6 +334,11 @@ function HareketlerSekmesi() {
   function hesapAdiGoster(hesapId) {
     const h = hesaplar.find((x) => x.banka_hesap_id === hesapId);
     return h ? `${h.banka_adi} — ${h.hesap_adi || h.para_birimi}` : `#${hesapId}`;
+  }
+
+  function satiraTikla(h) {
+    if (!h.kaynak_tablo || !h.kaynak_id) return;
+    setAcikDetayId((mevcut) => (mevcut === h.id ? null : h.id));
   }
 
   const gosterilecekHareketler = hesapFiltre
@@ -350,17 +382,43 @@ function HareketlerSekmesi() {
               </tr>
             </thead>
             <tbody>
-              {gosterilecekHareketler.map((h) => (
-                <tr key={h.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
-                  <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{h.tarih}</td>
-                  <td style={{ padding: '10px 16px' }}>{hesapAdiGoster(h.banka_hesap_id)}</td>
-                  <td style={{ padding: '10px 16px' }}>{BANKA_HAREKET_TIP_METIN[h.tip] || h.tip}</td>
-                  <td style={{ padding: '10px 16px', fontWeight: 500, color: Number(h.tutar) >= 0 ? 'var(--yesil)' : 'var(--kirmizi)' }}>
-                    {paraFormat(h.tutar)}
-                  </td>
-                  <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{h.aciklama || '—'}</td>
-                </tr>
-              ))}
+              {gosterilecekHareketler.map((h) => {
+                const tiklanabilir = !!(h.kaynak_tablo && h.kaynak_id);
+                return (
+                  <Fragment key={h.id}>
+                    <tr
+                      onClick={() => satiraTikla(h)}
+                      style={{
+                        borderTop: '1px solid var(--kenarlik)',
+                        cursor: tiklanabilir ? 'pointer' : 'default',
+                        background: acikDetayId === h.id ? 'var(--zemin)' : 'transparent',
+                      }}
+                    >
+                      <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{h.tarih}</td>
+                      <td style={{ padding: '10px 16px' }}>{hesapAdiGoster(h.banka_hesap_id)}</td>
+                      <td style={{ padding: '10px 16px' }}>{BANKA_HAREKET_TIP_METIN[h.tip] || h.tip}</td>
+                      <td style={{ padding: '10px 16px', fontWeight: 500, color: Number(h.tutar) >= 0 ? 'var(--yesil)' : 'var(--kirmizi)' }}>
+                        {paraFormat(h.tutar)}
+                      </td>
+                      <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>
+                        {h.aciklama || '—'}
+                        {tiklanabilir && (
+                          <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--lacivert)' }}>
+                            {acikDetayId === h.id ? '▲ detayı gizle' : '▼ detay göster'}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                    {acikDetayId === h.id && (
+                      <tr>
+                        <td colSpan={5} style={{ padding: 0 }}>
+                          <KaynakDetayi kaynakTablo={h.kaynak_tablo} kaynakId={h.kaynak_id} />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
             </tbody>
           </table>
         )}
@@ -370,15 +428,15 @@ function HareketlerSekmesi() {
 }
 
 export default function BankaSayfasi() {
-  const [sekme, setSekme] = useState('hesaplar');
+  const [sekme, setSekme] = useState('hareketler');
 
   return (
     <div>
       <SayfaBasligi baslik="Banka" aciklama="Banka hesap yönetimi ve para hareketleri" />
       <Sekmeler sekmeler={SEKMELER} aktif={sekme} onDegistir={setSekme} />
 
-      {sekme === 'hesaplar' && <HesaplarSekmesi />}
       {sekme === 'hareketler' && <HareketlerSekmesi />}
+      {sekme === 'hesaplar' && <HesaplarSekmesi />}
     </div>
   );
 }
