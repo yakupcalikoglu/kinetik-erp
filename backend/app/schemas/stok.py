@@ -194,6 +194,6 @@ class StokMaliyetKalemiYanit(BaseModel):
     class Config:
         from_attributes = True
         
-      class TopluDurumGuncelleIstegi(BaseModel):
+    class TopluDurumGuncelleIstegi(BaseModel):
     stok_seri_no_idleri: list[int]
     durum: StokDurum
