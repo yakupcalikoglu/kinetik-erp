@@ -11,7 +11,8 @@ from app.models.stok import (StokKarti, StokSeriNo, StokMaliyetKalemi,
 from app.schemas.stok import (StokKartiOlusturIstegi, StokKartiYanit,
                                StokSeriNoYanit, StokDurumGuncelleIstegi,
                                MaliyetKalemiEkleIstegi, KarRaporuYanit, StokSatisIstegi,
-                               StokMaliyetKalemiYanit)
+                               StokMaliyetKalemiYanit, TopluDurumGuncelleIstegi,
+                               StokSeriNoDuzenleIstegi)
 from app.services.para_hareketi import para_hareketi_olustur
 
 router = APIRouter(tags=["Stok"])
@@ -114,6 +115,57 @@ def stok_seri_no_getir(
     return _seri_no_getir_veya_404(db, seri_id, sirket_id)
 
 
+@router.put("/stok-seri-no/{seri_id}", response_model=StokSeriNoYanit,
+            dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
+def stok_seri_no_duzenle(
+    seri_id: int,
+    istek: StokSeriNoDuzenleIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """Bir urunun seri numarasini veya hangi urun tanimina (stok karti) ait oldugunu duzeltir."""
+    kayit = _seri_no_getir_veya_404(db, seri_id, sirket_id)
+
+    yeni_kart = db.get(StokKarti, istek.stok_karti_id)
+    if yeni_kart is None or yeni_kart.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ürün tanımı bulunamadı.")
+
+    kayit.seri_no = istek.seri_no
+    kayit.stok_karti_id = istek.stok_karti_id
+    db.commit()
+    db.refresh(kayit)
+    return kayit
+
+
+@router.delete("/stok-seri-no/{seri_id}",
+               dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
+def stok_seri_no_sil(
+    seri_id: int,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Bir urun kaydini siler. Satis gecmisini korumak icin SATILDI durumundaki
+    urunler silinemez - once (varsa) ilgili satis kaydi incelenmelidir.
+    Bagli maliyet kalemleri de birlikte silinir.
+    """
+    kayit = _seri_no_getir_veya_404(db, seri_id, sirket_id)
+    if kayit.durum == StokDurum.SATILDI:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Satılmış bir ürün silinemez (satış geçmişi korunur)."
+        )
+
+    for kalem in list(db.execute(
+        select(StokMaliyetKalemi).where(StokMaliyetKalemi.stok_seri_no_id == seri_id)
+    ).scalars()):
+        db.delete(kalem)
+
+    db.delete(kayit)
+    db.commit()
+    return {"silindi": True}
+
+
 @router.put("/stok-seri-no/{seri_id}/durum", response_model=StokSeriNoYanit,
             dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
 def stok_durum_guncelle(
@@ -141,6 +193,41 @@ def stok_durum_guncelle(
     db.commit()
     db.refresh(kayit)
     return kayit
+
+
+@router.put("/stok-seri-no/toplu-durum-guncelle", response_model=list[StokSeriNoYanit],
+            dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
+def stok_toplu_durum_guncelle(
+    istek: TopluDurumGuncelleIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Birden fazla urunun (seri no) durumunu TEK SEFERDE gunceller
+    (orn. gumrukten cikan 10 urunu birden 'Depoda' yapmak icin).
+    SATILDI durumu buradan YAPILAMAZ - odeme/kasa-banka takibinin dogru
+    islenmesi icin satislar tek tek "Satis yap" akisiyla yapilmalidir.
+    """
+    if istek.durum == StokDurum.SATILDI:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Toplu satış desteklenmiyor. Ödeme takibi için ürünleri tek tek 'Satış yap' ile işleyin."
+        )
+    if not istek.stok_seri_no_idleri:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "En az bir ürün seçmelisiniz.")
+
+    guncellenenler = []
+    for seri_id in istek.stok_seri_no_idleri:
+        kayit = db.get(StokSeriNo, seri_id)
+        if kayit is None or kayit.sirket_id != sirket_id:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Ürün bulunamadı (ID={seri_id}).")
+        kayit.durum = istek.durum
+        guncellenenler.append(kayit)
+
+    db.commit()
+    for k in guncellenenler:
+        db.refresh(k)
+    return guncellenenler
 
 
 @router.post("/stok-seri-no/{seri_id}/satis", response_model=StokSeriNoYanit,
