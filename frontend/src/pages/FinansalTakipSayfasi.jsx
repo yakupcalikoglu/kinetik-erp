@@ -440,6 +440,222 @@ function AkreditifKalemOdemeFormu({ kalem, akreditif, onKaydedildi, onVazgec }) 
   );
 }
 
+function TaksitOdemeFormu({ taksit, akreditif, onKaydedildi, onVazgec }) {
+  const [bankaHesaplari, setBankaHesaplari] = useState([]);
+  const [form, setForm] = useState({
+    odeme_yontemi: 'BANKA', banka_hesap_id: '', odeme_tarihi: new Date().toISOString().slice(0, 10), kur: '1',
+  });
+  const [hata, setHata] = useState(null);
+  const [kaydediliyor, setKaydediliyor] = useState(false);
+
+  useEffect(() => {
+    api.get('/banka-bakiyeleri').then((r) => setBankaHesaplari(r.data)).catch(() => {});
+    if (akreditif.para_birimi !== 'TRY') {
+      api.get(`/kur/${akreditif.para_birimi}`).then((r) => setForm((f) => ({ ...f, kur: r.data.kur }))).catch(() => {});
+    }
+  }, []); // eslint-disable-line
+
+  async function kaydet(e) {
+    e.preventDefault();
+    setHata(null);
+    setKaydediliyor(true);
+    try {
+      await api.put(`/akreditif-kalem-taksitleri/${taksit.id}/ode`, {
+        odeme_tarihi: form.odeme_tarihi,
+        odeme_yontemi: form.odeme_yontemi,
+        banka_hesap_id: form.odeme_yontemi === 'BANKA' ? Number(form.banka_hesap_id) : null,
+        kur: form.odeme_yontemi === 'NAKIT' && akreditif.para_birimi !== 'TRY' ? Number(form.kur) : null,
+      });
+      onKaydedildi();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setKaydediliyor(false);
+    }
+  }
+
+  return (
+    <tr>
+      <td colSpan={4} style={{ padding: 0 }}>
+        <div style={{ padding: 12, background: 'white', border: '1px solid var(--kenarlik)', borderRadius: 7, margin: '4px 0' }}>
+          <form onSubmit={kaydet}>
+            <HataMesaji>{hata}</HataMesaji>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+              <Alan etiket="Ödeme yöntemi">
+                <select value={form.odeme_yontemi} onChange={(e) => setForm((f) => ({ ...f, odeme_yontemi: e.target.value }))} style={girdiStili}>
+                  <option value="BANKA">Banka</option>
+                  <option value="NAKIT">Nakit (Ana Kasa)</option>
+                </select>
+              </Alan>
+              {form.odeme_yontemi === 'BANKA' ? (
+                <Alan etiket="Banka hesabı">
+                  <select required value={form.banka_hesap_id} onChange={(e) => setForm((f) => ({ ...f, banka_hesap_id: e.target.value }))} style={girdiStili}>
+                    <option value="">Seçin...</option>
+                    {bankaHesaplari.map((h) => (
+                      <option key={h.banka_hesap_id} value={h.banka_hesap_id}>
+                        {h.banka_adi} — {h.hesap_adi || h.para_birimi} ({h.para_birimi})
+                      </option>
+                    ))}
+                  </select>
+                </Alan>
+              ) : akreditif.para_birimi !== 'TRY' && (
+                <Alan etiket="Kur">
+                  <input required type="number" step="0.0001" value={form.kur} onChange={(e) => setForm((f) => ({ ...f, kur: e.target.value }))} style={girdiStili} />
+                </Alan>
+              )}
+              <Alan etiket="Ödeme tarihi">
+                <input required type="date" value={form.odeme_tarihi} onChange={(e) => setForm((f) => ({ ...f, odeme_tarihi: e.target.value }))} style={girdiStili} />
+              </Alan>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Kaydediliyor...' : 'Taksidi öde'}</Buton>
+              <Buton type="button" variant="ikincil" onClick={onVazgec}>Vazgeç</Buton>
+            </div>
+          </form>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function TaksitlendirFormu({ kalem, onTamamlandi, onVazgec }) {
+  const [form, setForm] = useState({ taksit_sayisi: 3, ek_ucret: '0', ilk_vade_tarihi: new Date().toISOString().slice(0, 10) });
+  const [hata, setHata] = useState(null);
+  const [kaydediliyor, setKaydediliyor] = useState(false);
+
+  async function kaydet(e) {
+    e.preventDefault();
+    setHata(null);
+    setKaydediliyor(true);
+    try {
+      await api.post(`/akreditif-kalemleri/${kalem.id}/taksitlendir`, {
+        taksit_sayisi: Number(form.taksit_sayisi),
+        ek_ucret: Number(form.ek_ucret || 0),
+        ilk_vade_tarihi: form.ilk_vade_tarihi,
+      });
+      onTamamlandi();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setKaydediliyor(false);
+    }
+  }
+
+  return (
+    <tr>
+      <td colSpan={4} style={{ padding: 0 }}>
+        <div style={{ padding: 12, background: 'white', border: '1px solid var(--kenarlik)', borderRadius: 7, margin: '4px 0' }}>
+          <form onSubmit={kaydet}>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
+              Taksitlendir — finansman sıkıntısında ek ücret karşılığında böl
+            </div>
+            <HataMesaji>{hata}</HataMesaji>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+              <Alan etiket="Taksit sayısı">
+                <input required type="number" min="2" value={form.taksit_sayisi} onChange={(e) => setForm((f) => ({ ...f, taksit_sayisi: e.target.value }))} style={girdiStili} />
+              </Alan>
+              <Alan etiket="Ek ücret (taksitlendirme bedeli)">
+                <input type="number" step="0.01" value={form.ek_ucret} onChange={(e) => setForm((f) => ({ ...f, ek_ucret: e.target.value }))} style={girdiStili} />
+              </Alan>
+              <Alan etiket="İlk taksit vade tarihi">
+                <input required type="date" value={form.ilk_vade_tarihi} onChange={(e) => setForm((f) => ({ ...f, ilk_vade_tarihi: e.target.value }))} style={girdiStili} />
+              </Alan>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Oluşturuluyor...' : 'Taksitlendir'}</Buton>
+              <Buton type="button" variant="ikincil" onClick={onVazgec}>Vazgeç</Buton>
+            </div>
+          </form>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function KalemTaksitPaneli({ kalem, akreditif, onKapat }) {
+  const [taksitler, setTaksitler] = useState(null);
+  const [taksitlendirFormuAcik, setTaksitlendirFormuAcik] = useState(false);
+  const [odemeYapilacakTaksitId, setOdemeYapilacakTaksitId] = useState(null);
+  const [hata, setHata] = useState(null);
+
+  function yukle() {
+    api.get(`/akreditif-kalemleri/${kalem.id}/taksitler`)
+      .then((r) => setTaksitler(r.data))
+      .catch((e) => setHata(hataMesajiCikar(e)));
+  }
+  useEffect(yukle, [kalem.id]); // eslint-disable-line
+
+  return (
+    <tr>
+      <td colSpan={6} style={{ padding: 0 }}>
+        <div style={{ padding: 14, background: 'var(--zemin)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>Taksitler — {kalem.aciklama || AKREDITIF_KALEM_TIP_METIN[kalem.tip]}</div>
+            <Buton variant="ikincil" onClick={onKapat}>Kapat</Buton>
+          </div>
+          <HataMesaji>{hata}</HataMesaji>
+
+          {taksitler === null ? (
+            <div style={{ color: 'var(--metin-soluk)', fontSize: 13 }}>Yükleniyor...</div>
+          ) : taksitler.length === 0 ? (
+            taksitlendirFormuAcik ? (
+              <table><tbody>
+                <TaksitlendirFormu kalem={kalem} onTamamlandi={() => { setTaksitlendirFormuAcik(false); yukle(); }} onVazgec={() => setTaksitlendirFormuAcik(false)} />
+              </tbody></table>
+            ) : (
+              <div>
+                <div style={{ fontSize: 13, color: 'var(--metin-ikincil)', marginBottom: 10 }}>Bu kalem henüz taksitlendirilmemiş.</div>
+                <Buton onClick={() => setTaksitlendirFormuAcik(true)}>Taksitlendir</Buton>
+              </div>
+            )
+          ) : (
+            <table>
+              <thead>
+                <tr style={{ background: 'white' }}>
+                  {['Taksit No', 'Vade', 'Tutar', 'Durum'].map((b) => (
+                    <th key={b} style={{ textAlign: 'left', padding: '6px 10px', fontSize: 12, color: 'var(--metin-ikincil)' }}>{b}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {taksitler.map((t) => (
+                  <Fragment key={t.id}>
+                    <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                      <td style={{ padding: '8px 10px' }}>{t.taksit_no}</td>
+                      <td style={{ padding: '8px 10px' }}>{t.vade_tarihi}</td>
+                      <td style={{ padding: '8px 10px' }}>{paraFormat(t.tutar, akreditif.para_birimi)}</td>
+                      <td style={{ padding: '8px 10px' }}>
+                        {t.odendi_mi ? (
+                          <Etiket ton="yesil">Ödendi</Etiket>
+                        ) : (
+                          <button
+                            onClick={() => setOdemeYapilacakTaksitId((mevcut) => (mevcut === t.id ? null : t.id))}
+                            style={eylemChipStili('lacivert')}
+                          >
+                            {odemeYapilacakTaksitId === t.id ? 'Kapat' : 'Öde'}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                    {odemeYapilacakTaksitId === t.id && (
+                      <TaksitOdemeFormu
+                        taksit={t}
+                        akreditif={akreditif}
+                        onKaydedildi={() => { setOdemeYapilacakTaksitId(null); yukle(); }}
+                        onVazgec={() => setOdemeYapilacakTaksitId(null)}
+                      />
+                    )}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 function AkreditifSekmesi() {
   const [liste, setListe] = useState([]);
   const [siparisler, setSiparisler] = useState([]);
@@ -457,6 +673,7 @@ function AkreditifSekmesi() {
   const [kalemForm, setKalemForm] = useState({ tip: 'ODEME', aciklama: '', tutar: '', vade_tarihi: new Date().toISOString().slice(0, 10) });
   const [dagitimFormuAcik, setDagitimFormuAcik] = useState(false);
   const [odemeYapilacakKalemId, setOdemeYapilacakKalemId] = useState(null);
+  const [taksitPaneliAcikKalemId, setTaksitPaneliAcikKalemId] = useState(null);
 
   function yukle() {
     api.get('/akreditifler').then((r) => setListe(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
@@ -539,34 +756,6 @@ function AkreditifSekmesi() {
       setKalemForm({ tip: 'ODEME', aciklama: '', tutar: '', vade_tarihi: new Date().toISOString().slice(0, 10) });
       yukle();
     } catch (err) { setHata(hataMesajiCikar(err)); }
-  }
-
-  async function maliyetDagit() {
-    const yontem = window.prompt('Dağıtım yöntemi: "esit" veya "agirlikli" yazın:', 'esit');
-    if (!yontem) return;
-    const temizYontem = yontem.trim().toLowerCase() === 'agirlikli' ? 'AGIRLIKLI' : 'ESIT';
-
-    let kur = 1;
-    if (seciliAkreditif.para_birimi !== 'TRY') {
-      let onerilenKur = '';
-      try {
-        const { data } = await api.get(`/kur/${seciliAkreditif.para_birimi}`);
-        onerilenKur = data.kur;
-      } catch (e) { /* elle girilecek */ }
-      const girilenKur = window.prompt(`${seciliAkreditif.para_birimi} için TL kuru:`, onerilenKur);
-      if (!girilenKur || Number.isNaN(Number(girilenKur))) {
-        window.alert('Geçerli bir kur girilmedi, işlem iptal edildi.');
-        return;
-      }
-      kur = Number(girilenKur);
-    }
-
-    try {
-      const { data } = await api.post(`/akreditifler/${seciliAkreditif.id}/maliyet-dagit`, { yontem: temizYontem, kur });
-      window.alert(`${data.dagitilan_urun_sayisi} ürüne toplam ${paraFormat(data.toplam_dagitilan_try)} dağıtıldı.`);
-    } catch (err) {
-      setHata(hataMesajiCikar(err));
-    }
   }
 
   function siparisEtiketi(id) {
@@ -726,12 +915,20 @@ function AkreditifSekmesi() {
                         <td style={{ padding: '8px 0' }}><Etiket ton={k.odendi_mi ? 'yesil' : 'amber'}>{k.odendi_mi ? 'Ödendi' : 'Bekliyor'}</Etiket></td>
                         <td style={{ padding: '8px 0' }}>
                           {!k.odendi_mi && (
-                            <button
-                              onClick={() => setOdemeYapilacakKalemId((mevcut) => (mevcut === k.id ? null : k.id))}
-                              style={eylemChipStili('lacivert')}
-                            >
-                              {odemeYapilacakKalemId === k.id ? 'Kapat' : 'Öde'}
-                            </button>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <button
+                                onClick={() => setOdemeYapilacakKalemId((mevcut) => (mevcut === k.id ? null : k.id))}
+                                style={eylemChipStili('lacivert')}
+                              >
+                                {odemeYapilacakKalemId === k.id ? 'Kapat' : 'Öde'}
+                              </button>
+                              <button
+                                onClick={() => setTaksitPaneliAcikKalemId((mevcut) => (mevcut === k.id ? null : k.id))}
+                                style={eylemChipStili('amber')}
+                              >
+                                {taksitPaneliAcikKalemId === k.id ? 'Kapat' : 'Taksitler'}
+                              </button>
+                            </div>
                           )}
                         </td>
                       </tr>
@@ -741,6 +938,13 @@ function AkreditifSekmesi() {
                           akreditif={seciliAkreditif}
                           onKaydedildi={() => { setOdemeYapilacakKalemId(null); kalemleriGoster(seciliAkreditif.id); yukle(); }}
                           onVazgec={() => setOdemeYapilacakKalemId(null)}
+                        />
+                      )}
+                      {taksitPaneliAcikKalemId === k.id && (
+                        <KalemTaksitPaneli
+                          kalem={k}
+                          akreditif={seciliAkreditif}
+                          onKapat={() => setTaksitPaneliAcikKalemId(null)}
                         />
                       )}
                     </Fragment>
