@@ -10,7 +10,8 @@ from app.models.stok import (StokKarti, StokSeriNo, StokMaliyetKalemi,
                               MALIYET_TIP_SUTUN_ESLEME, StokDurum)
 from app.schemas.stok import (StokKartiOlusturIstegi, StokKartiYanit,
                                StokSeriNoYanit, StokDurumGuncelleIstegi,
-                               MaliyetKalemiEkleIstegi, KarRaporuYanit, StokSatisIstegi)
+                               MaliyetKalemiEkleIstegi, KarRaporuYanit, StokSatisIstegi,
+                               StokMaliyetKalemiYanit)
 from app.services.para_hareketi import para_hareketi_olustur
 
 router = APIRouter(tags=["Stok"])
@@ -175,6 +176,23 @@ def stok_satisi_yap(
     db.commit()
     db.refresh(kayit)
     return kayit
+
+
+@router.get("/stok-seri-no/{seri_id}/maliyet-kalemleri", response_model=list[StokMaliyetKalemiYanit],
+            dependencies=[Depends(izin_gerektir("STOK_GORUNTULE"))])
+def maliyet_kalemlerini_listele(
+    seri_id: int,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """Bir urune eklenmis tum maliyet faturalarini (nakliye, gumruk, antrepo vb.) tarih sirasiyla doner."""
+    _seri_no_getir_veya_404(db, seri_id, sirket_id)
+    sorgu = (
+        select(StokMaliyetKalemi)
+        .where(StokMaliyetKalemi.stok_seri_no_id == seri_id)
+        .order_by(StokMaliyetKalemi.tarih.desc())
+    )
+    return list(db.execute(sorgu).scalars())
 
 
 @router.post("/stok-seri-no/{seri_id}/maliyet-kalemi", response_model=StokSeriNoYanit,
