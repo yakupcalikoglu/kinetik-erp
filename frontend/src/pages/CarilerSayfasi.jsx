@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Fragment } from 'react';
 import { api, hataMesajiCikar } from '../api/client';
 import {
   Kart, SayfaBasligi, Buton, Etiket, Alan, girdiStili, BosDurum, HataMesaji, paraFormat, eylemChipStili,
@@ -11,6 +11,32 @@ const TIP_ETIKET = {
   ORTAK: { metin: 'Ortak', ton: 'notr' },
   DIGER: { metin: 'Diğer', ton: 'notr' },
 };
+
+function KaynakDetayi({ kaynakTablo, kaynakId }) {
+  const [detay, setDetay] = useState(null);
+  const [hata, setHata] = useState(null);
+
+  useEffect(() => {
+    api.get(`/kaynak-detay/${kaynakTablo}/${kaynakId}`)
+      .then((r) => setDetay(r.data))
+      .catch((e) => setHata(hataMesajiCikar(e)));
+  }, [kaynakTablo, kaynakId]);
+
+  if (hata) return <div style={{ padding: '10px 16px', fontSize: 12.5, color: 'var(--kirmizi)' }}>{hata}</div>;
+  if (!detay) return <div style={{ padding: '10px 16px', fontSize: 12.5, color: 'var(--metin-soluk)' }}>Yükleniyor...</div>;
+
+  return (
+    <div style={{ padding: '12px 16px', background: 'var(--zemin)', fontSize: 13 }}>
+      <div style={{ fontWeight: 600, marginBottom: 6 }}>{detay.baslik}</div>
+      {detay.detaylar.map(([etiket, deger]) => (
+        <div key={etiket} style={{ display: 'flex', gap: 8, color: 'var(--metin-ikincil)' }}>
+          <span style={{ minWidth: 130 }}>{etiket}:</span>
+          <span style={{ color: 'var(--metin-birincil)' }}>{deger}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function CariFormu({ duzenlenenCari, onKaydedildi, onVazgec }) {
   const duzenlemeModu = !!duzenlenenCari;
@@ -176,6 +202,95 @@ function CariFormu({ duzenlenenCari, onKaydedildi, onVazgec }) {
   );
 }
 
+const HAREKET_YON_METIN = { GIRIS: 'Giriş', CIKIS: 'Çıkış' };
+
+function CariHareketleri({ cari, onKapat }) {
+  const [hareketler, setHareketler] = useState([]);
+  const [yukleniyor, setYukleniyor] = useState(true);
+  const [hata, setHata] = useState(null);
+  const [acikDetayId, setAcikDetayId] = useState(null);
+
+  useEffect(() => {
+    setYukleniyor(true);
+    api.get(`/cariler/${cari.id}/hareketler`)
+      .then((r) => setHareketler(r.data))
+      .catch((e) => setHata(hataMesajiCikar(e)))
+      .finally(() => setYukleniyor(false));
+  }, [cari.id]);
+
+  function satiraTikla(h) {
+    if (!h.kaynak_tablo || !h.kaynak_id) return;
+    setAcikDetayId((mevcut) => (mevcut === h.id ? null : h.id));
+  }
+
+  return (
+    <Kart style={{ marginBottom: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ fontWeight: 600, fontSize: 14 }}>{cari.unvan} — hareket geçmişi</div>
+        <Buton variant="ikincil" onClick={onKapat}>Kapat</Buton>
+      </div>
+      <HataMesaji>{hata}</HataMesaji>
+
+      {yukleniyor ? (
+        <div style={{ padding: 20, color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
+      ) : hareketler.length === 0 ? (
+        <BosDurum baslik="Bu cari için hareket bulunamadı" />
+      ) : (
+        <table>
+          <thead>
+            <tr style={{ background: 'var(--zemin)' }}>
+              {['Tarih', 'Yön', 'Tutar', 'TL Karşılığı', 'Açıklama'].map((b) => (
+                <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {hareketler.map((h) => {
+              const tiklanabilir = !!(h.kaynak_tablo && h.kaynak_id);
+              return (
+                <Fragment key={h.id}>
+                  <tr
+                    onClick={() => satiraTikla(h)}
+                    style={{
+                      borderTop: '1px solid var(--kenarlik)',
+                      cursor: tiklanabilir ? 'pointer' : 'default',
+                      background: acikDetayId === h.id ? 'var(--zemin)' : 'transparent',
+                    }}
+                  >
+                    <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{h.tarih}</td>
+                    <td style={{ padding: '10px 16px' }}>{HAREKET_YON_METIN[h.yon]}</td>
+                    <td style={{ padding: '10px 16px', fontWeight: 500, color: h.yon === 'GIRIS' ? 'var(--yesil)' : 'var(--kirmizi)' }}>
+                      {paraFormat(h.tutar, h.para_birimi)}
+                    </td>
+                    <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>
+                      {h.tutar_try_karsiligi != null ? paraFormat(h.tutar_try_karsiligi) : '—'}
+                    </td>
+                    <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>
+                      {h.aciklama || '—'}
+                      {tiklanabilir && (
+                        <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--lacivert)' }}>
+                          {acikDetayId === h.id ? '▲ detayı gizle' : '▼ detay göster'}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                  {acikDetayId === h.id && (
+                    <tr>
+                      <td colSpan={5} style={{ padding: 0 }}>
+                        <KaynakDetayi kaynakTablo={h.kaynak_tablo} kaynakId={h.kaynak_id} />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+    </Kart>
+  );
+}
+
 export default function CarilerSayfasi() {
   const [cariler, setCariler] = useState([]);
   const [yukleniyor, setYukleniyor] = useState(true);
@@ -183,6 +298,7 @@ export default function CarilerSayfasi() {
   const [formAcik, setFormAcik] = useState(false);
   const [duzenlenenCari, setDuzenlenenCari] = useState(null);
   const [arama, setArama] = useState('');
+  const [seciliCari, setSeciliCari] = useState(null);
 
   function listeyiYukle() {
     setYukleniyor(true);
@@ -237,6 +353,10 @@ export default function CarilerSayfasi() {
         />
       )}
 
+      {seciliCari && (
+        <CariHareketleri cari={seciliCari} onKapat={() => setSeciliCari(null)} />
+      )}
+
       <Kart style={{ padding: 0 }}>
         <div style={{ padding: 16, borderBottom: '1px solid var(--kenarlik)' }}>
           <input
@@ -276,6 +396,7 @@ export default function CarilerSayfasi() {
                   <td style={{ padding: '12px 16px' }}>{paraFormat(c.bakiye_usd, 'USD')}</td>
                   <td style={{ padding: '12px 16px' }}>
                     <div style={{ display: 'flex', gap: 6 }}>
+                      <button onClick={() => setSeciliCari(c)} style={eylemChipStili('lacivert')}>Hareketler</button>
                       <button onClick={() => duzenle(c)} style={eylemChipStili('lacivert')}>Düzenle</button>
                       <button onClick={() => cariyiSil(c)} style={eylemChipStili('kirmizi')}>Sil</button>
                     </div>
