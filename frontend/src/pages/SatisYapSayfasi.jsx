@@ -1,16 +1,25 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api, hataMesajiCikar } from '../api/client';
-import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat } from '../components/Ortak';
+import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat, Sekmeler } from '../components/Ortak';
 
 const ODEME_TIPLERI = [
-  { deger: 'PESIN_NAKIT', etiket: 'Peşin — Nakit', aciklama: 'Para elden, Ana Kasa\'ya girer' },
-  { deger: 'PESIN_HAVALE', etiket: 'Peşin — Havale/EFT', aciklama: 'Para banka hesabına yatar' },
-  { deger: 'PESIN_KART', etiket: 'Peşin — Kredi Kartı (POS)', aciklama: 'POS cihazınızın bağlı olduğu banka hesabına yatar' },
-  { deger: 'TAKSITLI', etiket: 'Taksitli', aciklama: 'Müşteri, belirlediğiniz sayıda taksitle öder' },
-  { deger: 'LEASINGLI', etiket: 'Leasingli', aciklama: 'Bir leasing şirketi üzerinden taksitli ödeme' },
-  { deger: 'CEK', etiket: 'Çek ile', aciklama: 'Müşteriden çek alınır, vadesinde tahsil edilir' },
+  { deger: 'PESIN_NAKIT', etiket: 'Nakit' },
+  { deger: 'PESIN_HAVALE', etiket: 'Havale/EFT' },
+  { deger: 'PESIN_KART', etiket: 'Kredi Kartı' },
+  { deger: 'TAKSITLI', etiket: 'Taksitli' },
+  { deger: 'LEASINGLI', etiket: 'Leasing' },
+  { deger: 'CEK', etiket: 'Çek' },
 ];
+
+const ODEME_TIPI_ACIKLAMA = {
+  PESIN_NAKIT: 'Tutar elden alınır, Ana Kasa\'ya işlenir.',
+  PESIN_HAVALE: 'Tutar seçtiğiniz banka hesabına yatar.',
+  PESIN_KART: 'Tutar POS\'unuzun bağlı olduğu banka hesabına yatar.',
+  TAKSITLI: 'Müşteri, belirlediğiniz sayıda taksitle öder.',
+  LEASINGLI: 'Leasing şirketi üzerinden taksitli ödeme yapılır.',
+  CEK: 'Müşteriden çek alınır, vadesinde tahsil edilir.',
+};
 
 export default function SatisYapSayfasi() {
   const [searchParams] = useSearchParams();
@@ -21,7 +30,7 @@ export default function SatisYapSayfasi() {
   const [bankaHesaplari, setBankaHesaplari] = useState([]);
   const [urunId, setUrunId] = useState(onSeciliUrunId || '');
   const [musteriCariId, setMusteriCariId] = useState('');
-  const [odemeTipi, setOdemeTipi] = useState('');
+  const [odemeTipi, setOdemeTipi] = useState('PESIN_NAKIT');
   const [tutar, setTutar] = useState('');
   const [tarih, setTarih] = useState(new Date().toISOString().slice(0, 10));
   const [bankaHesapId, setBankaHesapId] = useState('');
@@ -35,8 +44,12 @@ export default function SatisYapSayfasi() {
   const [tamamlandi, setTamamlandi] = useState(false);
 
   useEffect(() => {
-    api.get('/stok-seri-no', { params: { durum: 'DEPODA' } }).then((r) => setUrunler((mevcut) => [...r.data]));
-    api.get('/stok-seri-no', { params: { durum: 'ANTREPODA' } }).then((r) => setUrunler((mevcut) => [...mevcut, ...r.data]));
+    Promise.all([
+      api.get('/stok-seri-no', { params: { durum: 'DEPODA' } }),
+      api.get('/stok-seri-no', { params: { durum: 'ANTREPODA' } }),
+    ]).then(([depoRes, antrepoRes]) => {
+      setUrunler([...depoRes.data, ...antrepoRes.data]);
+    }).catch((e) => setHata(hataMesajiCikar(e)));
     api.get('/cariler').then((r) => setCariler(r.data)).catch(() => {});
     api.get('/banka-bakiyeleri').then((r) => setBankaHesaplari(r.data)).catch(() => {});
   }, []);
@@ -50,7 +63,6 @@ export default function SatisYapSayfasi() {
 
     if (!urunId) { setHata('Lütfen satılacak ürünü seçin.'); return; }
     if (!musteriCariId) { setHata('Lütfen müşteriyi seçin.'); return; }
-    if (!odemeTipi) { setHata('Lütfen bir ödeme türü seçin.'); return; }
     if (!tutar || Number(tutar) <= 0) { setHata('Lütfen geçerli bir tutar girin.'); return; }
 
     setKaydediliyor(true);
@@ -97,9 +109,9 @@ export default function SatisYapSayfasi() {
       <div>
         <SayfaBasligi baslik="Satış Yap" />
         <Kart style={{ background: 'var(--yesil-acik)' }}>
-          <div style={{ color: 'var(--yesil)', fontWeight: 600, fontSize: 15, marginBottom: 8 }}>Satış tamamlandı ✓</div>
+          <div style={{ color: 'var(--yesil)', fontWeight: 600, fontSize: 15, marginBottom: 8 }}>Satış tamamlandı</div>
           <div style={{ fontSize: 13.5, color: 'var(--metin-ikincil)', marginBottom: 16 }}>
-            Ürün "Satıldı" olarak işaretlendi ve ilgili para hareketi/kayıt oluşturuldu.
+            Ürün "Satıldı" olarak işaretlendi ve ilgili kayıt oluşturuldu.
           </div>
           <Buton onClick={() => window.location.reload()}>Yeni satış yap</Buton>
         </Kart>
@@ -109,126 +121,103 @@ export default function SatisYapSayfasi() {
 
   return (
     <div>
-      <SayfaBasligi baslik="Satış Yap" aciklama="Ürünü seçin, müşteriyi seçin, ödeme türünü belirleyin — satış otomatik olarak Kasa/Banka/Çek/Taksit kayıtlarına işlenir" />
+      <SayfaBasligi baslik="Satış Yap" aciklama="Satış otomatik olarak Kasa/Banka/Çek/Taksit kayıtlarına işlenir" />
       <HataMesaji>{hata}</HataMesaji>
 
-      <form onSubmit={satisiTamamla}>
-        {/* ADIM 1 */}
-        <Kart style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>1. Hangi ürünü satıyorsunuz?</div>
-          <Alan etiket="Ürün (Depoda veya Antrepoda olanlar listelenir)">
-            <select required value={urunId} onChange={(e) => setUrunId(e.target.value)} style={girdiStili}>
-              <option value="">Seçin...</option>
-              {urunler.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.seri_no} — Maliyet: {paraFormat(u.toplam_maliyet_try)}
-                </option>
-              ))}
-            </select>
-          </Alan>
-          {urunler.length === 0 && (
-            <div style={{ fontSize: 13, color: 'var(--metin-soluk)' }}>Şu an satılabilir (Depoda/Antrepoda) ürün yok.</div>
-          )}
-        </Kart>
-
-        {/* ADIM 2 */}
-        <Kart style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>2. Kime satıyorsunuz?</div>
-          <Alan etiket="Müşteri (Leasingli satışta leasing şirketini seçin)">
-            <select required value={musteriCariId} onChange={(e) => setMusteriCariId(e.target.value)} style={girdiStili}>
-              <option value="">Seçin...</option>
-              {cariler.map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
-            </select>
-          </Alan>
-        </Kart>
-
-        {/* ADIM 3 */}
-        <Kart style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>3. Ödeme nasıl yapılacak?</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-            {ODEME_TIPLERI.map((o) => (
-              <button
-                key={o.deger}
-                type="button"
-                onClick={() => setOdemeTipi(o.deger)}
-                style={{
-                  textAlign: 'left', padding: 14, borderRadius: 9, cursor: 'pointer',
-                  border: odemeTipi === o.deger ? '2px solid var(--lacivert)' : '1px solid var(--kenarlik)',
-                  background: odemeTipi === o.deger ? 'var(--zemin)' : 'white',
-                }}
-              >
-                <div style={{ fontWeight: 600, fontSize: 13.5, marginBottom: 3 }}>{o.etiket}</div>
-                <div style={{ fontSize: 12, color: 'var(--metin-ikincil)' }}>{o.aciklama}</div>
-              </button>
-            ))}
+      <Kart>
+        <form onSubmit={satisiTamamla}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+            <Alan etiket="Ürün">
+              <select required value={urunId} onChange={(e) => setUrunId(e.target.value)} style={girdiStili}>
+                <option value="">Seçin...</option>
+                {urunler.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.seri_no} — Maliyet: {paraFormat(u.toplam_maliyet_try)}
+                  </option>
+                ))}
+              </select>
+              {urunler.length === 0 && (
+                <div style={{ fontSize: 12.5, color: 'var(--metin-soluk)', marginTop: 4 }}>
+                  Depoda veya Antrepoda ürün yok. Stok sayfasından bir ürünün durumunu güncelleyin.
+                </div>
+              )}
+            </Alan>
+            <Alan etiket="Müşteri">
+              <select required value={musteriCariId} onChange={(e) => setMusteriCariId(e.target.value)} style={girdiStili}>
+                <option value="">Seçin...</option>
+                {cariler.map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
+              </select>
+            </Alan>
           </div>
-        </Kart>
 
-        {/* ADIM 4 - kosullu alanlar */}
-        {odemeTipi && (
-          <Kart style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>4. Tutar ve detaylar</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-              <Alan etiket={odemeTipi === 'TAKSITLI' || odemeTipi === 'LEASINGLI' ? 'Toplam satış tutarı (TL)' : 'Satış tutarı (TL)'}>
-                <input required type="number" step="0.01" value={tutar} onChange={(e) => setTutar(e.target.value)} style={girdiStili} />
+          <div style={{ marginTop: 16, marginBottom: 4 }}>
+            <span style={{ display: 'block', fontSize: 12.5, color: 'var(--metin-ikincil)', marginBottom: 6 }}>Ödeme Türü</span>
+            <Sekmeler sekmeler={ODEME_TIPLERI} aktif={odemeTipi} onDegistir={setOdemeTipi} />
+          </div>
+          <div style={{ fontSize: 12.5, color: 'var(--metin-soluk)', marginTop: -12, marginBottom: 14 }}>
+            {ODEME_TIPI_ACIKLAMA[odemeTipi]}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
+            <Alan etiket={odemeTipi === 'TAKSITLI' || odemeTipi === 'LEASINGLI' ? 'Toplam Tutar (TL)' : 'Tutar (TL)'}>
+              <input required type="number" step="0.01" value={tutar} onChange={(e) => setTutar(e.target.value)} style={girdiStili} />
+            </Alan>
+            <Alan etiket="Tarih">
+              <input required type="date" value={tarih} onChange={(e) => setTarih(e.target.value)} style={girdiStili} />
+            </Alan>
+
+            {bankaGerekli && (
+              <Alan etiket="Banka Hesabı">
+                <select required value={bankaHesapId} onChange={(e) => setBankaHesapId(e.target.value)} style={girdiStili}>
+                  <option value="">Seçin...</option>
+                  {bankaHesaplari.map((h) => (
+                    <option key={h.banka_hesap_id} value={h.banka_hesap_id}>{h.banka_adi} — {h.hesap_adi || h.para_birimi}</option>
+                  ))}
+                </select>
               </Alan>
-              <Alan etiket={odemeTipi === 'CEK' ? 'Satış tarihi' : 'Tarih'}>
-                <input required type="date" value={tarih} onChange={(e) => setTarih(e.target.value)} style={girdiStili} />
-              </Alan>
-
-              {bankaGerekli && (
-                <Alan etiket="Paranın yatacağı banka hesabı">
-                  <select required value={bankaHesapId} onChange={(e) => setBankaHesapId(e.target.value)} style={girdiStili}>
-                    <option value="">Seçin...</option>
-                    {bankaHesaplari.map((h) => (
-                      <option key={h.banka_hesap_id} value={h.banka_hesap_id}>{h.banka_adi} — {h.hesap_adi || h.para_birimi}</option>
-                    ))}
-                  </select>
-                </Alan>
-              )}
-
-              {(odemeTipi === 'TAKSITLI' || odemeTipi === 'LEASINGLI') && (
-                <>
-                  <Alan etiket="Peşinat (TL) — yoksa 0 bırakın">
-                    <input type="number" step="0.01" value={pesinat} onChange={(e) => setPesinat(e.target.value)} style={girdiStili} />
-                  </Alan>
-                  <Alan etiket="Taksit sayısı">
-                    <input required type="number" min="2" value={taksitSayisi} onChange={(e) => setTaksitSayisi(e.target.value)} style={girdiStili} />
-                  </Alan>
-                </>
-              )}
-
-              {odemeTipi === 'CEK' && (
-                <>
-                  <Alan etiket="Çek no (opsiyonel)">
-                    <input value={cekNo} onChange={(e) => setCekNo(e.target.value)} style={girdiStili} />
-                  </Alan>
-                  <Alan etiket="Çekin bankası (opsiyonel)">
-                    <input value={cekBankaAdi} onChange={(e) => setCekBankaAdi(e.target.value)} style={girdiStili} />
-                  </Alan>
-                  <Alan etiket="Çek vade tarihi">
-                    <input required type="date" value={cekVadeTarihi} onChange={(e) => setCekVadeTarihi(e.target.value)} style={girdiStili} />
-                  </Alan>
-                </>
-              )}
-            </div>
-
-            {seciliUrun && tutar && (
-              <div style={{
-                marginTop: 8, padding: 10, borderRadius: 7, background: 'var(--zemin)', fontSize: 13,
-                color: Number(tutar) - seciliUrun.toplam_maliyet_try >= 0 ? 'var(--yesil)' : 'var(--kirmizi)',
-              }}>
-                Tahmini kâr/zarar: {paraFormat(Number(tutar) - seciliUrun.toplam_maliyet_try)}
-                <span style={{ color: 'var(--metin-soluk)' }}> (maliyet: {paraFormat(seciliUrun.toplam_maliyet_try)})</span>
-              </div>
             )}
-          </Kart>
-        )}
 
-        <Buton type="submit" disabled={kaydediliyor || !odemeTipi}>
-          {kaydediliyor ? 'Kaydediliyor...' : 'Satışı Tamamla'}
-        </Buton>
-      </form>
+            {(odemeTipi === 'TAKSITLI' || odemeTipi === 'LEASINGLI') && (
+              <>
+                <Alan etiket="Peşinat (TL)">
+                  <input type="number" step="0.01" value={pesinat} onChange={(e) => setPesinat(e.target.value)} style={girdiStili} />
+                </Alan>
+                <Alan etiket="Taksit Sayısı">
+                  <input required type="number" min="2" value={taksitSayisi} onChange={(e) => setTaksitSayisi(e.target.value)} style={girdiStili} />
+                </Alan>
+              </>
+            )}
+
+            {odemeTipi === 'CEK' && (
+              <>
+                <Alan etiket="Çek No">
+                  <input value={cekNo} onChange={(e) => setCekNo(e.target.value)} style={girdiStili} />
+                </Alan>
+                <Alan etiket="Çekin Bankası">
+                  <input value={cekBankaAdi} onChange={(e) => setCekBankaAdi(e.target.value)} style={girdiStili} />
+                </Alan>
+                <Alan etiket="Vade Tarihi">
+                  <input required type="date" value={cekVadeTarihi} onChange={(e) => setCekVadeTarihi(e.target.value)} style={girdiStili} />
+                </Alan>
+              </>
+            )}
+          </div>
+
+          {seciliUrun && tutar && (
+            <div style={{
+              marginTop: 4, marginBottom: 16, padding: 10, borderRadius: 7, background: 'var(--zemin)', fontSize: 13,
+              color: Number(tutar) - seciliUrun.toplam_maliyet_try >= 0 ? 'var(--yesil)' : 'var(--kirmizi)',
+            }}>
+              Tahmini kâr/zarar: {paraFormat(Number(tutar) - seciliUrun.toplam_maliyet_try)}
+              <span style={{ color: 'var(--metin-soluk)' }}> (maliyet: {paraFormat(seciliUrun.toplam_maliyet_try)})</span>
+            </div>
+          )}
+
+          <Buton type="submit" disabled={kaydediliyor}>
+            {kaydediliyor ? 'Kaydediliyor...' : 'Satışı Tamamla'}
+          </Buton>
+        </form>
+      </Kart>
     </div>
   );
 }
