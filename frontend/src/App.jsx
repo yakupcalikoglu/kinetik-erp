@@ -55,6 +55,7 @@ function App() {
             <Route path="finansal" element={<FinansalTakipSayfasi />} />
             <Route path="proforma-fatura" element={<ProformaFaturaSayfasi />} />
             <Route path="raporlar" element={<RaporlarSayfasi />} />
+            <Route path="urun-tanimlari" element={<UrunTanimlariSayfasi />} />
             <Route path="yonetici-paneli" element={<YoneticiPaneliSayfasi />} />
             <Route path="harcama-turleri" element={<HarcamaTurleriSayfasi />} />
           </Route>
