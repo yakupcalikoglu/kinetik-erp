@@ -18,7 +18,6 @@ from app.services.kur_servisi import guncel_kur_getir
 
 router = APIRouter(tags=["Banka ve Ana Kasa"])
 
-# Karsi hesap gerektiren hareket tipleri (cift tarafli kayit acilir)
 _CIFT_TARAFLI_TIPLER = {
     BankaHareketTip.HESAPLAR_ARASI_TRANSFER,
     BankaHareketTip.DOVIZ_ALIM,
@@ -201,7 +200,7 @@ def banka_hareketi_olustur(
 
     if istek.tip in _CIFT_TARAFLI_TIPLER and istek.karsi_hesap_id is not None:
         carpan = istek.kullanilan_kur if istek.kullanilan_kur else 1
-        karsi_tutar = -istek.tutar * carpan  # kaynaktan cikan, karsiya ters isaretle girer
+        karsi_tutar = -istek.tutar * carpan
         karsi_hareket = BankaHareketi(
             sirket_id=sirket_id,
             banka_hesap_id=istek.karsi_hesap_id,
@@ -234,6 +233,39 @@ def tum_banka_hareketlerini_listele(
         .order_by(BankaHareketi.tarih.desc())
     )
     return list(db.execute(sorgu).scalars())
+
+
+@router.put("/banka-hareketleri/{hareket_id}", response_model=BankaHareketiYanit,
+            dependencies=[Depends(izin_gerektir("BANKA_DUZENLE"))])
+def banka_hareketi_guncelle(
+    hareket_id: int,
+    istek: BankaHareketiOlusturIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Mevcut bir banka hareketini duzenler. Sadece BANKA_DUZENLE iznine sahip
+    kullanicilar cagirabilir (Yonetici Paneli > Rol/Izinler'den atanir).
+    Not: cift tarafli (transfer/doviz) hareketlerde SADECE bu satir
+    guncellenir, otomatik acilmis karsi kayit degismez - gerekirse o da
+    ayrica duzenlenmelidir.
+    """
+    kayit = db.get(BankaHareketi, hareket_id)
+    if kayit is None or kayit.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Banka hareketi bulunamadı.")
+
+    kayit.banka_hesap_id = istek.banka_hesap_id
+    kayit.tarih = istek.tarih
+    kayit.tip = istek.tip
+    kayit.tutar = istek.tutar
+    kayit.aciklama = istek.aciklama
+    kayit.karsi_hesap_id = istek.karsi_hesap_id
+    kayit.kullanilan_kur = istek.kullanilan_kur
+    kayit.cari_id = istek.cari_id
+
+    db.commit()
+    db.refresh(kayit)
+    return kayit
 
 
 # --------------------------------------------------------------- Ana Kasa
@@ -280,6 +312,38 @@ def kasa_hareketlerini_listele(
         .order_by(KasaHareketi.tarih.desc())
     )
     return list(db.execute(sorgu).scalars())
+
+
+@router.put("/kasa-hareketleri/{hareket_id}", response_model=KasaHareketiYanit,
+            dependencies=[Depends(izin_gerektir("KASA_DUZENLE"))])
+def kasa_hareketi_guncelle(
+    hareket_id: int,
+    istek: KasaHareketiOlusturIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """Mevcut bir kasa hareketini duzenler. Sadece KASA_DUZENLE iznine sahip kullanicilar cagirabilir."""
+    kayit = db.get(KasaHareketi, hareket_id)
+    if kayit is None or kayit.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Kasa hareketi bulunamadı.")
+
+    if istek.para_birimi.value != "TRY" and istek.tutar_try_karsiligi is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "TRY dışı bir para birimi seçildiğinde tutar_try_karsiligi zorunludur."
+        )
+    tutar_try_karsiligi = istek.tutar_try_karsiligi if istek.para_birimi.value != "TRY" else istek.tutar
+
+    kayit.tarih = istek.tarih
+    kayit.yon = istek.yon
+    kayit.para_birimi = istek.para_birimi
+    kayit.tutar = istek.tutar
+    kayit.tutar_try_karsiligi = tutar_try_karsiligi
+    kayit.aciklama = istek.aciklama
+
+    db.commit()
+    db.refresh(kayit)
+    return kayit
 
 
 @router.get("/kasa-bakiye", response_model=KasaBakiyeYanit,
