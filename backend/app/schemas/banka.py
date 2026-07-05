@@ -39,10 +39,10 @@ class BankaHareketiOlusturIstegi(BaseModel):
     banka_hesap_id: int
     tarih: date
     tip: BankaHareketTip
-    tutar: Decimal  # GIRIS/CIKIS icin isaretli (cikis negatif); transfer/doviz icin asagidaki not'a bak
+    tutar: Decimal
     aciklama: str | None = None
-    karsi_hesap_id: int | None = None  # TRANSFER ve DOVIZ_* icin zorunlu
-    kullanilan_kur: Decimal | None = None  # DOVIZ_* icin zorunlu
+    karsi_hesap_id: int | None = None
+    kullanilan_kur: Decimal | None = None
     cari_id: int | None = None
 
 
@@ -55,6 +55,8 @@ class BankaHareketiYanit(BaseModel):
     aciklama: str | None
     karsi_hesap_id: int | None
     kullanilan_kur: Decimal | None
+    kaynak_tablo: str | None
+    kaynak_id: int | None
 
     class Config:
         from_attributes = True
@@ -66,7 +68,7 @@ class KasaHareketiOlusturIstegi(BaseModel):
     yon: HareketYon
     tutar: Decimal
     para_birimi: ParaBirimi = ParaBirimi.TRY
-    tutar_try_karsiligi: Decimal | None = None  # TRY disi para biriminde zorunlu (kur ile hesaplanir)
+    tutar_try_karsiligi: Decimal | None = None
     aciklama: str | None = None
 
 
@@ -79,6 +81,7 @@ class KasaHareketiYanit(BaseModel):
     tutar_try_karsiligi: Decimal | None
     aciklama: str | None
     kaynak_tablo: str | None
+    kaynak_id: int | None
 
     class Config:
         from_attributes = True
@@ -91,4 +94,4 @@ class KasaBakiyeSatiri(BaseModel):
 
 class KasaBakiyeYanit(BaseModel):
     bakiyeler: list[KasaBakiyeSatiri]
-    net_bakiye_try_toplam: Decimal  # tum para birimlerinin TL karsiligi toplami
+    net_bakiye_try_toplam: Decimal
