@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { api, hataMesajiCikar } from '../api/client';
 import {
   Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat,
-  eylemChipStili, BIRIM_SECENEKLERI,
+  eylemChipStili,
 } from '../components/Ortak';
 
 const DURUM_ETIKET = {
@@ -19,110 +19,6 @@ const MALIYET_TIP_METIN = {
   SATINALMA: 'Satınalma', NAKLIYE: 'Nakliye', GUMRUK: 'Gümrük', ANTREPO: 'Antrepo',
   MILLILESTIRME: 'Millileştirme', LEASING: 'Leasing', DIGER: 'Diğer',
 };
-
-function bosStokKartiForm() {
-  return { marka: '', model: '', birim: 'ADET', birim_agirlik_kg: '', aciklama: '', mense_ulke: '', gtip_kodu: '' };
-}
-
-function StokKartiFormu({ duzenlenenKart, onKaydedildi, onVazgec }) {
-  const duzenlemeModu = !!duzenlenenKart;
-  const [form, setForm] = useState(() => duzenlenenKart
-    ? {
-        marka: duzenlenenKart.marka || '',
-        model: duzenlenenKart.model || '',
-        birim: duzenlenenKart.birim || 'ADET',
-        birim_agirlik_kg: duzenlenenKart.birim_agirlik_kg ?? '',
-        aciklama: duzenlenenKart.aciklama || '',
-        mense_ulke: duzenlenenKart.mense_ulke || '',
-        gtip_kodu: duzenlenenKart.gtip_kodu || '',
-      }
-    : bosStokKartiForm()
-  );
-  const [hata, setHata] = useState(null);
-  const [kaydediliyor, setKaydediliyor] = useState(false);
-  const [olusturulanId, setOlusturulanId] = useState(null);
-
-  async function kaydet(e) {
-    e.preventDefault();
-    setHata(null);
-    setKaydediliyor(true);
-    try {
-      const govde = {
-        ...form,
-        birim_agirlik_kg: form.birim_agirlik_kg ? Number(form.birim_agirlik_kg) : null,
-      };
-      if (duzenlemeModu) {
-        await api.put(`/stok-kartlari/${duzenlenenKart.id}`, govde);
-        onKaydedildi();
-      } else {
-        const { data } = await api.post('/stok-kartlari', govde);
-        setOlusturulanId(data.id);
-      }
-    } catch (err) {
-      setHata(hataMesajiCikar(err));
-    } finally {
-      setKaydediliyor(false);
-    }
-  }
-
-  if (olusturulanId) {
-    return (
-      <Kart style={{ marginBottom: 20, background: 'var(--yesil-acik)' }}>
-        <div style={{ color: 'var(--yesil)', fontWeight: 600, marginBottom: 6 }}>
-          Stok kartı oluşturuldu — ID: {olusturulanId}
-        </div>
-        <div style={{ fontSize: 13, color: 'var(--metin-ikincil)', marginBottom: 12 }}>
-          Bu ID'yi sipariş oluştururken "Stok Kartı ID" alanına girin.
-        </div>
-        <Buton variant="ikincil" onClick={onKaydedildi}>Kapat</Buton>
-      </Kart>
-    );
-  }
-
-  return (
-    <Kart style={{ marginBottom: 20 }}>
-      <form onSubmit={kaydet}>
-        <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 14 }}>
-          {duzenlemeModu ? `Stok kartını düzenle — #${duzenlenenKart.id}` : 'Yeni stok kartı'}
-        </div>
-        <HataMesaji>{hata}</HataMesaji>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12 }}>
-          <Alan etiket="Marka">
-            <input required value={form.marka} onChange={(e) => setForm((f) => ({ ...f, marka: e.target.value }))} style={girdiStili} />
-          </Alan>
-          <Alan etiket="Model">
-            <input required value={form.model} onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))} style={girdiStili} />
-          </Alan>
-          <Alan etiket="Birim">
-            <select value={form.birim} onChange={(e) => setForm((f) => ({ ...f, birim: e.target.value }))} style={girdiStili}>
-              {BIRIM_SECENEKLERI.map((b) => <option key={b} value={b}>{b}</option>)}
-            </select>
-          </Alan>
-          <Alan etiket="Menşei ülke">
-            <input value={form.mense_ulke} onChange={(e) => setForm((f) => ({ ...f, mense_ulke: e.target.value }))} placeholder="Çin" style={girdiStili} />
-          </Alan>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <Alan etiket="GTİP kodu">
-            <input value={form.gtip_kodu} onChange={(e) => setForm((f) => ({ ...f, gtip_kodu: e.target.value }))} placeholder="8427.20" style={girdiStili} />
-          </Alan>
-          <Alan etiket="Birim ağırlık (kg) — opsiyonel, nakliye hesabında kullanılır">
-            <input type="number" step="0.1" value={form.birim_agirlik_kg} onChange={(e) => setForm((f) => ({ ...f, birim_agirlik_kg: e.target.value }))} style={girdiStili} />
-          </Alan>
-        </div>
-        <Alan etiket="Açıklama">
-          <input value={form.aciklama} onChange={(e) => setForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
-        </Alan>
-        <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-          <Buton type="submit" disabled={kaydediliyor}>
-            {kaydediliyor ? 'Kaydediliyor...' : duzenlemeModu ? 'Değişiklikleri kaydet' : 'Stok kartı oluştur'}
-          </Buton>
-          <Buton type="button" variant="ikincil" onClick={onVazgec}>Vazgeç</Buton>
-        </div>
-      </form>
-    </Kart>
-  );
-}
 
 function SatisFormu({ urun, onKaydedildi, onVazgec }) {
   const [cariler, setCariler] = useState([]);
@@ -351,14 +247,13 @@ function MaliyetDetayi({ urun, onKapat }) {
 }
 
 export default function StokSayfasi() {
+  const [tumUrunler, setTumUrunler] = useState([]);
   const [urunler, setUrunler] = useState([]);
   const [stokKartlari, setStokKartlari] = useState([]);
-  const [depodakiSayilar, setDepodakiSayilar] = useState({});
   const [durumFiltre, setDurumFiltre] = useState('');
+  const [urunFiltre, setUrunFiltre] = useState('');
   const [yukleniyor, setYukleniyor] = useState(true);
   const [hata, setHata] = useState(null);
-  const [formAcik, setFormAcik] = useState(false);
-  const [duzenlenenKart, setDuzenlenenKart] = useState(null);
   const [satisYapilacakUrun, setSatisYapilacakUrun] = useState(null);
   const [maliyetGosterilecekUrun, setMaliyetGosterilecekUrun] = useState(null);
   const [seciliIdler, setSeciliIdler] = useState([]);
@@ -391,8 +286,8 @@ export default function StokSayfasi() {
         durum: topluDurum,
       });
       setSeciliIdler([]);
+      tumUrunleriYukle();
       urunleriYukle();
-      depodakiSayilariYukle();
     } catch (err) {
       setTopluHata(hataMesajiCikar(err));
     } finally {
@@ -400,9 +295,17 @@ export default function StokSayfasi() {
     }
   }
 
+  function tumUrunleriYukle() {
+    // Durum ozet kartlari icin filtresiz TAM liste
+    api.get('/stok-seri-no').then((r) => setTumUrunler(r.data)).catch(() => {});
+  }
+
   function urunleriYukle() {
     setYukleniyor(true);
-    api.get('/stok-seri-no', { params: durumFiltre ? { durum: durumFiltre } : {} })
+    const params = {};
+    if (durumFiltre) params.durum = durumFiltre;
+    if (urunFiltre) params.stok_karti_id = urunFiltre;
+    api.get('/stok-seri-no', { params })
       .then((res) => setUrunler(res.data))
       .catch((err) => setHata(hataMesajiCikar(err)))
       .finally(() => setYukleniyor(false));
@@ -412,110 +315,51 @@ export default function StokSayfasi() {
     api.get('/stok-kartlari').then((r) => setStokKartlari(r.data)).catch(() => {});
   }
 
-  function depodakiSayilariYukle() {
-    api.get('/stok-seri-no', { params: { durum: 'DEPODA' } })
-      .then((r) => {
-        const harita = {};
-        r.data.forEach((u) => {
-          harita[u.stok_karti_id] = (harita[u.stok_karti_id] || 0) + 1;
-        });
-        setDepodakiSayilar(harita);
-      })
-      .catch(() => {});
-  }
+  useEffect(() => {
+    tumUrunleriYukle();
+    stokKartlariniYukle();
+  }, []);
 
   useEffect(() => {
     urunleriYukle();
-    stokKartlariniYukle();
-    depodakiSayilariYukle();
-  }, [durumFiltre]);
+  }, [durumFiltre, urunFiltre]); // eslint-disable-line
 
-  function yeniKartAc() {
-    setDuzenlenenKart(null);
-    setFormAcik(true);
+  function urunAdiGoster(stokKartiId) {
+    const k = stokKartlari.find((x) => x.id === stokKartiId);
+    return k ? `${k.marka} ${k.model}` : `#${stokKartiId}`;
   }
 
-  function duzenle(kart) {
-    setDuzenlenenKart(kart);
-    setFormAcik(true);
-  }
-
-  function formuKapat() {
-    setFormAcik(false);
-    setDuzenlenenKart(null);
-  }
-
-  async function kartiSil(kart) {
-    if (!window.confirm(`${kart.marka} ${kart.model} stok kartını silmek istediğinize emin misiniz?`)) return;
-    try {
-      await api.delete(`/stok-kartlari/${kart.id}`);
-      stokKartlariniYukle();
-    } catch (err) {
-      setHata(hataMesajiCikar(err));
-    }
-  }
+  // Durum bazli ozet: hangi durumdan kac adet var
+  const durumOzet = {};
+  tumUrunler.forEach((u) => {
+    durumOzet[u.durum] = (durumOzet[u.durum] || 0) + 1;
+  });
 
   return (
     <div>
-      <SayfaBasligi
-        baslik="Stok"
-        aciklama="Seri numarası bazlı ürün takibi ve maliyet dökümü"
-        eylem={!formAcik && <Buton onClick={yeniKartAc}>+ Yeni stok kartı</Buton>}
-      />
+      <SayfaBasligi baslik="Stok" aciklama="Fiziksel envanter — konum/duruma göre gruplanmış ve filtrelenebilir" />
       <HataMesaji>{hata}</HataMesaji>
 
-      {formAcik && (
-        <StokKartiFormu
-          duzenlenenKart={duzenlenenKart}
-          onKaydedildi={() => { formuKapat(); stokKartlariniYukle(); depodakiSayilariYukle(); }}
-          onVazgec={formuKapat}
-        />
-      )}
-
-      {stokKartlari.length > 0 && (
-        <Kart style={{ marginBottom: 16, padding: 0 }}>
-          <div style={{ padding: '12px 16px', fontWeight: 600, fontSize: 13.5, borderBottom: '1px solid var(--kenarlik)' }}>
-            Tanımlı stok kartları ({stokKartlari.length})
-          </div>
-          <table>
-            <thead>
-              <tr style={{ background: 'var(--zemin)' }}>
-                {['ID', 'Marka', 'Model', 'Birim', 'Depodaki Adet', 'Menşei', 'GTİP', 'İşlem'].map((b) => (
-                  <th key={b} style={{ textAlign: 'left', padding: '8px 16px', fontSize: 12, color: 'var(--metin-ikincil)' }}>{b}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {stokKartlari.map((sk) => (
-                <tr key={sk.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
-                  <td style={{ padding: '8px 16px', fontFamily: 'var(--font-mono)' }}>{sk.id}</td>
-                  <td style={{ padding: '8px 16px' }}>{sk.marka}</td>
-                  <td style={{ padding: '8px 16px' }}>{sk.model}</td>
-                  <td style={{ padding: '8px 16px' }}>{sk.birim}</td>
-                  <td style={{ padding: '8px 16px', fontWeight: 600 }}>
-                    <Etiket ton={depodakiSayilar[sk.id] > 0 ? 'yesil' : 'notr'}>
-                      {depodakiSayilar[sk.id] || 0} {sk.birim}
-                    </Etiket>
-                  </td>
-                  <td style={{ padding: '8px 16px' }}>{sk.mense_ulke || '—'}</td>
-                  <td style={{ padding: '8px 16px' }}>{sk.gtip_kodu || '—'}</td>
-                  <td style={{ padding: '8px 16px' }}>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <button onClick={() => duzenle(sk)} style={eylemChipStili('lacivert')}>Düzenle</button>
-                      <button onClick={() => kartiSil(sk)} style={eylemChipStili('kirmizi')}>Sil</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Kart>
-      )}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+        {Object.entries(DURUM_METIN).map(([kod, etiket]) => (
+          <button
+            key={kod}
+            onClick={() => setDurumFiltre((mevcut) => (mevcut === kod ? '' : kod))}
+            style={{
+              padding: '10px 16px', borderRadius: 9, border: durumFiltre === kod ? '2px solid var(--lacivert)' : '1px solid var(--kenarlik)',
+              background: durumFiltre === kod ? 'var(--zemin)' : 'white', cursor: 'pointer', textAlign: 'left', minWidth: 110,
+            }}
+          >
+            <div style={{ fontSize: 11, color: 'var(--metin-ikincil)' }}>{etiket}</div>
+            <div style={{ fontSize: 20, fontWeight: 600 }}>{durumOzet[kod] || 0}</div>
+          </button>
+        ))}
+      </div>
 
       {satisYapilacakUrun && (
         <SatisFormu
           urun={satisYapilacakUrun}
-          onKaydedildi={() => { setSatisYapilacakUrun(null); urunleriYukle(); depodakiSayilariYukle(); }}
+          onKaydedildi={() => { setSatisYapilacakUrun(null); urunleriYukle(); tumUrunleriYukle(); }}
           onVazgec={() => setSatisYapilacakUrun(null)}
         />
       )}
@@ -546,11 +390,18 @@ export default function StokSayfasi() {
       )}
 
       <Kart style={{ padding: 0 }}>
-        <div style={{ padding: 16, borderBottom: '1px solid var(--kenarlik)' }}>
-          <select value={durumFiltre} onChange={(e) => setDurumFiltre(e.target.value)} style={{ ...girdiStili, maxWidth: 220 }}>
-            <option value="">Tüm durumlar</option>
-            {Object.entries(DURUM_METIN).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
+        <div style={{ padding: 16, borderBottom: '1px solid var(--kenarlik)', display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <Alan etiket="Ürüne göre filtrele">
+            <select value={urunFiltre} onChange={(e) => setUrunFiltre(e.target.value)} style={{ ...girdiStili, minWidth: 220 }}>
+              <option value="">Tüm ürünler</option>
+              {stokKartlari.map((k) => (
+                <option key={k.id} value={k.id}>{k.marka} {k.model}</option>
+              ))}
+            </select>
+          </Alan>
+          {durumFiltre && (
+            <Buton variant="ikincil" onClick={() => setDurumFiltre('')}>Durum filtresini temizle ({DURUM_METIN[durumFiltre]})</Buton>
+          )}
         </div>
 
         {yukleniyor ? (
@@ -568,7 +419,7 @@ export default function StokSayfasi() {
                     onChange={tumunuSecVeyaKaldir}
                   />
                 </th>
-                {['Seri No', 'Durum', 'Toplam Maliyet', 'Satış Fiyatı', 'Kâr/Zarar', 'İşlem'].map((b) => (
+                {['Seri No', 'Ürün', 'Durum', 'Toplam Maliyet', 'Satış Fiyatı', 'Kâr/Zarar', 'İşlem'].map((b) => (
                   <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
                 ))}
               </tr>
@@ -583,6 +434,7 @@ export default function StokSayfasi() {
                       <input type="checkbox" checked={seciliMi(u.id)} onChange={() => secimiDegistir(u.id)} />
                     </td>
                     <td style={{ padding: '12px 16px', fontWeight: 500, fontFamily: 'var(--font-mono)' }}>{u.seri_no}</td>
+                    <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>{urunAdiGoster(u.stok_karti_id)}</td>
                     <td style={{ padding: '12px 16px' }}>
                       <Etiket ton={DURUM_ETIKET[u.durum]}>{DURUM_METIN[u.durum]}</Etiket>
                     </td>
