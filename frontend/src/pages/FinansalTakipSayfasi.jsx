@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Fragment } from 'react';
 import { api, hataMesajiCikar } from '../api/client';
 import {
   Kart, SayfaBasligi, Buton, Etiket, Alan, girdiStili, BosDurum, HataMesaji, paraFormat, Sekmeler, eylemChipStili,
@@ -358,6 +358,88 @@ function MaliyetDagitimFormu({ akreditif, onKapat, onTamamlandi }) {
     </Kart>
   );
 }
+
+function AkreditifKalemOdemeFormu({ kalem, akreditif, onKaydedildi, onVazgec }) {
+  const [bankaHesaplari, setBankaHesaplari] = useState([]);
+  const [form, setForm] = useState({
+    odeme_yontemi: 'BANKA', banka_hesap_id: '', odeme_tarihi: new Date().toISOString().slice(0, 10), kur: '1',
+  });
+  const [hata, setHata] = useState(null);
+  const [kaydediliyor, setKaydediliyor] = useState(false);
+
+  useEffect(() => {
+    api.get('/banka-bakiyeleri').then((r) => setBankaHesaplari(r.data)).catch(() => {});
+    if (akreditif.para_birimi !== 'TRY') {
+      api.get(`/kur/${akreditif.para_birimi}`).then((r) => setForm((f) => ({ ...f, kur: r.data.kur }))).catch(() => {});
+    }
+  }, []); // eslint-disable-line
+
+  async function kaydet(e) {
+    e.preventDefault();
+    setHata(null);
+    setKaydediliyor(true);
+    try {
+      await api.put(`/akreditif-kalemleri/${kalem.id}/ode`, {
+        odeme_tarihi: form.odeme_tarihi,
+        odeme_yontemi: form.odeme_yontemi,
+        banka_hesap_id: form.odeme_yontemi === 'BANKA' ? Number(form.banka_hesap_id) : null,
+        kur: form.odeme_yontemi === 'NAKIT' && akreditif.para_birimi !== 'TRY' ? Number(form.kur) : null,
+      });
+      onKaydedildi();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setKaydediliyor(false);
+    }
+  }
+
+  return (
+    <tr>
+      <td colSpan={6} style={{ padding: 0 }}>
+        <div style={{ padding: 16, background: 'var(--zemin)' }}>
+          <form onSubmit={kaydet}>
+            <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 12 }}>
+              Kalemi öde — {paraFormat(kalem.tutar, akreditif.para_birimi)}
+            </div>
+            <HataMesaji>{hata}</HataMesaji>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12 }}>
+              <Alan etiket="Ödeme yöntemi">
+                <select value={form.odeme_yontemi} onChange={(e) => setForm((f) => ({ ...f, odeme_yontemi: e.target.value }))} style={girdiStili}>
+                  <option value="BANKA">Banka</option>
+                  <option value="NAKIT">Nakit (Ana Kasa)</option>
+                </select>
+              </Alan>
+              {form.odeme_yontemi === 'BANKA' ? (
+                <Alan etiket="Banka hesabı">
+                  <select required value={form.banka_hesap_id} onChange={(e) => setForm((f) => ({ ...f, banka_hesap_id: e.target.value }))} style={girdiStili}>
+                    <option value="">Seçin...</option>
+                    {bankaHesaplari.map((h) => (
+                      <option key={h.banka_hesap_id} value={h.banka_hesap_id}>
+                        {h.banka_adi} — {h.hesap_adi || h.para_birimi} ({h.para_birimi})
+                      </option>
+                    ))}
+                  </select>
+                </Alan>
+              ) : akreditif.para_birimi !== 'TRY' && (
+                <Alan etiket={`${akreditif.para_birimi} için TL kuru (otomatik, elle değiştirilebilir)`}>
+                  <input required type="number" step="0.0001" value={form.kur} onChange={(e) => setForm((f) => ({ ...f, kur: e.target.value }))} style={girdiStili} />
+                </Alan>
+              )}
+              <Alan etiket="Ödeme tarihi">
+                <input required type="date" value={form.odeme_tarihi} onChange={(e) => setForm((f) => ({ ...f, odeme_tarihi: e.target.value }))} style={girdiStili} />
+              </Alan>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Kaydediliyor...' : 'Ödemeyi tamamla'}</Buton>
+              <Buton type="button" variant="ikincil" onClick={onVazgec}>Vazgeç</Buton>
+            </div>
+          </form>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 function AkreditifSekmesi() {
   const [liste, setListe] = useState([]);
   const [siparisler, setSiparisler] = useState([]);
@@ -374,6 +456,7 @@ function AkreditifSekmesi() {
   const [kalemler, setKalemler] = useState(null);
   const [kalemForm, setKalemForm] = useState({ tip: 'ODEME', aciklama: '', tutar: '', vade_tarihi: new Date().toISOString().slice(0, 10) });
   const [dagitimFormuAcik, setDagitimFormuAcik] = useState(false);
+  const [odemeYapilacakKalemId, setOdemeYapilacakKalemId] = useState(null);
 
   function yukle() {
     api.get('/akreditifler').then((r) => setListe(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
@@ -458,14 +541,32 @@ function AkreditifSekmesi() {
     } catch (err) { setHata(hataMesajiCikar(err)); }
   }
 
-  async function kalemOde(kalemId) {
-    const secim = await odemeYontemiSor(seciliAkreditif.para_birimi);
-    if (!secim) return;
+  async function maliyetDagit() {
+    const yontem = window.prompt('Dağıtım yöntemi: "esit" veya "agirlikli" yazın:', 'esit');
+    if (!yontem) return;
+    const temizYontem = yontem.trim().toLowerCase() === 'agirlikli' ? 'AGIRLIKLI' : 'ESIT';
+
+    let kur = 1;
+    if (seciliAkreditif.para_birimi !== 'TRY') {
+      let onerilenKur = '';
+      try {
+        const { data } = await api.get(`/kur/${seciliAkreditif.para_birimi}`);
+        onerilenKur = data.kur;
+      } catch (e) { /* elle girilecek */ }
+      const girilenKur = window.prompt(`${seciliAkreditif.para_birimi} için TL kuru:`, onerilenKur);
+      if (!girilenKur || Number.isNaN(Number(girilenKur))) {
+        window.alert('Geçerli bir kur girilmedi, işlem iptal edildi.');
+        return;
+      }
+      kur = Number(girilenKur);
+    }
+
     try {
-      await api.put(`/akreditif-kalemleri/${kalemId}/ode`, { odeme_tarihi: new Date().toISOString().slice(0, 10), ...secim });
-      kalemleriGoster(seciliAkreditif.id);
-      yukle();
-    } catch (err) { setHata(hataMesajiCikar(err)); }
+      const { data } = await api.post(`/akreditifler/${seciliAkreditif.id}/maliyet-dagit`, { yontem: temizYontem, kur });
+      window.alert(`${data.dagitilan_urun_sayisi} ürüne toplam ${paraFormat(data.toplam_dagitilan_try)} dağıtıldı.`);
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    }
   }
 
   function siparisEtiketi(id) {
@@ -571,7 +672,7 @@ function AkreditifSekmesi() {
             <div style={{ fontWeight: 600, fontSize: 13.5 }}>
               {seciliAkreditif.akreditif_no || `Akreditif #${seciliAkreditif.id}`} — ödeme/komisyon kalemleri
             </div>
-           <button onClick={() => setDagitimFormuAcik((a) => !a)} style={eylemChipStili('lacivert')}>
+            <button onClick={() => setDagitimFormuAcik((a) => !a)} style={eylemChipStili('lacivert')}>
               {dagitimFormuAcik ? 'Dağıtım formunu kapat' : 'Komisyon/masrafı ürünlere dağıt'}
             </button>
           </div>
@@ -605,24 +706,48 @@ function AkreditifSekmesi() {
           </form>
 
           {kalemler && (
-            <BasitTablo
-              basliklar={['Tip', 'Açıklama', 'Tutar', 'Vade', 'Durum', '']}
-              satirlar={kalemler}
-              render={(k) => (
-                <tr key={k.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
-                  <td style={{ padding: '8px 0' }}>{AKREDITIF_KALEM_TIP_METIN[k.tip]}</td>
-                  <td style={{ padding: '8px 0' }}>{k.aciklama || '—'}</td>
-                  <td style={{ padding: '8px 0' }}>{paraFormat(k.tutar, seciliAkreditif.para_birimi)}</td>
-                  <td style={{ padding: '8px 0' }}>{k.vade_tarihi}</td>
-                  <td style={{ padding: '8px 0' }}><Etiket ton={k.odendi_mi ? 'yesil' : 'amber'}>{k.odendi_mi ? 'Ödendi' : 'Bekliyor'}</Etiket></td>
-                  <td style={{ padding: '8px 0' }}>
-                    {!k.odendi_mi && (
-                      <button onClick={() => kalemOde(k.id)} style={eylemChipStili('lacivert')}>Öde</button>
-                    )}
-                  </td>
-                </tr>
-              )}
-            />
+            kalemler.length === 0 ? <BosDurum baslik="Henüz kalem eklenmedi" /> : (
+              <table>
+                <thead>
+                  <tr style={{ background: 'var(--zemin)' }}>
+                    {['Tip', 'Açıklama', 'Tutar', 'Vade', 'Durum', ''].map((b) => (
+                      <th key={b} style={{ textAlign: 'left', padding: '8px 0', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {kalemler.map((k) => (
+                    <Fragment key={k.id}>
+                      <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                        <td style={{ padding: '8px 0' }}>{AKREDITIF_KALEM_TIP_METIN[k.tip]}</td>
+                        <td style={{ padding: '8px 0' }}>{k.aciklama || '—'}</td>
+                        <td style={{ padding: '8px 0' }}>{paraFormat(k.tutar, seciliAkreditif.para_birimi)}</td>
+                        <td style={{ padding: '8px 0' }}>{k.vade_tarihi}</td>
+                        <td style={{ padding: '8px 0' }}><Etiket ton={k.odendi_mi ? 'yesil' : 'amber'}>{k.odendi_mi ? 'Ödendi' : 'Bekliyor'}</Etiket></td>
+                        <td style={{ padding: '8px 0' }}>
+                          {!k.odendi_mi && (
+                            <button
+                              onClick={() => setOdemeYapilacakKalemId((mevcut) => (mevcut === k.id ? null : k.id))}
+                              style={eylemChipStili('lacivert')}
+                            >
+                              {odemeYapilacakKalemId === k.id ? 'Kapat' : 'Öde'}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                      {odemeYapilacakKalemId === k.id && (
+                        <AkreditifKalemOdemeFormu
+                          kalem={k}
+                          akreditif={seciliAkreditif}
+                          onKaydedildi={() => { setOdemeYapilacakKalemId(null); kalemleriGoster(seciliAkreditif.id); yukle(); }}
+                          onVazgec={() => setOdemeYapilacakKalemId(null)}
+                        />
+                      )}
+                    </Fragment>
+                  ))}
+                </tbody>
+              </table>
+            )
           )}
         </Kart>
       )}
