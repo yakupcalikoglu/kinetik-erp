@@ -14,6 +14,7 @@ const MODULLER = [
   { yol: '/finansal', ad: 'Finansal Takip', simge: '◇' },
   { yol: '/proforma-fatura', ad: 'Proforma / Fatura', simge: '▭' },
   { yol: '/raporlar', ad: 'Raporlar', simge: '◔' },
+  { yol: '/urun-tanimlari', ad: 'Ürün Tanımları', simge: '📦' },
   { yol: '/harcama-turleri', ad: 'Harcama Türleri', simge: '☰' },
   { yol: '/yonetici-paneli', ad: 'Yönetici Paneli', simge: '⚙' },
 ];
