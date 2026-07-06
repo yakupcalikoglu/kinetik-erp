@@ -17,6 +17,7 @@ from app.schemas.akreditif import (
     AkreditifUrunSecenegi, AkreditifMaliyetDagitIstegi, AkreditifMaliyetDagitYaniti,
     AkreditifMaliyetDagitimSatiri,
     AkreditifKalemTaksitlendirIstegi, AkreditifKalemTaksitiYanit, AkreditifKalemTaksitOdeIstegi,
+    AkreditifKalemTaksitiDuzenleIstegi,
 )
 from app.services.para_hareketi import para_hareketi_olustur
 
@@ -24,8 +25,10 @@ router = APIRouter(prefix="/akreditifler", tags=["Akreditif"])
 
 kalem_router = APIRouter(prefix="/akreditif-kalemleri", tags=["Akreditif"])
 
+# Dagitim gecmisi kayitlarinin silinmesi (geri alma) icin ayri, kucuk bir router.
 dagitim_router = APIRouter(prefix="/akreditif-maliyet-dagitimlari", tags=["Akreditif"])
 
+# Kalem taksit odemeleri icin ayri, kucuk bir router.
 taksit_router = APIRouter(prefix="/akreditif-kalem-taksitleri", tags=["Akreditif"])
 
 
@@ -482,3 +485,115 @@ def akreditif_kalem_taksiti_ode(
     db.commit()
     db.refresh(taksit)
     return taksit
+
+
+# --------------------------------------------------------- Kalem Düzenle/Sil
+@kalem_router.put("/{kalem_id}", response_model=AkreditifYanit,
+                   dependencies=[Depends(izin_gerektir("AKREDITIF_DUZENLE"))])
+def akreditif_kalemi_duzenle(
+    kalem_id: int,
+    istek: AkreditifKalemEkleIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """Odenmemis ve taksitlendirilmemis bir kalemin bilgilerini duzeltir (yanlis girilen tutar/tarih icin)."""
+    kalem = db.get(AkreditifKalemi, kalem_id)
+    if kalem is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Akreditif kalemi bulunamadı.")
+    akreditif = db.get(Akreditif, kalem.akreditif_id)
+    if akreditif is None or akreditif.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Akreditif kalemi bulunamadı.")
+    if kalem.odendi_mi:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ödenmiş bir kalem düzenlenemez.")
+
+    taksit_var_mi = db.execute(
+        select(AkreditifKalemTaksiti).where(AkreditifKalemTaksiti.kalem_id == kalem_id)
+    ).first()
+    if taksit_var_mi is not None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Taksitlendirilmiş bir kalem düzenlenemez; önce taksitleri silin."
+        )
+
+    kalem.tip = istek.tip
+    kalem.aciklama = istek.aciklama
+    kalem.tutar = istek.tutar
+    kalem.vade_tarihi = istek.vade_tarihi
+    db.commit()
+    return _detayli_getir(db, akreditif.id)
+
+
+@kalem_router.delete("/{kalem_id}", dependencies=[Depends(izin_gerektir("AKREDITIF_DUZENLE"))])
+def akreditif_kalemi_sil(
+    kalem_id: int,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """Odenmemis bir kalemi siler. Taksitlendirilmisse, henuz odenmemis taksitleri de birlikte siler."""
+    kalem = db.get(AkreditifKalemi, kalem_id)
+    if kalem is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Akreditif kalemi bulunamadı.")
+    akreditif = db.get(Akreditif, kalem.akreditif_id)
+    if akreditif is None or akreditif.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Akreditif kalemi bulunamadı.")
+    if kalem.odendi_mi:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ödenmiş bir kalem silinemez.")
+
+    taksitler = list(db.execute(
+        select(AkreditifKalemTaksiti).where(AkreditifKalemTaksiti.kalem_id == kalem_id)
+    ).scalars())
+    if any(t.odendi_mi for t in taksitler):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ödenmiş taksiti olan bir kalem silinemez.")
+    for t in taksitler:
+        db.delete(t)
+
+    db.delete(kalem)
+    db.commit()
+    return {"silindi": True}
+
+
+# --------------------------------------------------------- Taksit Düzenle/Sil
+@taksit_router.put("/{taksit_id}", response_model=AkreditifKalemTaksitiYanit,
+                    dependencies=[Depends(izin_gerektir("AKREDITIF_DUZENLE"))])
+def akreditif_kalem_taksitini_duzenle(
+    taksit_id: int,
+    istek: AkreditifKalemTaksitiDuzenleIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    taksit = db.get(AkreditifKalemTaksiti, taksit_id)
+    if taksit is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Taksit bulunamadı.")
+    kalem = db.get(AkreditifKalemi, taksit.kalem_id)
+    akreditif = db.get(Akreditif, kalem.akreditif_id) if kalem else None
+    if akreditif is None or akreditif.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Taksit bulunamadı.")
+    if taksit.odendi_mi:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ödenmiş bir taksit düzenlenemez.")
+
+    taksit.vade_tarihi = istek.vade_tarihi
+    taksit.tutar = istek.tutar
+    db.commit()
+    db.refresh(taksit)
+    return taksit
+
+
+@taksit_router.delete("/{taksit_id}", dependencies=[Depends(izin_gerektir("AKREDITIF_DUZENLE"))])
+def akreditif_kalem_taksitini_sil(
+    taksit_id: int,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    taksit = db.get(AkreditifKalemTaksiti, taksit_id)
+    if taksit is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Taksit bulunamadı.")
+    kalem = db.get(AkreditifKalemi, taksit.kalem_id)
+    akreditif = db.get(Akreditif, kalem.akreditif_id) if kalem else None
+    if akreditif is None or akreditif.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Taksit bulunamadı.")
+    if taksit.odendi_mi:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ödenmiş bir taksit silinemez.")
+
+    db.delete(taksit)
+    db.commit()
+    return {"silindi": True}
