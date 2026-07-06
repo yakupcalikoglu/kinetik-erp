@@ -348,3 +348,117 @@ def borc_sil(borc_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: 
     db.delete(borc)
     db.commit()
     return {"silindi": True}
+    # ============================================================================ PERSONEL - ÖDEME GERİ AL
+@router.put("/personel-odemeleri/{odeme_id}/odemeyi-geri-al", dependencies=[Depends(izin_gerektir("PERSONEL_DUZENLE"))])
+def personel_odemesini_geri_al(
+    odeme_id: int,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    odeme = db.get(PersonelOdeme, odeme_id)
+    if odeme is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ödeme kaydı bulunamadı.")
+    personel = db.get(Personel, odeme.personel_id)
+    if personel is None or personel.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ödeme kaydı bulunamadı.")
+    if not odeme.odendi_mi:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bu ödeme zaten yapılmamış durumda.")
+
+    from app.models.banka import KasaHareketi, BankaHareketi
+    for h in list(db.execute(
+        select(KasaHareketi).where(KasaHareketi.kaynak_tablo == "PERSONEL_ODEME", KasaHareketi.kaynak_id == odeme_id)
+    ).scalars()):
+        db.delete(h)
+    for h in list(db.execute(
+        select(BankaHareketi).where(BankaHareketi.kaynak_tablo == "PERSONEL_ODEME", BankaHareketi.kaynak_id == odeme_id)
+    ).scalars()):
+        db.delete(h)
+
+    odeme.odendi_mi = False
+    odeme.odeme_tarihi = None
+    db.commit()
+    return {"geri_alindi": True}
+
+
+@router.delete("/personel-odemeleri/{odeme_id}", dependencies=[Depends(izin_gerektir("PERSONEL_DUZENLE"))])
+def personel_odemesini_sil(
+    odeme_id: int,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """Sadece HENUZ odenmemis bir tahakkuk kaydini siler (yanlislikla girilmisse)."""
+    odeme = db.get(PersonelOdeme, odeme_id)
+    if odeme is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ödeme kaydı bulunamadı.")
+    personel = db.get(Personel, odeme.personel_id)
+    if personel is None or personel.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ödeme kaydı bulunamadı.")
+    if odeme.odendi_mi:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ödenmiş bir kayıt silinemez; önce ödemeyi geri alın.")
+
+    db.delete(odeme)
+    db.commit()
+    return {"silindi": True}
+
+
+# ===================================================================== SABİT GİDER - ÖDEME GERİ AL
+@router.put("/sabit-giderler/{gider_id}/odemeyi-geri-al", dependencies=[Depends(izin_gerektir("GIDER_DUZENLE"))])
+def sabit_gider_odemesini_geri_al(
+    gider_id: int,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    gider = db.get(SabitGider, gider_id)
+    if gider is None or gider.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Gider kaydı bulunamadı.")
+    if not gider.odendi_mi:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bu gider zaten ödenmemiş durumda.")
+
+    from app.models.banka import KasaHareketi, BankaHareketi
+    for h in list(db.execute(
+        select(KasaHareketi).where(KasaHareketi.kaynak_tablo == "SABIT_GIDER", KasaHareketi.kaynak_id == gider_id)
+    ).scalars()):
+        db.delete(h)
+    for h in list(db.execute(
+        select(BankaHareketi).where(BankaHareketi.kaynak_tablo == "SABIT_GIDER", BankaHareketi.kaynak_id == gider_id)
+    ).scalars()):
+        db.delete(h)
+
+    gider.odendi_mi = False
+    gider.odeme_tarihi = None
+    db.commit()
+    return {"geri_alindi": True}
+
+
+# ===================================================================== ORTAK/DIŞ BORÇ - ÖDEME SİL
+@router.delete("/borc-odemeleri/{odeme_id}", dependencies=[Depends(izin_gerektir("BORC_DUZENLE"))])
+def borc_odemesini_sil(
+    odeme_id: int,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Bir borc odeme kaydini (yanlislikla girildiyse) siler ve olusturdugu
+    Kasa/Banka hareketini de geri alir. Borcun kendisi etkilenmez, sadece
+    bu tek odeme kaydi kaldirilir.
+    """
+    odeme = db.get(BorcOdeme, odeme_id)
+    if odeme is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ödeme kaydı bulunamadı.")
+    borc = db.get(Borc, odeme.borc_id)
+    if borc is None or borc.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ödeme kaydı bulunamadı.")
+
+    from app.models.banka import KasaHareketi, BankaHareketi
+    for h in list(db.execute(
+        select(KasaHareketi).where(KasaHareketi.kaynak_tablo == "BORC_ODEME", KasaHareketi.kaynak_id == odeme_id)
+    ).scalars()):
+        db.delete(h)
+    for h in list(db.execute(
+        select(BankaHareketi).where(BankaHareketi.kaynak_tablo == "BORC_ODEME", BankaHareketi.kaynak_id == odeme_id)
+    ).scalars()):
+        db.delete(h)
+
+    db.delete(odeme)
+    db.commit()
+    return {"silindi": True}
