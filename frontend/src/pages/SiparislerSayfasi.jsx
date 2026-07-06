@@ -13,9 +13,8 @@ const DURUM_METIN = {
   TESLIM_ALINDI: 'Teslim Alındı', TAMAMLANDI: 'Tamamlandı', IPTAL: 'İptal',
 };
 
-// Sadece kesinlesmis (Tamamlandi) veya iptal edilmis siparislerde
-// Duzenle/Sil gizlenir - digerlerinde her zaman erisilebilir.
-const DUZENLEME_KAPALI_DURUMLAR = ['TAMAMLANDI', 'IPTAL'];
+// Bu durumlar KESIN/SON durumlardir - artik hicbir islem yapilamaz.
+const SON_DURUMLAR = ['TAMAMLANDI', 'IPTAL'];
 
 export default function SiparislerSayfasi() {
   const location = useLocation();
@@ -49,8 +48,14 @@ export default function SiparislerSayfasi() {
     }
   }
 
+  async function siparisiIptalEt(siparisId, siparisNo) {
+    if (!window.confirm(`${siparisNo} numaralı siparişi iptal etmek istediğinize emin misiniz? Bu işlem geri alınamaz.`)) return;
+    await durumDegistir(siparisId, 'IPTAL');
+    setBilgiMesaji(`${siparisNo} numaralı sipariş iptal edildi.`);
+  }
+
   async function siparisiSil(siparisId, siparisNo) {
-    if (!window.confirm(`${siparisNo} numaralı siparişi silmek istediğinize emin misiniz?`)) return;
+    if (!window.confirm(`${siparisNo} numaralı siparişi (taslağı) silmek istediğinize emin misiniz?`)) return;
     try {
       await api.delete(`/siparisler/${siparisId}`);
       setBilgiMesaji(`${siparisNo} numaralı sipariş silindi.`);
@@ -122,7 +127,7 @@ export default function SiparislerSayfasi() {
             <tbody>
               {siparisler.map((s) => {
                 const toplam = (s.urunler || []).reduce((acc, u) => acc + u.miktar * Number(u.birim_fiyat), 0);
-                const duzenlenebilir = !DUZENLEME_KAPALI_DURUMLAR.includes(s.durum);
+                const sonDurumda = SON_DURUMLAR.includes(s.durum);
                 return (
                   <tr key={s.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
                     <td style={{ padding: '12px 16px', fontWeight: 500 }}>{s.siparis_no}</td>
@@ -135,17 +140,10 @@ export default function SiparislerSayfasi() {
                     <td style={{ padding: '12px 16px' }}>
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                         {s.durum === 'TASLAK' && (
-                          <button onClick={() => durumDegistir(s.id, 'ONAYLANDI')} style={eylemChipStili('lacivert')}>
-                            Onayla
-                          </button>
-                        )}
-                        {(s.durum === 'ONAYLANDI' || s.durum === 'YOLDA' || s.durum === 'GUMRUKTE') && (
-                          <Link to={`/siparisler/${s.id}/teslim-al`} style={eylemChipStili('yesil')}>
-                            Teslim al
-                          </Link>
-                        )}
-                        {duzenlenebilir && (
                           <>
+                            <button onClick={() => durumDegistir(s.id, 'ONAYLANDI')} style={eylemChipStili('lacivert')}>
+                              Onayla
+                            </button>
                             <Link to={`/siparisler/${s.id}/duzenle`} style={eylemChipStili('lacivert')}>
                               Düzenle
                             </Link>
@@ -153,6 +151,16 @@ export default function SiparislerSayfasi() {
                               Sil
                             </button>
                           </>
+                        )}
+                        {(s.durum === 'ONAYLANDI' || s.durum === 'YOLDA' || s.durum === 'GUMRUKTE') && (
+                          <Link to={`/siparisler/${s.id}/teslim-al`} style={eylemChipStili('yesil')}>
+                            Teslim al
+                          </Link>
+                        )}
+                        {!sonDurumda && s.durum !== 'TASLAK' && (
+                          <button onClick={() => siparisiIptalEt(s.id, s.siparis_no)} style={eylemChipStili('kirmizi')}>
+                            İptal Et
+                          </button>
                         )}
                         <button onClick={() => pdfIndir(s.id, s.siparis_no, 'ic')} style={eylemChipStili('notr')}>
                           PDF (şirket içi)
