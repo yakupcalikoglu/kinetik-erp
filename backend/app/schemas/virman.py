@@ -25,3 +25,29 @@ class UrunVirmanIstegi(BaseModel):
 class UrunVirmanYaniti(BaseModel):
     stok_seri_no_id: int
     yeni_sahip_cari_id: int
+
+class UrunSahiplikGecmisiYanit(BaseModel):
+    id: int
+    stok_seri_no_id: int
+    seri_no: str | None = None
+    eski_cari_id: int | None
+    eski_cari_unvan: str | None = None
+    yeni_cari_id: int
+    yeni_cari_unvan: str | None = None
+    aciklama: str | None
+    tarih: date
+
+    class Config:
+        from_attributes = True
+
+
+class CariVirmanGecmisiYanit(BaseModel):
+    id: int
+    kaynak_cari_id: int
+    kaynak_cari_unvan: str | None = None
+    hedef_cari_id: int
+    hedef_cari_unvan: str | None = None
+    tutar: Decimal
+    para_birimi: str
+    aciklama: str | None
+    tarih: date
