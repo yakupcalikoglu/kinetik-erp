@@ -161,6 +161,8 @@ def akreditif_durum_guncelle(
 
 
 def _durumu_yeniden_hesapla(db: Session, akreditif: Akreditif) -> None:
+    """Kalemlerin odenme durumuna gore akreditifin genel durumunu gunceller.
+    Bir odeme geri alindiginda ACIK'a donebilmesi icin de kontrol eder."""
     kalemler = list(db.execute(
         select(AkreditifKalemi).where(AkreditifKalemi.akreditif_id == akreditif.id)
     ).scalars())
@@ -170,6 +172,8 @@ def _durumu_yeniden_hesapla(db: Session, akreditif: Akreditif) -> None:
         akreditif.durum = AkreditifDurum.KAPANDI
     elif any(k.odendi_mi for k in kalemler):
         akreditif.durum = AkreditifDurum.KISMI_ODENDI
+    elif akreditif.durum not in (AkreditifDurum.IPTAL,):
+        akreditif.durum = AkreditifDurum.ACIK
 
 
 @router.post("/{akreditif_id}/kalem", response_model=AkreditifYanit,
@@ -597,3 +601,82 @@ def akreditif_kalem_taksitini_sil(
     db.delete(taksit)
     db.commit()
     return {"silindi": True}
+
+
+# --------------------------------------------------------- Ödemeyi Geri Al
+@kalem_router.put("/{kalem_id}/odemeyi-geri-al", dependencies=[Depends(izin_gerektir("AKREDITIF_DUZENLE"))])
+def akreditif_kalemi_odemesini_geri_al(
+    kalem_id: int,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Yanlislikla odenmis/isaretlenmis bir kalemin odemesini geri alir:
+    olusturulan Kasa/Banka hareketini siler ve kalemi tekrar 'Bekliyor'
+    durumuna dondurur - boylece duzenlenebilir/silinebilir hale gelir.
+    """
+    kalem = db.get(AkreditifKalemi, kalem_id)
+    if kalem is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Akreditif kalemi bulunamadı.")
+    akreditif = db.get(Akreditif, kalem.akreditif_id)
+    if akreditif is None or akreditif.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Akreditif kalemi bulunamadı.")
+    if not kalem.odendi_mi:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bu kalem zaten ödenmemiş durumda.")
+
+    from app.models.banka import KasaHareketi, BankaHareketi
+    for kasa_h in list(db.execute(
+        select(KasaHareketi).where(KasaHareketi.kaynak_tablo == "AKREDITIF_KALEMI", KasaHareketi.kaynak_id == kalem_id)
+    ).scalars()):
+        db.delete(kasa_h)
+    for banka_h in list(db.execute(
+        select(BankaHareketi).where(BankaHareketi.kaynak_tablo == "AKREDITIF_KALEMI", BankaHareketi.kaynak_id == kalem_id)
+    ).scalars()):
+        db.delete(banka_h)
+
+    kalem.odendi_mi = False
+    kalem.odeme_tarihi = None
+    _durumu_yeniden_hesapla(db, akreditif)
+
+    db.commit()
+    return {"geri_alindi": True}
+
+
+@taksit_router.put("/{taksit_id}/odemeyi-geri-al", dependencies=[Depends(izin_gerektir("AKREDITIF_DUZENLE"))])
+def akreditif_kalem_taksitinin_odemesini_geri_al(
+    taksit_id: int,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """Bir taksit odemesini geri alir: Kasa/Banka hareketini siler, taksidi ve
+    (tum taksitler odendi diye isaretlenmisse) kalemi tekrar 'Bekliyor' yapar."""
+    taksit = db.get(AkreditifKalemTaksiti, taksit_id)
+    if taksit is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Taksit bulunamadı.")
+    kalem = db.get(AkreditifKalemi, taksit.kalem_id)
+    akreditif = db.get(Akreditif, kalem.akreditif_id) if kalem else None
+    if akreditif is None or akreditif.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Taksit bulunamadı.")
+    if not taksit.odendi_mi:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bu taksit zaten ödenmemiş durumda.")
+
+    from app.models.banka import KasaHareketi, BankaHareketi
+    for kasa_h in list(db.execute(
+        select(KasaHareketi).where(KasaHareketi.kaynak_tablo == "AKREDITIF_KALEM_TAKSIT", KasaHareketi.kaynak_id == taksit_id)
+    ).scalars()):
+        db.delete(kasa_h)
+    for banka_h in list(db.execute(
+        select(BankaHareketi).where(BankaHareketi.kaynak_tablo == "AKREDITIF_KALEM_TAKSIT", BankaHareketi.kaynak_id == taksit_id)
+    ).scalars()):
+        db.delete(banka_h)
+
+    taksit.odendi_mi = False
+    taksit.odeme_tarihi = None
+
+    if kalem.odendi_mi:
+        kalem.odendi_mi = False
+        kalem.odeme_tarihi = None
+    _durumu_yeniden_hesapla(db, akreditif)
+
+    db.commit()
+    return {"geri_alindi": True}
