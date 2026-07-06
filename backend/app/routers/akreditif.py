@@ -100,17 +100,38 @@ def akreditif_sil(
     sirket_id: int = Depends(aktif_sirket_id_getir),
     db: Session = Depends(get_db),
 ):
+    """
+    Akreditifi ve ona bagli TUM alt kayitlari (kalemler, kalem taksitleri,
+    maliyet dagitim kayitlari) siler. Onceki surumde maliyet dagitim
+    kayitlari unutulmustu, bu da FK ihlali ile silmeyi engelliyordu.
+    """
     akreditif = _akreditif_getir_veya_404(db, akreditif_id, sirket_id)
     try:
+        # 1) Bu akreditife bagli maliyet dagitim kayitlari (varsa)
+        for dagitim in list(db.execute(
+            select(AkreditifMaliyetDagitimi).where(AkreditifMaliyetDagitimi.akreditif_id == akreditif_id)
+        ).scalars()):
+            db.delete(dagitim)
+
+        # 2) Kalemler ve onlara bagli taksitler
         for kalem in list(db.execute(
             select(AkreditifKalemi).where(AkreditifKalemi.akreditif_id == akreditif_id)
         ).scalars()):
+            for taksit in list(db.execute(
+                select(AkreditifKalemTaksiti).where(AkreditifKalemTaksiti.kalem_id == kalem.id)
+            ).scalars()):
+                db.delete(taksit)
             db.delete(kalem)
+
         db.delete(akreditif)
         db.commit()
-    except IntegrityError:
+    except IntegrityError as e:
         db.rollback()
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bu akreditif başka kayıtlarda kullanıldığı için silinemiyor.")
+        detay = str(getattr(e, "orig", e))
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Bu akreditif başka kayıtlarda kullanıldığı için silinemiyor. Teknik detay: {detay}"
+        )
     return {"silindi": True}
 
 
