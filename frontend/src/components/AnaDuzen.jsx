@@ -5,23 +5,23 @@ import { api, hataMesajiCikar } from '../api/client';
 
 const MODULLER = [
   { yol: '/', ad: 'Genel Bakış', simge: '◧' },
-  { yol: '/cariler', ad: 'Cari', simge: '◑' },
-  { yol: '/stok', ad: 'Stok', simge: '◫' },
+  { yol: '/cariler', ad: 'Cari', simge: '◑', gerekliIzin: 'CARI_GORUNTULE' },
+  { yol: '/stok', ad: 'Stok', simge: '◫', gerekliIzin: 'STOK_GORUNTULE' },
   { yol: '/siparisler', ad: 'Siparişler', simge: '⇄' },
-  { yol: '/banka', ad: 'Banka', simge: '◈' },
+  { yol: '/banka', ad: 'Banka', simge: '◈', gerekliIzin: 'BANKA_GORUNTULE' },
   { yol: '/virman', ad: 'Virman', simge: '⇌' },
-  { yol: '/kasa', ad: 'Ana Kasa', simge: '▤' },
+  { yol: '/kasa', ad: 'Ana Kasa', simge: '▤', gerekliIzin: 'KASA_GORUNTULE' },
   { yol: '/finansal', ad: 'Finansal Takip', simge: '◇' },
-  { yol: '/proforma-fatura', ad: 'Proforma / Fatura', simge: '▭' },
+  { yol: '/proforma-fatura', ad: 'Proforma / Fatura', simge: '▭', gerekliIzin: 'FATURA_GORUNTULE' },
   { yol: '/raporlar', ad: 'Raporlar', simge: '◔' },
-  { yol: '/satis-yap', ad: 'Satış Yap', simge: '💰' },
-  { yol: '/urun-tanimlari', ad: 'Ürün Tanımları', simge: '📦' },
+  { yol: '/satis-yap', ad: 'Satış Yap', simge: '💰', gerekliIzin: 'STOK_DUZENLE' },
+  { yol: '/urun-tanimlari', ad: 'Ürün Tanımları', simge: '📦', gerekliIzin: 'STOK_GORUNTULE' },
   { yol: '/harcama-turleri', ad: 'Harcama Türleri', simge: '☰' },
-  { yol: '/yonetici-paneli', ad: 'Yönetici Paneli', simge: '⚙' },
+  { yol: '/yonetici-paneli', ad: 'Yönetici Paneli', simge: '⚙', gerekliIzin: 'KULLANICI_YONET' },
 ];
 
 export default function AnaDuzen() {
-  const { oturum, cikisYap, sirketDegistir, sirketleriTazele } = useAuth();
+  const { oturum, cikisYap, sirketDegistir, sirketleriTazele, izinVarMi } = useAuth();
   const navigate = useNavigate();
   const [yeniSirketFormuAcik, setYeniSirketFormuAcik] = useState(false);
   const [yeniSirketAdi, setYeniSirketAdi] = useState('');
@@ -45,6 +45,8 @@ export default function AnaDuzen() {
     }
   }
 
+  const gorunurModuller = MODULLER.filter((m) => izinVarMi(m.gerekliIzin));
+
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
       <aside
@@ -65,7 +67,7 @@ export default function AnaDuzen() {
         </div>
 
         <nav style={{ flex: 1, padding: '12px 8px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {MODULLER.map((m) => (
+          {gorunurModuller.map((m) => (
             <NavLink
               key={m.yol}
               to={m.yol}
