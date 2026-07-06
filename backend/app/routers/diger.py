@@ -311,3 +311,40 @@ def fatura_getir(fatura_id: int, sirket_id: int = Depends(aktif_sirket_id_getir)
     if fatura is None or fatura.sirket_id != sirket_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Fatura bulunamadı.")
     return fatura
+# ============================================================================ PERSONEL - SİL
+@router.delete("/personel/{personel_id}", dependencies=[Depends(izin_gerektir("PERSONEL_DUZENLE"))])
+def personel_sil(personel_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
+    """Personel gecmis odeme kayitlarinin butunlugu icin FIZIKSEL SILINMEZ, pasif hale getirilir."""
+    personel = db.get(Personel, personel_id)
+    if personel is None or personel.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Personel bulunamadı.")
+    personel.aktif = False
+    db.commit()
+    return {"silindi": True}
+
+
+# ===================================================================== SABİT GİDER - SİL
+@router.delete("/sabit-giderler/{gider_id}", dependencies=[Depends(izin_gerektir("GIDER_DUZENLE"))])
+def sabit_gider_sil(gider_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
+    gider = db.get(SabitGider, gider_id)
+    if gider is None or gider.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Gider kaydı bulunamadı.")
+    if gider.odendi_mi:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ödenmiş bir gider kaydı silinemez.")
+    db.delete(gider)
+    db.commit()
+    return {"silindi": True}
+
+
+# ===================================================================== ORTAK/DIŞ BORÇ - SİL
+@router.delete("/borclar/{borc_id}", dependencies=[Depends(izin_gerektir("BORC_DUZENLE"))])
+def borc_sil(borc_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
+    borc = db.get(Borc, borc_id)
+    if borc is None or borc.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Borç kaydı bulunamadı.")
+    odeme_var_mi = db.execute(select(BorcOdeme).where(BorcOdeme.borc_id == borc_id)).first()
+    if odeme_var_mi is not None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ödemesi yapılmış bir borç kaydı silinemez.")
+    db.delete(borc)
+    db.commit()
+    return {"silindi": True}
