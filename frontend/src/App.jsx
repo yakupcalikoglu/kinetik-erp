@@ -1,6 +1,7 @@
 import { Navigate, Route, BrowserRouter, Routes } from 'react-router-dom';
 import { AuthSaglayici, useAuth } from './context/AuthContext';
 import AnaDuzen from './components/AnaDuzen';
+import YetkiliSayfa from './components/YetkiliSayfa';
 import GirisSayfasi from './pages/GirisSayfasi';
 import SifremiUnuttumSayfasi from './pages/SifremiUnuttumSayfasi';
 import SifreSifirlaSayfasi from './pages/SifreSifirlaSayfasi';
@@ -44,22 +45,22 @@ function App() {
             }
           >
             <Route index element={<GenelBakisSayfasi />} />
-            <Route path="cariler" element={<CarilerSayfasi />} />
-            <Route path="stok" element={<StokSayfasi />} />
+            <Route path="cariler" element={<YetkiliSayfa gerekliIzin="CARI_GORUNTULE"><CarilerSayfasi /></YetkiliSayfa>} />
+            <Route path="stok" element={<YetkiliSayfa gerekliIzin="STOK_GORUNTULE"><StokSayfasi /></YetkiliSayfa>} />
             <Route path="siparisler" element={<SiparislerSayfasi />} />
             <Route path="siparisler/:siparisId/duzenle" element={<SiparisOlusturSayfasi />} />
             <Route path="siparisler/yeni" element={<SiparisOlusturSayfasi />} />
             <Route path="siparisler/:siparisId/teslim-al" element={<SiparisTeslimAlSayfasi />} />
-            <Route path="banka" element={<BankaSayfasi />} />
-            <Route path="kasa" element={<KasaSayfasi />} />
+            <Route path="banka" element={<YetkiliSayfa gerekliIzin="BANKA_GORUNTULE"><BankaSayfasi /></YetkiliSayfa>} />
+            <Route path="kasa" element={<YetkiliSayfa gerekliIzin="KASA_GORUNTULE"><KasaSayfasi /></YetkiliSayfa>} />
             <Route path="virman" element={<VirmanSayfasi />} />
             <Route path="finansal" element={<FinansalTakipSayfasi />} />
-            <Route path="proforma-fatura" element={<ProformaFaturaSayfasi />} />
+            <Route path="proforma-fatura" element={<YetkiliSayfa gerekliIzin="FATURA_GORUNTULE"><ProformaFaturaSayfasi /></YetkiliSayfa>} />
             <Route path="raporlar" element={<RaporlarSayfasi />} />
-            <Route path="urun-tanimlari" element={<UrunTanimlariSayfasi />} />
-            <Route path="yonetici-paneli" element={<YoneticiPaneliSayfasi />} />
+            <Route path="urun-tanimlari" element={<YetkiliSayfa gerekliIzin="STOK_GORUNTULE"><UrunTanimlariSayfasi /></YetkiliSayfa>} />
+            <Route path="yonetici-paneli" element={<YetkiliSayfa gerekliIzin="KULLANICI_YONET"><YoneticiPaneliSayfasi /></YetkiliSayfa>} />
             <Route path="harcama-turleri" element={<HarcamaTurleriSayfasi />} />
-            <Route path="satis-yap" element={<SatisYapSayfasi />} />
+            <Route path="satis-yap" element={<YetkiliSayfa gerekliIzin="STOK_DUZENLE"><SatisYapSayfasi /></YetkiliSayfa>} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
