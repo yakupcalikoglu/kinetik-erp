@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select
 
 from app.db.session import get_db
-from app.models.auth import Kullanici, KullaniciSirketErisim, Sirket
+from app.models.auth import Kullanici, KullaniciSirketErisim, Sirket, Izin, rol_izinleri, KullaniciRolu
 from app.core.security import sifre_dogrula, token_olustur, sifre_hashle
 from app.core.deps import aktif_kullanici_getir
 from app.schemas.auth import (
@@ -17,13 +17,29 @@ from datetime import datetime, timedelta, timezone
 router = APIRouter(prefix="/auth", tags=["Kimlik Doğrulama"])
 
 
+def _izin_kodlarini_getir(db: Session, kullanici_id: int, sirket_id: int) -> list[str]:
+    """Bir kullanicinin BELIRLI bir sirketteki tum izin kodlarini doner (rolu uzerinden)."""
+    sorgu = (
+        select(Izin.kod)
+        .join(rol_izinleri, rol_izinleri.c.izin_id == Izin.id)
+        .join(KullaniciRolu, KullaniciRolu.rol_id == rol_izinleri.c.rol_id)
+        .where(KullaniciRolu.kullanici_id == kullanici_id, KullaniciRolu.sirket_id == sirket_id)
+    )
+    return list(db.execute(sorgu).scalars())
+
+
 def _erisebildigi_sirketler(db: Session, kullanici_id: int) -> list[Sirket]:
     sorgu = (
         select(Sirket)
         .join(KullaniciSirketErisim, KullaniciSirketErisim.sirket_id == Sirket.id)
         .where(KullaniciSirketErisim.kullanici_id == kullanici_id, Sirket.aktif.is_(True))
     )
-    return list(db.execute(sorgu).scalars())
+    sirketler = list(db.execute(sorgu).scalars())
+    # Her sirket icin, o sirkette bu kullanicinin sahip oldugu izin kodlarini
+    # nesnenin uzerine ekliyoruz - SirketOzet semasi bunu izin_kodlari olarak okur.
+    for s in sirketler:
+        s.izin_kodlari = _izin_kodlarini_getir(db, kullanici_id, s.id)
+    return sirketler
 
 
 @router.post("/login", response_model=GirisYaniti)
