@@ -9,7 +9,7 @@ class GirisIstegi(BaseModel):
 class SirketOzet(BaseModel):
     id: int
     unvan: str
-
+    izin_kodlari: list[str] = []
     class Config:
         from_attributes = True
         
