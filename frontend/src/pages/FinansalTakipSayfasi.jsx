@@ -33,6 +33,8 @@ function BasitTablo({ basliklar, satirlar, render }) {
   );
 }
 
+// Cari ID -> unvan haritasi. Cari ID gorunen her yerde isim de gosterebilmek icin
+// carileri bir kere cekip id bazli bir haritaya donusturuyoruz.
 function useCariHaritasi() {
   const [harita, setHarita] = useState({});
   useEffect(() => {
@@ -45,6 +47,14 @@ function useCariHaritasi() {
       .catch(() => {});
   }, []);
   return harita;
+}
+
+function useCariler() {
+  const [cariler, setCariler] = useState([]);
+  useEffect(() => {
+    api.get('/cariler').then((r) => setCariler(r.data)).catch(() => {});
+  }, []);
+  return cariler;
 }
 
 function useHarcamaTurleri() {
@@ -61,6 +71,11 @@ function cariGoster(id, harita) {
   return unvan ? `#${id} — ${unvan}` : `#${id}`;
 }
 
+// Odeme/tahsilat islemlerinde nakit/banka secimini sorar. TRY disi bir
+// para biriminde NAKIT secilirse, guncel kuru otomatik ceker ve kullaniciya
+// onaylatir/degistirtir (kasa'ya dogru TL karsiligiyla yazilmasi icin).
+// Iptal edilirse null doner, secim yapilirsa
+// { odeme_yontemi, banka_hesap_id, kur? } doner.
 async function odemeYontemiSor(paraBirimi = 'TRY') {
   const yanit = window.prompt('Ödeme yöntemi? "nakit" yazın ya da banka hesap ID girin:', 'nakit');
   if (yanit === null || yanit.trim() === '') return null;
@@ -104,6 +119,7 @@ function CekSekmesi() {
   const [form, setForm] = useState({ tip: 'ALINAN', cek_no: '', banka_adi: '', cari_id: '', tutar: '', vade_tarihi: '', alinma_verilme_tarihi: '' });
   const [hata, setHata] = useState(null);
   const cariHaritasi = useCariHaritasi();
+  const cariler = useCariler();
 
   function yukle() {
     api.get('/cekler').then((r) => setCekler(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
@@ -141,6 +157,14 @@ function CekSekmesi() {
     } catch (err) { setHata(hataMesajiCikar(err)); }
   }
 
+  async function durumuGeriAl(cekId) {
+    if (!window.confirm('Bu çekin durumunu "Portföyde"ye geri almak istediğinize emin misiniz? Oluşan Kasa/Banka hareketi silinecek.')) return;
+    try {
+      await api.put(`/cekler/${cekId}/durumu-geri-al`);
+      yukle();
+    } catch (err) { setHata(hataMesajiCikar(err)); }
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
@@ -163,8 +187,11 @@ function CekSekmesi() {
             <Alan etiket="Banka">
               <input value={form.banka_adi} onChange={(e) => setForm((f) => ({ ...f, banka_adi: e.target.value }))} style={girdiStili} />
             </Alan>
-            <Alan etiket="Cari ID">
-              <input type="number" value={form.cari_id} onChange={(e) => setForm((f) => ({ ...f, cari_id: e.target.value }))} style={girdiStili} />
+            <Alan etiket="Cari (opsiyonel)">
+              <select value={form.cari_id} onChange={(e) => setForm((f) => ({ ...f, cari_id: e.target.value }))} style={girdiStili}>
+                <option value="">Seçin...</option>
+                {cariler.map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
+              </select>
             </Alan>
             <Alan etiket="Tutar (TL)">
               <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
@@ -194,14 +221,19 @@ function CekSekmesi() {
               <td style={{ padding: '10px 16px' }}>{c.vade_tarihi}</td>
               <td style={{ padding: '10px 16px' }}><Etiket ton={CEK_DURUM_TON[c.durum]}>{CEK_DURUM_METIN[c.durum]}</Etiket></td>
               <td style={{ padding: '10px 16px' }}>
-                {c.durum === 'PORTFOYDE' && (
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <button onClick={() => ciroEt(c.id)} style={eylemChipStili('lacivert')}>Ciro et</button>
-                    <button onClick={() => tahsilEtVeyaOde(c)} style={eylemChipStili('yesil')}>
-                      {c.tip === 'ALINAN' ? 'Tahsil et' : 'Öde'}
-                    </button>
-                  </div>
-                )}
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {c.durum === 'PORTFOYDE' && (
+                    <>
+                      <button onClick={() => ciroEt(c.id)} style={eylemChipStili('lacivert')}>Ciro et</button>
+                      <button onClick={() => tahsilEtVeyaOde(c)} style={eylemChipStili('yesil')}>
+                        {c.tip === 'ALINAN' ? 'Tahsil et' : 'Öde'}
+                      </button>
+                    </>
+                  )}
+                  {(c.durum === 'TAHSIL_EDILDI' || c.durum === 'ODENDI') && (
+                    <button onClick={() => durumuGeriAl(c.id)} style={eylemChipStili('kirmizi')}>Geri Al</button>
+                  )}
+                </div>
               </td>
             </tr>
           )}
@@ -1190,6 +1222,22 @@ function PersonelSekmesi() {
     } catch (err) { setHata(hataMesajiCikar(err)); }
   }
 
+  async function odemeGeriAl(odemeId) {
+    if (!window.confirm('Bu ödemeyi geri almak istediğinize emin misiniz? Oluşan Kasa/Banka hareketi silinecek.')) return;
+    try {
+      await api.put(`/personel-odemeleri/${odemeId}/odemeyi-geri-al`);
+      odemeleriGoster(seciliPersonel);
+    } catch (err) { setHata(hataMesajiCikar(err)); }
+  }
+
+  async function odemeSil(odemeId) {
+    if (!window.confirm('Bu tahakkuk kaydını silmek istediğinize emin misiniz?')) return;
+    try {
+      await api.delete(`/personel-odemeleri/${odemeId}`);
+      odemeleriGoster(seciliPersonel);
+    } catch (err) { setHata(hataMesajiCikar(err)); }
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
@@ -1269,9 +1317,16 @@ function PersonelSekmesi() {
                   <td style={{ padding: '8px 0' }}>{paraFormat(o.tutar)}</td>
                   <td style={{ padding: '8px 0' }}><Etiket ton={o.odendi_mi ? 'yesil' : 'amber'}>{o.odendi_mi ? 'Ödendi' : 'Bekliyor'}</Etiket></td>
                   <td style={{ padding: '8px 0' }}>
-                    {!o.odendi_mi && (
-                      <button onClick={() => ode(o.id)} style={eylemChipStili('lacivert')}>Öde</button>
-                    )}
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      {o.odendi_mi ? (
+                        <button onClick={() => odemeGeriAl(o.id)} style={eylemChipStili('kirmizi')}>Geri Al</button>
+                      ) : (
+                        <>
+                          <button onClick={() => ode(o.id)} style={eylemChipStili('lacivert')}>Öde</button>
+                          <button onClick={() => odemeSil(o.id)} style={eylemChipStili('kirmizi')}>Sil</button>
+                        </>
+                      )}
+                    </div>
                   </td>
                 </tr>
               )}
@@ -1314,6 +1369,14 @@ function BakimSekmesi() {
         banka_hesap_id: form.odeme_yontemi === 'BANKA' ? Number(form.banka_hesap_id) : null,
       });
       setFormAcik(false);
+      yukle();
+    } catch (err) { setHata(hataMesajiCikar(err)); }
+  }
+
+  async function sil(bakimId) {
+    if (!window.confirm('Bu bakım kaydını silmek istediğinize emin misiniz? Oluşan Kasa/Banka hareketi bu işlemle silinmez.')) return;
+    try {
+      await api.delete(`/bakim-kayitlari/${bakimId}`);
       yukle();
     } catch (err) { setHata(hataMesajiCikar(err)); }
   }
@@ -1375,7 +1438,7 @@ function BakimSekmesi() {
 
       <Kart style={{ padding: 0 }}>
         <BasitTablo
-          basliklar={['Seri No ID', 'Tarih', 'Tip', 'Açıklama', 'Tutar']}
+          basliklar={['Seri No ID', 'Tarih', 'Tip', 'Açıklama', 'Tutar', '']}
           satirlar={liste}
           render={(b) => (
             <tr key={b.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
@@ -1384,6 +1447,9 @@ function BakimSekmesi() {
               <td style={{ padding: '10px 16px' }}><Etiket ton={b.tip === 'GELIR' ? 'yesil' : 'kirmizi'}>{b.tip === 'GELIR' ? 'Gelir' : 'Gider'}</Etiket></td>
               <td style={{ padding: '10px 16px' }}>{b.aciklama || '—'}</td>
               <td style={{ padding: '10px 16px', fontWeight: 500 }}>{paraFormat(b.tutar)}</td>
+              <td style={{ padding: '10px 16px' }}>
+                <button onClick={() => sil(b.id)} style={eylemChipStili('kirmizi')}>Sil</button>
+              </td>
             </tr>
           )}
         />
@@ -1415,6 +1481,14 @@ function LeasingSekmesi() {
     if (!secim) return;
     try {
       await api.put(`/leasing-odemeleri/${odemeId}/ode`, { odeme_tarihi: new Date().toISOString().slice(0, 10), ...secim });
+      planiGoster(seciliPlan.id);
+    } catch (err) { setHata(hataMesajiCikar(err)); }
+  }
+
+  async function odemeyiGeriAl(odemeId) {
+    if (!window.confirm('Bu ödemeyi geri almak istediğinize emin misiniz? Oluşan Kasa/Banka hareketi silinecek.')) return;
+    try {
+      await api.put(`/leasing-odemeleri/${odemeId}/odemeyi-geri-al`);
       planiGoster(seciliPlan.id);
     } catch (err) { setHata(hataMesajiCikar(err)); }
   }
@@ -1456,7 +1530,9 @@ function LeasingSekmesi() {
                 <td style={{ padding: '8px 16px' }}>{paraFormat(t.tutar)}</td>
                 <td style={{ padding: '8px 16px' }}><Etiket ton={t.odendi_mi ? 'yesil' : 'amber'}>{t.odendi_mi ? 'Ödendi' : 'Bekliyor'}</Etiket></td>
                 <td style={{ padding: '8px 16px' }}>
-                  {!t.odendi_mi && (
+                  {t.odendi_mi ? (
+                    <button onClick={() => odemeyiGeriAl(t.id)} style={eylemChipStili('kirmizi')}>Geri Al</button>
+                  ) : (
                     <button onClick={() => odemeYap(t.id)} style={eylemChipStili('lacivert')}>Öde</button>
                   )}
                 </td>
@@ -1476,6 +1552,7 @@ function KiralamaSekmesi() {
   const [form, setForm] = useState({ stok_seri_no_id: '', kiraci_cari_id: '', baslangic_tarihi: new Date().toISOString().slice(0, 10), aylik_kira_tutari: '', para_birimi: 'TRY' });
   const [hata, setHata] = useState(null);
   const cariHaritasi = useCariHaritasi();
+  const cariler = useCariler();
   const [seciliSozlesme, setSeciliSozlesme] = useState(null);
   const [odemeler, setOdemeler] = useState(null);
   const [odemeForm, setOdemeForm] = useState({ donem_basi: '', donem_sonu: '', tutar: '' });
@@ -1527,6 +1604,14 @@ function KiralamaSekmesi() {
     } catch (err) { setHata(hataMesajiCikar(err)); }
   }
 
+  async function tahsilatiGeriAl(odemeId) {
+    if (!window.confirm('Bu tahsilatı geri almak istediğinize emin misiniz? Oluşan Kasa/Banka hareketi silinecek.')) return;
+    try {
+      await api.put(`/kiralama-odemeleri/${odemeId}/tahsilati-geri-al`);
+      odemeleriGoster(seciliSozlesme);
+    } catch (err) { setHata(hataMesajiCikar(err)); }
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
@@ -1540,8 +1625,11 @@ function KiralamaSekmesi() {
             <Alan etiket="Stok seri no ID">
               <input required type="number" value={form.stok_seri_no_id} onChange={(e) => setForm((f) => ({ ...f, stok_seri_no_id: e.target.value }))} style={girdiStili} />
             </Alan>
-            <Alan etiket="Kiracı cari ID">
-              <input required type="number" value={form.kiraci_cari_id} onChange={(e) => setForm((f) => ({ ...f, kiraci_cari_id: e.target.value }))} style={girdiStili} />
+            <Alan etiket="Kiracı">
+              <select required value={form.kiraci_cari_id} onChange={(e) => setForm((f) => ({ ...f, kiraci_cari_id: e.target.value }))} style={girdiStili}>
+                <option value="">Seçin...</option>
+                {cariler.map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
+              </select>
             </Alan>
             <Alan etiket="Başlangıç tarihi">
               <input required type="date" value={form.baslangic_tarihi} onChange={(e) => setForm((f) => ({ ...f, baslangic_tarihi: e.target.value }))} style={girdiStili} />
@@ -1603,7 +1691,9 @@ function KiralamaSekmesi() {
                   <td style={{ padding: '8px 0' }}>{paraFormat(o.tutar)}</td>
                   <td style={{ padding: '8px 0' }}><Etiket ton={o.odendi_mi ? 'yesil' : 'amber'}>{o.odendi_mi ? 'Tahsil Edildi' : 'Bekliyor'}</Etiket></td>
                   <td style={{ padding: '8px 0' }}>
-                    {!o.odendi_mi && (
+                    {o.odendi_mi ? (
+                      <button onClick={() => tahsilatiGeriAl(o.id)} style={eylemChipStili('kirmizi')}>Geri Al</button>
+                    ) : (
                       <button onClick={() => tahsilEt(o.id)} style={eylemChipStili('lacivert')}>Tahsil et</button>
                     )}
                   </td>
@@ -1620,6 +1710,7 @@ function KiralamaSekmesi() {
 // ============================================================== TAKSİTLİ SATIŞ
 function TaksitSekmesi() {
   const [hata, setHata] = useState(null);
+  const cariler = useCariler();
   const [vadesiGecenler, setVadesiGecenler] = useState([]);
   const [formAcik, setFormAcik] = useState(false);
   const [form, setForm] = useState({
@@ -1665,6 +1756,16 @@ function TaksitSekmesi() {
     } catch (err) { setHata(hataMesajiCikar(err)); }
   }
 
+  async function tahsilatiGeriAl(taksitId) {
+    if (!window.confirm('Bu tahsilatı geri almak istediğinize emin misiniz? Oluşan Kasa/Banka hareketi silinecek.')) return;
+    try {
+      await api.put(`/taksit-detay/${taksitId}/tahsilati-geri-al`);
+      const { data } = await api.get(`/taksitli-satis-planlari/${olusanPlan.id}/taksitler`);
+      setTaksitler(data);
+      vadesiGecenleriYukle();
+    } catch (err) { setHata(hataMesajiCikar(err)); }
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
@@ -1675,8 +1776,11 @@ function TaksitSekmesi() {
       {formAcik && (
         <Kart style={{ marginBottom: 16 }}>
           <form onSubmit={kaydet} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-            <Alan etiket="Müşteri cari ID">
-              <input required type="number" value={form.musteri_cari_id} onChange={(e) => setForm((f) => ({ ...f, musteri_cari_id: e.target.value }))} style={girdiStili} />
+            <Alan etiket="Müşteri">
+              <select required value={form.musteri_cari_id} onChange={(e) => setForm((f) => ({ ...f, musteri_cari_id: e.target.value }))} style={girdiStili}>
+                <option value="">Seçin...</option>
+                {cariler.map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
+              </select>
             </Alan>
             <Alan etiket="Stok seri no ID (opsiyonel)">
               <input type="number" value={form.stok_seri_no_id} onChange={(e) => setForm((f) => ({ ...f, stok_seri_no_id: e.target.value }))} style={girdiStili} />
@@ -1713,7 +1817,9 @@ function TaksitSekmesi() {
                 <td style={{ padding: '8px 16px' }}>{paraFormat(t.tutar)}</td>
                 <td style={{ padding: '8px 16px' }}><Etiket ton={t.odendi_mi ? 'yesil' : 'amber'}>{t.odendi_mi ? 'Tahsil Edildi' : 'Bekliyor'}</Etiket></td>
                 <td style={{ padding: '8px 16px' }}>
-                  {!t.odendi_mi && (
+                  {t.odendi_mi ? (
+                    <button onClick={() => tahsilatiGeriAl(t.id)} style={eylemChipStili('kirmizi')}>Geri Al</button>
+                  ) : (
                     <button onClick={() => tahsilEt(t.id)} style={eylemChipStili('lacivert')}>Tahsil et</button>
                   )}
                 </td>
@@ -1779,6 +1885,22 @@ function SabitGiderSekmesi() {
     } catch (err) { setHata(hataMesajiCikar(err)); }
   }
 
+  async function odemeyiGeriAl(giderId) {
+    if (!window.confirm('Bu ödemeyi geri almak istediğinize emin misiniz? Oluşan Kasa/Banka hareketi silinecek.')) return;
+    try {
+      await api.put(`/sabit-giderler/${giderId}/odemeyi-geri-al`);
+      yukle();
+    } catch (err) { setHata(hataMesajiCikar(err)); }
+  }
+
+  async function sil(giderId) {
+    if (!window.confirm('Bu gider kaydını silmek istediğinize emin misiniz?')) return;
+    try {
+      await api.delete(`/sabit-giderler/${giderId}`);
+      yukle();
+    } catch (err) { setHata(hataMesajiCikar(err)); }
+  }
+
   const kategoriAdi = (id) => kategoriler.find((k) => k.id === id)?.ad || '—';
 
   return (
@@ -1829,9 +1951,16 @@ function SabitGiderSekmesi() {
               <td style={{ padding: '10px 16px' }}>{g.aciklama || '—'}</td>
               <td style={{ padding: '10px 16px' }}><Etiket ton={g.odendi_mi ? 'yesil' : 'amber'}>{g.odendi_mi ? 'Ödendi' : 'Bekliyor'}</Etiket></td>
               <td style={{ padding: '10px 16px' }}>
-                {!g.odendi_mi && (
-                  <button onClick={() => ode(g.id)} style={eylemChipStili('lacivert')}>Öde</button>
-                )}
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {g.odendi_mi ? (
+                    <button onClick={() => odemeyiGeriAl(g.id)} style={eylemChipStili('kirmizi')}>Geri Al</button>
+                  ) : (
+                    <>
+                      <button onClick={() => ode(g.id)} style={eylemChipStili('lacivert')}>Öde</button>
+                      <button onClick={() => sil(g.id)} style={eylemChipStili('kirmizi')}>Sil</button>
+                    </>
+                  )}
+                </div>
               </td>
             </tr>
           )}
@@ -1851,6 +1980,7 @@ function BorcSekmesi() {
   const [hata, setHata] = useState(null);
   const [bakiyeler, setBakiyeler] = useState({});
   const cariHaritasi = useCariHaritasi();
+  const cariler = useCariler();
 
   function yukle() {
     api.get('/borclar').then((r) => setListe(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
@@ -1903,8 +2033,11 @@ function BorcSekmesi() {
                 <option value="ORTAGA_VERILEN">Ortağa Verilen</option>
               </select>
             </Alan>
-            <Alan etiket="Cari ID">
-              <input required type="number" value={form.cari_id} onChange={(e) => setForm((f) => ({ ...f, cari_id: e.target.value }))} style={girdiStili} />
+            <Alan etiket="Cari">
+              <select required value={form.cari_id} onChange={(e) => setForm((f) => ({ ...f, cari_id: e.target.value }))} style={girdiStili}>
+                <option value="">Seçin...</option>
+                {cariler.map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
+              </select>
             </Alan>
             <Alan etiket="Tutar">
               <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
@@ -1919,7 +2052,7 @@ function BorcSekmesi() {
 
       <Kart style={{ padding: 0 }}>
         <BasitTablo
-          basliklar={['Tip', 'Cari ID', 'Toplam Borç', 'Kalan Bakiye', '']}
+          basliklar={['Tip', 'Cari', 'Toplam Borç', 'Kalan Bakiye', '']}
           satirlar={liste}
           render={(b) => (
             <tr key={b.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
