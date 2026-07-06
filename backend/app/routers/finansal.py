@@ -473,3 +473,138 @@ def bakim_kaydi_sil(bakim_id: int, sirket_id: int = Depends(aktif_sirket_id_geti
     db.delete(kayit)
     db.commit()
     return {"silindi": True}
+    # ============================================================================ ÇEK - DURUM GERİ AL
+@router.put("/cekler/{cek_id}/durumu-geri-al", dependencies=[Depends(izin_gerektir("CEK_DUZENLE"))])
+def cek_durumunu_geri_al(
+    cek_id: int,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Yanlislikla 'Tahsil Edildi'/'Odendi' isaretlenmis bir cekin durumunu
+    'Portfoyde'ye geri dondurur; olusan Kasa/Banka hareketini ve son durum
+    gecmisi kaydini siler.
+    """
+    cek = db.get(Cek, cek_id)
+    if cek is None or cek.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Çek bulunamadı.")
+    if cek.durum not in (CekDurum.TAHSIL_EDILDI, CekDurum.ODENDI):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Sadece tahsil edilmiş/ödenmiş bir çekin durumu geri alınabilir.")
+
+    from app.models.banka import KasaHareketi, BankaHareketi
+    for h in list(db.execute(
+        select(KasaHareketi).where(KasaHareketi.kaynak_tablo == "CEKLER", KasaHareketi.kaynak_id == cek_id)
+    ).scalars()):
+        db.delete(h)
+    for h in list(db.execute(
+        select(BankaHareketi).where(BankaHareketi.kaynak_tablo == "CEKLER", BankaHareketi.kaynak_id == cek_id)
+    ).scalars()):
+        db.delete(h)
+
+    son_gecmis = db.execute(
+        select(CekGecmis).where(CekGecmis.cek_id == cek_id).order_by(CekGecmis.id.desc())
+    ).scalars().first()
+    if son_gecmis is not None:
+        db.delete(son_gecmis)
+
+    cek.durum = CekDurum.PORTFOYDE
+    db.commit()
+    return {"geri_alindi": True}
+
+
+# ========================================================================= LEASING - ÖDEME GERİ AL
+@router.put("/leasing-odemeleri/{odeme_id}/odemeyi-geri-al", dependencies=[Depends(izin_gerektir("LEASING_DUZENLE"))])
+def leasing_odemesini_geri_al(
+    odeme_id: int,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    odeme = db.get(LeasingOdeme, odeme_id)
+    if odeme is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ödeme kaydı bulunamadı.")
+    sozlesme = db.get(LeasingSozlesme, odeme.leasing_id)
+    if sozlesme is None or sozlesme.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ödeme kaydı bulunamadı.")
+    if not odeme.odendi_mi:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bu taksit zaten ödenmemiş durumda.")
+
+    from app.models.banka import KasaHareketi, BankaHareketi
+    for h in list(db.execute(
+        select(KasaHareketi).where(KasaHareketi.kaynak_tablo == "LEASING_ODEME", KasaHareketi.kaynak_id == odeme_id)
+    ).scalars()):
+        db.delete(h)
+    for h in list(db.execute(
+        select(BankaHareketi).where(BankaHareketi.kaynak_tablo == "LEASING_ODEME", BankaHareketi.kaynak_id == odeme_id)
+    ).scalars()):
+        db.delete(h)
+
+    odeme.odendi_mi = False
+    odeme.odeme_tarihi = None
+    db.commit()
+    return {"geri_alindi": True}
+
+
+# =================================================================== TAKSİTLİ SATIŞ - TAHSİLAT GERİ AL
+@router.put("/taksit-detay/{taksit_id}/tahsilati-geri-al", dependencies=[Depends(izin_gerektir("TAKSIT_DUZENLE"))])
+def taksit_tahsilatini_geri_al(
+    taksit_id: int,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    taksit = db.get(TaksitDetay, taksit_id)
+    if taksit is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Taksit bulunamadı.")
+    plan = db.get(TaksitliSatisPlani, taksit.plan_id)
+    if plan is None or plan.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Taksit bulunamadı.")
+    if not taksit.odendi_mi:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bu taksit zaten tahsil edilmemiş durumda.")
+
+    from app.models.banka import KasaHareketi, BankaHareketi
+    for h in list(db.execute(
+        select(KasaHareketi).where(KasaHareketi.kaynak_tablo == "TAKSIT_DETAY", KasaHareketi.kaynak_id == taksit_id)
+    ).scalars()):
+        db.delete(h)
+    for h in list(db.execute(
+        select(BankaHareketi).where(BankaHareketi.kaynak_tablo == "TAKSIT_DETAY", BankaHareketi.kaynak_id == taksit_id)
+    ).scalars()):
+        db.delete(h)
+
+    taksit.odendi_mi = False
+    taksit.odeme_tarihi = None
+    taksit.tahsilat_kaynak_tablo = None
+    taksit.tahsilat_kaynak_id = None
+    db.commit()
+    return {"geri_alindi": True}
+
+
+# ===================================================================== KİRALAMA - TAHSİLAT GERİ AL
+@router.put("/kiralama-odemeleri/{odeme_id}/tahsilati-geri-al", dependencies=[Depends(izin_gerektir("KIRALAMA_DUZENLE"))])
+def kiralama_odemesini_geri_al(
+    odeme_id: int,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    odeme = db.get(KiralamaOdeme, odeme_id)
+    if odeme is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ödeme kaydı bulunamadı.")
+    sozlesme = db.get(KiralamaSozlesme, odeme.sozlesme_id)
+    if sozlesme is None or sozlesme.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ödeme kaydı bulunamadı.")
+    if not odeme.odendi_mi:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bu dönem zaten tahsil edilmemiş durumda.")
+
+    from app.models.banka import KasaHareketi, BankaHareketi
+    for h in list(db.execute(
+        select(KasaHareketi).where(KasaHareketi.kaynak_tablo == "KIRALAMA_ODEME", KasaHareketi.kaynak_id == odeme_id)
+    ).scalars()):
+        db.delete(h)
+    for h in list(db.execute(
+        select(BankaHareketi).where(BankaHareketi.kaynak_tablo == "KIRALAMA_ODEME", BankaHareketi.kaynak_id == odeme_id)
+    ).scalars()):
+        db.delete(h)
+
+    odeme.odendi_mi = False
+    odeme.odeme_tarihi = None
+    db.commit()
+    return {"geri_alindi": True}
