@@ -690,6 +690,16 @@ function KalemTaksitPaneli({ kalem, akreditif, onKapat }) {
     }
   }
 
+  async function taksitOdemesiniGeriAl(taksitId) {
+    if (!window.confirm('Bu taksidin ödemesini geri almak istediğinize emin misiniz? Oluşan Kasa/Banka hareketi silinecek.')) return;
+    try {
+      await api.put(`/akreditif-kalem-taksitleri/${taksitId}/odemeyi-geri-al`);
+      yukle();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    }
+  }
+
   function yukle() {
     api.get(`/akreditif-kalemleri/${kalem.id}/taksitler`)
       .then((r) => setTaksitler(r.data))
@@ -749,7 +759,10 @@ function KalemTaksitPaneli({ kalem, akreditif, onKapat }) {
                         <td style={{ padding: '8px 10px' }}>{paraFormat(t.tutar, akreditif.para_birimi)}</td>
                         <td style={{ padding: '8px 10px' }}>
                           {t.odendi_mi ? (
-                            <Etiket ton="yesil">Ödendi</Etiket>
+                            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                              <Etiket ton="yesil">Ödendi</Etiket>
+                              <button onClick={() => taksitOdemesiniGeriAl(t.id)} style={eylemChipStili('kirmizi')}>Ödemeyi Geri Al</button>
+                            </div>
                           ) : (
                             <div style={{ display: 'flex', gap: 6 }}>
                               <button
@@ -891,6 +904,17 @@ function AkreditifSekmesi() {
     if (!window.confirm('Bu kalemi silmek istediğinize emin misiniz?')) return;
     try {
       await api.delete(`/akreditif-kalemleri/${kalemId}`);
+      kalemleriGoster(seciliAkreditif.id);
+      yukle();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    }
+  }
+
+  async function kalemOdemesiniGeriAl(kalemId) {
+    if (!window.confirm('Bu kalemin ödemesini geri almak istediğinize emin misiniz? Oluşan Kasa/Banka hareketi silinecek.')) return;
+    try {
+      await api.put(`/akreditif-kalemleri/${kalemId}/odemeyi-geri-al`);
       kalemleriGoster(seciliAkreditif.id);
       yukle();
     } catch (err) {
@@ -1065,7 +1089,9 @@ function AkreditifSekmesi() {
                           <td style={{ padding: '8px 0' }}>{k.vade_tarihi}</td>
                           <td style={{ padding: '8px 0' }}><Etiket ton={k.odendi_mi ? 'yesil' : 'amber'}>{k.odendi_mi ? 'Ödendi' : 'Bekliyor'}</Etiket></td>
                           <td style={{ padding: '8px 0' }}>
-                            {!k.odendi_mi && (
+                            {k.odendi_mi ? (
+                              <button onClick={() => kalemOdemesiniGeriAl(k.id)} style={eylemChipStili('kirmizi')}>Ödemeyi Geri Al</button>
+                            ) : (
                               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                                 <button
                                   onClick={() => setOdemeYapilacakKalemId((mevcut) => (mevcut === k.id ? null : k.id))}
@@ -1366,7 +1392,7 @@ function BakimSekmesi() {
   );
 }
 
-// ============================================================== LEASING (salt görüntüleme - olusturma siparis baglantili)
+// ============================================================== LEASING
 function LeasingSekmesi() {
   const [liste, setListe] = useState([]);
   const [hata, setHata] = useState(null);
