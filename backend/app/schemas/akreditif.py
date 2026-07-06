@@ -122,3 +122,7 @@ class AkreditifKalemTaksitOdeIstegi(BaseModel):
     odeme_yontemi: str  # "NAKIT" | "BANKA"
     banka_hesap_id: int | None = None
     kur: Decimal | None = None
+    
+class AkreditifKalemTaksitiDuzenleIstegi(BaseModel):
+    vade_tarihi: date
+    tutar: Decimal
