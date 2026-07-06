@@ -75,13 +75,15 @@ export function AuthSaglayici({ children }) {
       // sessizce yut - kritik olmayan bir tazeleme islemi
     }
   }, []);
-
+  
+const izinVarMi = useCallback((izinKodu) => {
+    if (!izinKodu) return true; // izin belirtilmemisse herkese acik
+    const aktifSirket = oturum?.sirketler?.find((s) => s.id === oturum.aktifSirketId);
+    return aktifSirket?.izin_kodlari?.includes(izinKodu) ?? false;
+  }, [oturum]);
+  
   return (
-    <AuthBaglami.Provider value={{ oturum, girisYap, cikisYap, sirketDegistir, sirketleriTazele, yukleniyor, hata }}>
-      {children}
-    </AuthBaglami.Provider>
-  );
-}
+    <AuthBaglami.Provider value={{ oturum, girisYap, cikisYap, sirketDegistir, sirketleriTazele, izinVarMi, yukleniyor, hata }}>
 
 export function useAuth() {
   const baglam = useContext(AuthBaglami);
