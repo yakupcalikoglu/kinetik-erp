@@ -1,4 +1,5 @@
 from decimal import Decimal
+from datetime import date
 from pydantic import BaseModel
 from app.models.cari import ParaBirimi
 
