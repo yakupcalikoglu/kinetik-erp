@@ -102,27 +102,37 @@ def akreditif_sil(
 ):
     """
     Akreditifi ve ona bagli TUM alt kayitlari (kalemler, kalem taksitleri,
-    maliyet dagitim kayitlari) siler. Onceki surumde maliyet dagitim
-    kayitlari unutulmustu, bu da FK ihlali ile silmeyi engelliyordu.
+    maliyet dagitim kayitlari) siler. Her asamadan sonra flush() ile silme
+    sirasi kesin olarak garanti edilir (once cocuk, sonra ebeveyn).
     """
     akreditif = _akreditif_getir_veya_404(db, akreditif_id, sirket_id)
     try:
-        # 1) Bu akreditife bagli maliyet dagitim kayitlari (varsa)
+        kalemler = list(db.execute(
+            select(AkreditifKalemi).where(AkreditifKalemi.akreditif_id == akreditif_id)
+        ).scalars())
+        kalem_idleri = [k.id for k in kalemler]
+
+        # 1) ONCE en alttaki cocuk: kalem taksitleri (varsa)
+        if kalem_idleri:
+            for taksit in list(db.execute(
+                select(AkreditifKalemTaksiti).where(AkreditifKalemTaksiti.kalem_id.in_(kalem_idleri))
+            ).scalars()):
+                db.delete(taksit)
+            db.flush()  # taksitlerin gercekten silindiginden emin ol
+
+        # 2) SONRA maliyet dagitim kayitlari (varsa)
         for dagitim in list(db.execute(
             select(AkreditifMaliyetDagitimi).where(AkreditifMaliyetDagitimi.akreditif_id == akreditif_id)
         ).scalars()):
             db.delete(dagitim)
+        db.flush()
 
-        # 2) Kalemler ve onlara bagli taksitler
-        for kalem in list(db.execute(
-            select(AkreditifKalemi).where(AkreditifKalemi.akreditif_id == akreditif_id)
-        ).scalars()):
-            for taksit in list(db.execute(
-                select(AkreditifKalemTaksiti).where(AkreditifKalemTaksiti.kalem_id == kalem.id)
-            ).scalars()):
-                db.delete(taksit)
+        # 3) SONRA kalemlerin kendisi
+        for kalem in kalemler:
             db.delete(kalem)
+        db.flush()  # kalemlerin gercekten silindiginden emin ol
 
+        # 4) EN SON akreditifin kendisi
         db.delete(akreditif)
         db.commit()
     except IntegrityError as e:
