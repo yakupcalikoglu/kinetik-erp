@@ -393,3 +393,83 @@ def bakim_kayitlarini_listele(
     if tip:
         sorgu = sorgu.where(BakimKaydi.tip == tip)
     return list(db.execute(sorgu).scalars())
+# ============================================================================ ÇEK - SİL
+@router.delete("/cekler/{cek_id}", dependencies=[Depends(izin_gerektir("CEK_DUZENLE"))])
+def cek_sil(cek_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
+    cek = db.get(Cek, cek_id)
+    if cek is None or cek.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Çek bulunamadı.")
+    if cek.durum != CekDurum.PORTFOYDE:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Sadece 'Portföyde' durumundaki çekler silinebilir (ciro/tahsil edilmiş çeklerin geçmişi korunur)."
+        )
+    for gecmis in list(db.execute(select(CekGecmis).where(CekGecmis.cek_id == cek_id)).scalars()):
+        db.delete(gecmis)
+    db.delete(cek)
+    db.commit()
+    return {"silindi": True}
+
+
+# ========================================================================= LEASING - SİL
+@router.delete("/leasing-sozlesmeleri/{leasing_id}", dependencies=[Depends(izin_gerektir("LEASING_DUZENLE"))])
+def leasing_sil(leasing_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
+    sozlesme = db.get(LeasingSozlesme, leasing_id)
+    if sozlesme is None or sozlesme.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Leasing sözleşmesi bulunamadı.")
+    odemeler = list(db.execute(select(LeasingOdeme).where(LeasingOdeme.leasing_id == leasing_id)).scalars())
+    if any(o.odendi_mi for o in odemeler):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ödenmiş taksiti olan bir sözleşme silinemez.")
+    for o in odemeler:
+        db.delete(o)
+    db.delete(sozlesme)
+    db.commit()
+    return {"silindi": True}
+
+
+# =================================================================== TAKSİTLİ SATIŞ - SİL
+@router.delete("/taksitli-satis-planlari/{plan_id}", dependencies=[Depends(izin_gerektir("TAKSIT_DUZENLE"))])
+def taksitli_satis_plani_sil(plan_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
+    plan = db.get(TaksitliSatisPlani, plan_id)
+    if plan is None or plan.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Taksit planı bulunamadı.")
+    taksitler = list(db.execute(select(TaksitDetay).where(TaksitDetay.plan_id == plan_id)).scalars())
+    if any(t.odendi_mi for t in taksitler):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Tahsil edilmiş taksiti olan bir plan silinemez.")
+    for t in taksitler:
+        db.delete(t)
+    db.delete(plan)
+    db.commit()
+    return {"silindi": True}
+
+
+# ===================================================================== KİRALAMA - SİL
+@router.delete("/kiralama-sozlesmeleri/{sozlesme_id}", dependencies=[Depends(izin_gerektir("KIRALAMA_DUZENLE"))])
+def kiralama_sil(sozlesme_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
+    sozlesme = db.get(KiralamaSozlesme, sozlesme_id)
+    if sozlesme is None or sozlesme.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Kiralama sözleşmesi bulunamadı.")
+    odemeler = list(db.execute(select(KiralamaOdeme).where(KiralamaOdeme.sozlesme_id == sozlesme_id)).scalars())
+    if any(o.odendi_mi for o in odemeler):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Tahsil edilmiş dönemi olan bir sözleşme silinemez.")
+    for o in odemeler:
+        db.delete(o)
+    db.delete(sozlesme)
+    db.commit()
+    return {"silindi": True}
+
+
+# ========================================================================= BAKIM - SİL
+@router.delete("/bakim-kayitlari/{bakim_id}", dependencies=[Depends(izin_gerektir("BAKIM_DUZENLE"))])
+def bakim_kaydi_sil(bakim_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
+    """
+    NOT: Bu kayit olusturulurken otomatik bir Kasa/Banka hareketi de acilmisti.
+    Bu silme islemi o para hareketini GERI ALMAZ - sadece bakim kaydini siler.
+    Gerekirse ilgili Kasa/Banka hareketini ayrica duzeltin.
+    """
+    kayit = db.get(BakimKaydi, bakim_id)
+    if kayit is None or kayit.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Bakım kaydı bulunamadı.")
+    db.delete(kayit)
+    db.commit()
+    return {"silindi": True}
