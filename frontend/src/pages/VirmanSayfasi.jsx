@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, hataMesajiCikar } from '../api/client';
-import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, Sekmeler } from '../components/Ortak';
+import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, Sekmeler, paraFormat, eylemChipStili, BosDurum } from '../components/Ortak';
 
 const SEKMELER = [
   { deger: 'banka-banka', etiket: 'Banka → Banka' },
@@ -16,6 +16,19 @@ function BasariMesaji({ children }) {
       {children}
     </div>
   );
+}
+
+function useUrunSecenekleri() {
+  const [urunler, setUrunler] = useState([]);
+  const [kartlar, setKartlar] = useState([]);
+  useEffect(() => {
+    api.get('/stok-seri-no').then((r) => setUrunler(r.data)).catch(() => {});
+    api.get('/stok-kartlari').then((r) => setKartlar(r.data)).catch(() => {});
+  }, []);
+  return urunler.map((u) => {
+    const kart = kartlar.find((k) => k.id === u.stok_karti_id);
+    return { ...u, etiket: kart ? `${u.seri_no} — ${kart.marka} ${kart.model}` : u.seri_no };
+  });
 }
 
 function BankaBankaVirmani() {
@@ -47,7 +60,7 @@ function BankaBankaVirmani() {
         kullanilan_kur: Number(form.kullanilan_kur),
         aciklama: form.aciklama || null,
       });
-      setBasari('Virman tamamlandı.');
+      setBasari('Virman tamamlandı. (Kayıt, Banka sayfasındaki Hareketler listesinde de görünür.)');
       setForm((f) => ({ ...f, tutar: '', aciklama: '' }));
     } catch (err) {
       setHata(hataMesajiCikar(err));
@@ -94,6 +107,9 @@ function BankaBankaVirmani() {
           <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Kaydediliyor...' : 'Virmanı yap'}</Buton>
         </div>
       </form>
+      <div style={{ fontSize: 12, color: 'var(--metin-soluk)', marginTop: 10 }}>
+        Yapılan virmanları görmek, düzenlemek veya silmek için <b>Banka → Hareketler</b> sekmesine bakın (tür: Transfer).
+      </div>
     </Kart>
   );
 }
@@ -128,7 +144,7 @@ function BankaCariVirmani() {
         tutar: form.tip === 'CIKIS' ? -Math.abs(Number(form.tutar)) : Math.abs(Number(form.tutar)),
         aciklama: form.aciklama || null,
       });
-      setBasari('Virman tamamlandı.');
+      setBasari('Virman tamamlandı. (Kayıt, Banka sayfasındaki Hareketler listesinde de görünür.)');
       setForm((f) => ({ ...f, tutar: '', aciklama: '' }));
     } catch (err) {
       setHata(hataMesajiCikar(err));
@@ -176,6 +192,9 @@ function BankaCariVirmani() {
           <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Kaydediliyor...' : 'Virmanı yap'}</Buton>
         </div>
       </form>
+      <div style={{ fontSize: 12, color: 'var(--metin-soluk)', marginTop: 10 }}>
+        Yapılan virmanları görmek, düzenlemek veya silmek için <b>Banka → Hareketler</b> sekmesine bakın.
+      </div>
     </Kart>
   );
 }
@@ -186,9 +205,15 @@ function CariCariVirmani() {
   const [hata, setHata] = useState(null);
   const [basari, setBasari] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
+  const [gecmis, setGecmis] = useState(null);
+
+  function gecmisiYukle() {
+    api.get('/virman/cari-cariye/gecmis').then((r) => setGecmis(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
+  }
 
   useEffect(() => {
     api.get('/cariler').then((r) => setCariler(r.data)).catch(() => {});
+    gecmisiYukle();
   }, []);
 
   async function kaydet(e) {
@@ -206,6 +231,7 @@ function CariCariVirmani() {
       });
       setBasari('Borç devri tamamlandı.');
       setForm((f) => ({ ...f, tutar: '', aciklama: '' }));
+      gecmisiYukle();
     } catch (err) {
       setHata(hataMesajiCikar(err));
     } finally {
@@ -213,60 +239,112 @@ function CariCariVirmani() {
     }
   }
 
+  async function geriAl(id) {
+    if (!window.confirm('Bu borç devrini geri almak istediğinize emin misiniz?')) return;
+    try {
+      await api.delete(`/virman/cari-cariye/${id}/geri-al`);
+      gecmisiYukle();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    }
+  }
+
   return (
-    <Kart>
-      <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 6 }}>Cariden cariye borç devri</div>
-      <div style={{ fontSize: 12.5, color: 'var(--metin-soluk)', marginBottom: 14 }}>
-        Kaynak carinin borcu/alacağı, girilen tutar kadar hedef cariye taşınır.
-      </div>
-      <HataMesaji>{hata}</HataMesaji>
-      <BasariMesaji>{basari}</BasariMesaji>
-      <form onSubmit={kaydet} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-        <Alan etiket="Kaynak cari (borcu devreden)">
-          <select required value={form.kaynak_cari_id} onChange={(e) => setForm((f) => ({ ...f, kaynak_cari_id: e.target.value }))} style={girdiStili}>
-            <option value="">Seçin...</option>
-            {cariler.map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
-          </select>
-        </Alan>
-        <Alan etiket="Hedef cari (borcu devralan)">
-          <select required value={form.hedef_cari_id} onChange={(e) => setForm((f) => ({ ...f, hedef_cari_id: e.target.value }))} style={girdiStili}>
-            <option value="">Seçin...</option>
-            {cariler.filter((c) => String(c.id) !== form.kaynak_cari_id).map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
-          </select>
-        </Alan>
-        <Alan etiket="Para birimi">
-          <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={girdiStili}>
-            <option value="TRY">TRY</option>
-            <option value="USD">USD</option>
-            <option value="EUR">EUR</option>
-            <option value="ALTIN">ALTIN</option>
-          </select>
-        </Alan>
-        <Alan etiket="Tutar">
-          <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
-        </Alan>
-        <Alan etiket="Açıklama">
-          <input value={form.aciklama} onChange={(e) => setForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
-        </Alan>
-        <div style={{ alignSelf: 'end' }}>
-          <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Kaydediliyor...' : 'Devri yap'}</Buton>
+    <div>
+      <Kart style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 6 }}>Cariden cariye borç devri</div>
+        <div style={{ fontSize: 12.5, color: 'var(--metin-soluk)', marginBottom: 14 }}>
+          Kaynak carinin borcu/alacağı, girilen tutar kadar hedef cariye taşınır.
         </div>
-      </form>
-    </Kart>
+        <HataMesaji>{hata}</HataMesaji>
+        <BasariMesaji>{basari}</BasariMesaji>
+        <form onSubmit={kaydet} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+          <Alan etiket="Kaynak cari (borcu devreden)">
+            <select required value={form.kaynak_cari_id} onChange={(e) => setForm((f) => ({ ...f, kaynak_cari_id: e.target.value }))} style={girdiStili}>
+              <option value="">Seçin...</option>
+              {cariler.map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
+            </select>
+          </Alan>
+          <Alan etiket="Hedef cari (borcu devralan)">
+            <select required value={form.hedef_cari_id} onChange={(e) => setForm((f) => ({ ...f, hedef_cari_id: e.target.value }))} style={girdiStili}>
+              <option value="">Seçin...</option>
+              {cariler.filter((c) => String(c.id) !== form.kaynak_cari_id).map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
+            </select>
+          </Alan>
+          <Alan etiket="Para birimi">
+            <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={girdiStili}>
+              <option value="TRY">TRY</option>
+              <option value="USD">USD</option>
+              <option value="EUR">EUR</option>
+              <option value="ALTIN">ALTIN</option>
+            </select>
+          </Alan>
+          <Alan etiket="Tutar">
+            <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
+          </Alan>
+          <Alan etiket="Açıklama">
+            <input value={form.aciklama} onChange={(e) => setForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
+          </Alan>
+          <div style={{ alignSelf: 'end' }}>
+            <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Kaydediliyor...' : 'Devri yap'}</Buton>
+          </div>
+        </form>
+      </Kart>
+
+      <Kart style={{ padding: 0 }}>
+        <div style={{ padding: '12px 16px', fontWeight: 600, fontSize: 13.5, borderBottom: '1px solid var(--kenarlik)' }}>
+          Geçmiş borç devirleri
+        </div>
+        {gecmis === null ? (
+          <div style={{ padding: 20, color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
+        ) : gecmis.length === 0 ? (
+          <BosDurum baslik="Henüz borç devri yapılmadı" />
+        ) : (
+          <table>
+            <thead>
+              <tr style={{ background: 'var(--zemin)' }}>
+                {['Tarih', 'Kaynak Cari', 'Hedef Cari', 'Tutar', 'Açıklama', ''].map((b) => (
+                  <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {gecmis.map((g) => (
+                <tr key={g.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                  <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{g.tarih}</td>
+                  <td style={{ padding: '10px 16px' }}>{g.kaynak_cari_unvan || `#${g.kaynak_cari_id}`}</td>
+                  <td style={{ padding: '10px 16px' }}>{g.hedef_cari_unvan || `#${g.hedef_cari_id}`}</td>
+                  <td style={{ padding: '10px 16px', fontWeight: 500 }}>{paraFormat(g.tutar, g.para_birimi)}</td>
+                  <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{g.aciklama || '—'}</td>
+                  <td style={{ padding: '10px 16px' }}>
+                    <button onClick={() => geriAl(g.id)} style={eylemChipStili('kirmizi')}>Geri Al</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Kart>
+    </div>
   );
 }
 
 function UrunCariVirmani() {
-  const [urunler, setUrunler] = useState([]);
+  const urunSecenekleri = useUrunSecenekleri();
   const [cariler, setCariler] = useState([]);
   const [form, setForm] = useState({ stok_seri_no_id: '', hedef_cari_id: '', aciklama: '' });
   const [hata, setHata] = useState(null);
   const [basari, setBasari] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
+  const [gecmis, setGecmis] = useState(null);
+
+  function gecmisiYukle() {
+    api.get('/virman/urun-cariye/gecmis').then((r) => setGecmis(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
+  }
 
   useEffect(() => {
-    api.get('/stok-seri-no').then((r) => setUrunler(r.data)).catch(() => {});
     api.get('/cariler').then((r) => setCariler(r.data)).catch(() => {});
+    gecmisiYukle();
   }, []);
 
   async function kaydet(e) {
@@ -281,6 +359,8 @@ function UrunCariVirmani() {
         aciklama: form.aciklama || null,
       });
       setBasari('Ürün sahiplik devri tamamlandı.');
+      setForm((f) => ({ ...f, aciklama: '' }));
+      gecmisiYukle();
     } catch (err) {
       setHata(hataMesajiCikar(err));
     } finally {
@@ -288,35 +368,82 @@ function UrunCariVirmani() {
     }
   }
 
+  async function geriAl(id) {
+    if (!window.confirm('Bu sahiplik devrini geri almak istediğinize emin misiniz? Ürün eski sahibine dönecek.')) return;
+    try {
+      await api.delete(`/virman/urun-cariye/${id}/geri-al`);
+      gecmisiYukle();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    }
+  }
+
   return (
-    <Kart>
-      <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 6 }}>Ürün sahiplik/zimmet devri</div>
-      <div style={{ fontSize: 12.5, color: 'var(--metin-soluk)', marginBottom: 14 }}>
-        Konsinye veya zimmetli bir ürünün ilişkili olduğu cari değiştirilir; ürünün durumu ve maliyetleri etkilenmez.
-      </div>
-      <HataMesaji>{hata}</HataMesaji>
-      <BasariMesaji>{basari}</BasariMesaji>
-      <form onSubmit={kaydet} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-        <Alan etiket="Ürün (seri no)">
-          <select required value={form.stok_seri_no_id} onChange={(e) => setForm((f) => ({ ...f, stok_seri_no_id: e.target.value }))} style={girdiStili}>
-            <option value="">Seçin...</option>
-            {urunler.map((u) => <option key={u.id} value={u.id}>{u.seri_no}</option>)}
-          </select>
-        </Alan>
-        <Alan etiket="Yeni sahip cari">
-          <select required value={form.hedef_cari_id} onChange={(e) => setForm((f) => ({ ...f, hedef_cari_id: e.target.value }))} style={girdiStili}>
-            <option value="">Seçin...</option>
-            {cariler.map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
-          </select>
-        </Alan>
-        <Alan etiket="Açıklama">
-          <input value={form.aciklama} onChange={(e) => setForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
-        </Alan>
-        <div style={{ alignSelf: 'end' }}>
-          <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Kaydediliyor...' : 'Devri yap'}</Buton>
+    <div>
+      <Kart style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 6 }}>Ürün sahiplik/zimmet devri</div>
+        <div style={{ fontSize: 12.5, color: 'var(--metin-soluk)', marginBottom: 14 }}>
+          Konsinye veya zimmetli bir ürünün ilişkili olduğu cari değiştirilir; ürünün durumu ve maliyetleri etkilenmez.
         </div>
-      </form>
-    </Kart>
+        <HataMesaji>{hata}</HataMesaji>
+        <BasariMesaji>{basari}</BasariMesaji>
+        <form onSubmit={kaydet} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+          <Alan etiket="Ürün">
+            <select required value={form.stok_seri_no_id} onChange={(e) => setForm((f) => ({ ...f, stok_seri_no_id: e.target.value }))} style={girdiStili}>
+              <option value="">Seçin...</option>
+              {urunSecenekleri.map((u) => <option key={u.id} value={u.id}>{u.etiket}</option>)}
+            </select>
+          </Alan>
+          <Alan etiket="Yeni sahip cari">
+            <select required value={form.hedef_cari_id} onChange={(e) => setForm((f) => ({ ...f, hedef_cari_id: e.target.value }))} style={girdiStili}>
+              <option value="">Seçin...</option>
+              {cariler.map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
+            </select>
+          </Alan>
+          <Alan etiket="Açıklama">
+            <input value={form.aciklama} onChange={(e) => setForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
+          </Alan>
+          <div style={{ alignSelf: 'end' }}>
+            <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Kaydediliyor...' : 'Devri yap'}</Buton>
+          </div>
+        </form>
+      </Kart>
+
+      <Kart style={{ padding: 0 }}>
+        <div style={{ padding: '12px 16px', fontWeight: 600, fontSize: 13.5, borderBottom: '1px solid var(--kenarlik)' }}>
+          Geçmiş sahiplik devirleri
+        </div>
+        {gecmis === null ? (
+          <div style={{ padding: 20, color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
+        ) : gecmis.length === 0 ? (
+          <BosDurum baslik="Henüz sahiplik devri yapılmadı" />
+        ) : (
+          <table>
+            <thead>
+              <tr style={{ background: 'var(--zemin)' }}>
+                {['Tarih', 'Ürün (Seri No)', 'Eski Sahip', 'Yeni Sahip', 'Açıklama', ''].map((b) => (
+                  <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {gecmis.map((g) => (
+                <tr key={g.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                  <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{g.tarih}</td>
+                  <td style={{ padding: '10px 16px', fontFamily: 'var(--font-mono)' }}>{g.seri_no || `#${g.stok_seri_no_id}`}</td>
+                  <td style={{ padding: '10px 16px' }}>{g.eski_cari_unvan || (g.eski_cari_id ? `#${g.eski_cari_id}` : '—')}</td>
+                  <td style={{ padding: '10px 16px' }}>{g.yeni_cari_unvan || `#${g.yeni_cari_id}`}</td>
+                  <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{g.aciklama || '—'}</td>
+                  <td style={{ padding: '10px 16px' }}>
+                    <button onClick={() => geriAl(g.id)} style={eylemChipStili('kirmizi')}>Geri Al</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Kart>
+    </div>
   );
 }
 
