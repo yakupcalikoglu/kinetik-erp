@@ -375,3 +375,54 @@ def kasa_bakiye(
     ]
 
     return KasaBakiyeYanit(bakiyeler=bakiyeler, net_bakiye_try_toplam=try_toplam)
+    # --------------------------------------------------------- KASA HAREKETİ - SİL
+@router.delete("/kasa-hareketleri/{hareket_id}", dependencies=[Depends(izin_gerektir("KASA_DUZENLE"))])
+def kasa_hareketi_sil(
+    hareket_id: int,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Sadece MANUEL girilmis (kaynak_tablo=None) kasa hareketleri silinebilir.
+    Baska bir modulden (Akreditif, Bakim, Sabit Gider vb.) otomatik acilmis
+    bir hareketi buradan silmek, o modulun kaydiyla senkronu bozar; bu yuzden
+    kaynagi olan hareketler icin "Odemeyi Geri Al" (ilgili modulde) kullanilmalidir.
+    """
+    kayit = db.get(KasaHareketi, hareket_id)
+    if kayit is None or kayit.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Kasa hareketi bulunamadı.")
+    if kayit.kaynak_tablo is not None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Bu hareket '{kayit.kaynak_tablo}' modülünden otomatik oluşturulmuştur; "
+            "buradan silinemez. İlgili modülde 'Ödemeyi Geri Al' seçeneğini kullanın."
+        )
+    db.delete(kayit)
+    db.commit()
+    return {"silindi": True}
+
+
+# ------------------------------------------------------- BANKA HAREKETİ - SİL
+@router.delete("/banka-hareketleri/{hareket_id}", dependencies=[Depends(izin_gerektir("BANKA_DUZENLE"))])
+def banka_hareketi_sil(
+    hareket_id: int,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Sadece MANUEL girilmis (kaynak_tablo=None) banka hareketleri silinebilir.
+    Cift-tarafli (transfer/doviz) hareketlerde SADECE bu satir silinir; karsi
+    hesaptaki es kaydi ayrica silinmelidir (otomatik eslestirme ID'si tutulmuyor).
+    """
+    kayit = db.get(BankaHareketi, hareket_id)
+    if kayit is None or kayit.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Banka hareketi bulunamadı.")
+    if kayit.kaynak_tablo is not None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Bu hareket '{kayit.kaynak_tablo}' modülünden otomatik oluşturulmuştur; "
+            "buradan silinemez. İlgili modülde 'Ödemeyi Geri Al' seçeneğini kullanın."
+        )
+    db.delete(kayit)
+    db.commit()
+    return {"silindi": True}
