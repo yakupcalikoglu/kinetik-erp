@@ -1,12 +1,97 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api, hataMesajiCikar } from '../api/client';
-import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji } from '../components/Ortak';
+import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, BosDurum, Etiket, paraFormat, eylemChipStili } from '../components/Ortak';
 
 function bosKalem() {
   return { aciklama: '', miktar: 1, birim_fiyat: '', kdv_orani: 20 };
 }
 
+function useCariler() {
+  const [cariler, setCariler] = useState([]);
+  useEffect(() => {
+    api.get('/cariler').then((r) => setCariler(r.data)).catch(() => {});
+  }, []);
+  return cariler;
+}
+
+const DURUM_TON = { TASLAK: 'notr', ONAYLANDI: 'amber', FATURALASTI: 'yesil' };
+const DURUM_METIN = { TASLAK: 'Taslak', ONAYLANDI: 'Onaylandı', FATURALASTI: 'Faturalaştı' };
+
+function GecmisProformalar({ cariler, yenidenYukleTetik, onGoruntule }) {
+  const [liste, setListe] = useState([]);
+  const [hata, setHata] = useState(null);
+  const [yukleniyor, setYukleniyor] = useState(true);
+
+  function yukle() {
+    setYukleniyor(true);
+    api.get('/proforma-faturalar')
+      .then((r) => setListe(r.data))
+      .catch((e) => setHata(hataMesajiCikar(e)))
+      .finally(() => setYukleniyor(false));
+  }
+  useEffect(yukle, [yenidenYukleTetik]); // eslint-disable-line
+
+  function cariUnvani(id) {
+    const c = cariler.find((x) => x.id === id);
+    return c ? c.unvan : `#${id}`;
+  }
+
+  async function sil(proforma) {
+    if (!window.confirm(`${proforma.proforma_no} numaralı proformayı silmek istediğinize emin misiniz?`)) return;
+    try {
+      await api.delete(`/proforma-faturalar/${proforma.id}`);
+      yukle();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    }
+  }
+
+  return (
+    <Kart style={{ padding: 0, marginTop: 20 }}>
+      <div style={{ padding: '14px 16px', fontWeight: 600, fontSize: 14, borderBottom: '1px solid var(--kenarlik)' }}>
+        Geçmiş proformalar
+      </div>
+      <HataMesaji>{hata}</HataMesaji>
+      {yukleniyor ? (
+        <div style={{ padding: 20, color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
+      ) : liste.length === 0 ? (
+        <BosDurum baslik="Henüz proforma oluşturulmadı" />
+      ) : (
+        <table>
+          <thead>
+            <tr style={{ background: 'var(--zemin)' }}>
+              {['Proforma No', 'Cari', 'Tarih', 'Genel Toplam', 'Durum', 'İşlem'].map((b) => (
+                <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {liste.map((p) => (
+              <tr key={p.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                <td style={{ padding: '10px 16px', fontWeight: 500 }}>{p.proforma_no}</td>
+                <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{cariUnvani(p.cari_id)}</td>
+                <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{p.tarih}</td>
+                <td style={{ padding: '10px 16px', fontWeight: 500 }}>{paraFormat(p.genel_toplam, p.para_birimi)}</td>
+                <td style={{ padding: '10px 16px' }}><Etiket ton={DURUM_TON[p.durum]}>{DURUM_METIN[p.durum] || p.durum}</Etiket></td>
+                <td style={{ padding: '10px 16px' }}>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button onClick={() => onGoruntule(p)} style={eylemChipStili('lacivert')}>Görüntüle</button>
+                    {p.durum !== 'FATURALASTI' && (
+                      <button onClick={() => sil(p)} style={eylemChipStili('kirmizi')}>Sil</button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </Kart>
+  );
+}
+
 export default function ProformaFaturaSayfasi() {
+  const cariler = useCariler();
   const [form, setForm] = useState({
     proforma_no: '', cari_id: '', tarih: new Date().toISOString().slice(0, 10), para_birimi: 'TRY', notlar: '',
   });
@@ -16,6 +101,7 @@ export default function ProformaFaturaSayfasi() {
   const [olusanFatura, setOlusanFatura] = useState(null);
   const [hata, setHata] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
+  const [gecmisYenidenYukleTetik, setGecmisYenidenYukleTetik] = useState(0);
 
   function kalemGuncelle(i, alan, deger) {
     setKalemler((liste) => liste.map((k, idx) => (idx === i ? { ...k, [alan]: deger } : k)));
@@ -37,6 +123,7 @@ export default function ProformaFaturaSayfasi() {
         })),
       });
       setOlusanProforma(data);
+      setGecmisYenidenYukleTetik((t) => t + 1);
     } catch (err) {
       setHata(hataMesajiCikar(err));
     } finally {
@@ -56,9 +143,24 @@ export default function ProformaFaturaSayfasi() {
       });
       setOlusanFatura(data);
       setOlusanProforma((p) => ({ ...p, durum: 'FATURALASTI' }));
+      setGecmisYenidenYukleTetik((t) => t + 1);
     } catch (err) {
       setHata(hataMesajiCikar(err));
     }
+  }
+
+  function yeniProformaBaslat() {
+    setOlusanProforma(null);
+    setOlusanFatura(null);
+    setFaturaNo('');
+    setForm({ proforma_no: '', cari_id: '', tarih: new Date().toISOString().slice(0, 10), para_birimi: 'TRY', notlar: '' });
+    setKalemler([bosKalem()]);
+  }
+
+  function gecmistenGoruntule(proforma) {
+    setOlusanProforma(proforma);
+    setOlusanFatura(null);
+    setFaturaNo('');
   }
 
   return (
@@ -74,8 +176,11 @@ export default function ProformaFaturaSayfasi() {
                 <input required value={form.proforma_no} onChange={(e) => setForm((f) => ({ ...f, proforma_no: e.target.value }))}
                   placeholder="PRF-2026-001" style={girdiStili} />
               </Alan>
-              <Alan etiket="Cari ID">
-                <input required type="number" value={form.cari_id} onChange={(e) => setForm((f) => ({ ...f, cari_id: e.target.value }))} style={girdiStili} />
+              <Alan etiket="Cari">
+                <select required value={form.cari_id} onChange={(e) => setForm((f) => ({ ...f, cari_id: e.target.value }))} style={girdiStili}>
+                  <option value="">Seçin...</option>
+                  {cariler.map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
+                </select>
               </Alan>
               <Alan etiket="Tarih">
                 <input required type="date" value={form.tarih} onChange={(e) => setForm((f) => ({ ...f, tarih: e.target.value }))} style={girdiStili} />
@@ -133,15 +238,18 @@ export default function ProformaFaturaSayfasi() {
         </form>
       ) : (
         <Kart>
-          <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 12 }}>
-            Proforma oluşturuldu: {olusanProforma.proforma_no}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 12 }}>
+              Proforma: {olusanProforma.proforma_no}
+            </div>
+            <Buton variant="ikincil" onClick={yeniProformaBaslat}>+ Yeni proforma</Buton>
           </div>
           <div style={{ fontSize: 13.5, color: 'var(--metin-ikincil)', marginBottom: 16 }}>
             Genel toplam: <strong>{Number(olusanProforma.genel_toplam).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} {olusanProforma.para_birimi}</strong>
-            {' '}— Durum: {olusanProforma.durum}
+            {' '}— Durum: {DURUM_METIN[olusanProforma.durum] || olusanProforma.durum}
           </div>
 
-          {!olusanFatura ? (
+          {olusanProforma.durum !== 'FATURALASTI' && !olusanFatura ? (
             <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
               <div style={{ flex: 1, maxWidth: 240 }}>
                 <Alan etiket="Fatura no">
@@ -150,13 +258,17 @@ export default function ProformaFaturaSayfasi() {
               </div>
               <Buton onClick={faturayaCevir} style={{ marginBottom: 14 }}>Faturaya çevir</Buton>
             </div>
-          ) : (
+          ) : olusanFatura ? (
             <div style={{ background: 'var(--yesil-acik)', color: 'var(--yesil)', padding: '12px 16px', borderRadius: 8, fontSize: 13.5 }}>
               Fatura oluşturuldu: <strong>{olusanFatura.fatura_no}</strong>
             </div>
+          ) : (
+            <div style={{ fontSize: 13, color: 'var(--metin-soluk)' }}>Bu proforma zaten faturalaştırılmış.</div>
           )}
         </Kart>
       )}
+
+      <GecmisProformalar cariler={cariler} yenidenYukleTetik={gecmisYenidenYukleTetik} onGoruntule={gecmistenGoruntule} />
     </div>
   );
 }
