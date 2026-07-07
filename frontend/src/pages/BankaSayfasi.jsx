@@ -358,7 +358,7 @@ function BankaHareketiDuzenleFormu({ hareket, hesaplar, onKaydedildi, onVazgec }
 
   return (
     <tr>
-      <td colSpan={5} style={{ padding: 0 }}>
+      <td colSpan={6} style={{ padding: 0 }}>
         <div style={{ padding: 16, background: 'var(--zemin)' }}>
           <form onSubmit={kaydet}>
             <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 12 }}>Hareketi düzenle</div>
@@ -458,6 +458,19 @@ function HareketlerSekmesi() {
     setAcikDetayId((mevcut) => (mevcut === h.id ? null : h.id));
   }
 
+  async function hareketiSil(hareketId, hareket) {
+    const uyari = ['HESAPLAR_ARASI_TRANSFER', 'DOVIZ_ALIM', 'DOVIZ_SATIM'].includes(hareket.tip)
+      ? '\n\nNOT: Bu bir transfer/döviz işlemi. Karşı hesaptaki eş kaydı bu işlemle silinmez, gerekirse onu da ayrıca silin.'
+      : '';
+    if (!window.confirm(`Bu banka hareketini silmek istediğinize emin misiniz?${uyari}`)) return;
+    try {
+      await api.delete(`/banka-hareketleri/${hareketId}`);
+      yukle();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    }
+  }
+
   const gosterilecekHareketler = hesapFiltre
     ? bankaHareketleri.filter((h) => String(h.banka_hesap_id) === hesapFiltre)
     : bankaHareketleri;
@@ -493,7 +506,7 @@ function HareketlerSekmesi() {
           <table>
             <thead>
               <tr style={{ background: 'var(--zemin)' }}>
-                {['Tarih', 'Hesap', 'Tür', 'Tutar', 'Açıklama'].map((b) => (
+                {['Tarih', 'Hesap', 'Tür', 'Tutar', 'Açıklama', 'İşlem'].map((b) => (
                   <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
                 ))}
               </tr>
@@ -501,6 +514,7 @@ function HareketlerSekmesi() {
             <tbody>
               {gosterilecekHareketler.map((h) => {
                 const tiklanabilir = !!(h.kaynak_tablo && h.kaynak_id);
+                const otomatikGeldi = !!h.kaynak_tablo;
                 if (duzenlenenId === h.id) {
                   return (
                     <BankaHareketiDuzenleFormu
@@ -535,20 +549,23 @@ function HareketlerSekmesi() {
                             </span>
                           )}
                         </span>
-                        <button
-                          onClick={() => setDuzenlenenId(h.id)}
-                          style={{
-                            marginLeft: 10, fontSize: 11, color: 'var(--lacivert)', background: 'none',
-                            border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0,
-                          }}
-                        >
-                          Düzenle
-                        </button>
+                      </td>
+                      <td style={{ padding: '10px 16px' }}>
+                        {otomatikGeldi ? (
+                          <span style={{ fontSize: 11.5, color: 'var(--metin-soluk)', fontStyle: 'italic' }}>
+                            Otomatik ({h.kaynak_tablo}) — geri almak için kaynağa gidin
+                          </span>
+                        ) : (
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <button onClick={() => setDuzenlenenId(h.id)} style={eylemChipStili('lacivert')}>Düzenle</button>
+                            <button onClick={() => hareketiSil(h.id, h)} style={eylemChipStili('kirmizi')}>Sil</button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                     {acikDetayId === h.id && (
                       <tr>
-                        <td colSpan={5} style={{ padding: 0 }}>
+                        <td colSpan={6} style={{ padding: 0 }}>
                           <KaynakDetayi kaynakTablo={h.kaynak_tablo} kaynakId={h.kaynak_id} />
                         </td>
                       </tr>
