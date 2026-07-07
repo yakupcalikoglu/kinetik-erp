@@ -394,6 +394,17 @@ export default function StokSayfasi() {
     }
   }
 
+  async function satisiGeriAl(urun) {
+    if (!window.confirm(`${urun.seri_no} seri numaralı ürünün satışını geri almak istediğinize emin misiniz? Ürün "Depoda" durumuna dönecek ve oluşan Kasa/Banka hareketi silinecek.`)) return;
+    try {
+      await api.put(`/stok-seri-no/${urun.id}/satisi-geri-al`);
+      urunleriYukle();
+      tumUrunleriYukle();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    }
+  }
+
   function tumUrunleriYukle() {
     api.get('/stok-seri-no').then((r) => setTumUrunler(r.data)).catch(() => {});
   }
@@ -555,7 +566,9 @@ export default function StokSayfasi() {
                             <Link to={`/satis-yap?urun=${u.id}`}><button style={eylemChipStili('yesil')} type="button">Satış yap</button></Link>
                           )}
                           <button onClick={() => setDuzenlenenUrunId(u.id)} style={eylemChipStili('lacivert')}>Düzenle</button>
-                          {u.durum !== 'SATILDI' && (
+                          {u.durum === 'SATILDI' ? (
+                            <button onClick={() => satisiGeriAl(u)} style={eylemChipStili('kirmizi')}>Satışı Geri Al</button>
+                          ) : (
                             <button onClick={() => urunuSil(u)} style={eylemChipStili('kirmizi')}>Sil</button>
                           )}
                         </div>
