@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { api, hataMesajiCikar } from '../api/client';
 import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat, Sekmeler } from '../components/Ortak';
 
@@ -26,6 +26,7 @@ export default function SatisYapSayfasi() {
   const onSeciliUrunId = searchParams.get('urun');
 
   const [urunler, setUrunler] = useState([]);
+  const [stokKartlari, setStokKartlari] = useState([]);
   const [cariler, setCariler] = useState([]);
   const [bankaHesaplari, setBankaHesaplari] = useState([]);
   const [urunId, setUrunId] = useState(onSeciliUrunId || '');
@@ -50,9 +51,16 @@ export default function SatisYapSayfasi() {
     ]).then(([depoRes, antrepoRes]) => {
       setUrunler([...depoRes.data, ...antrepoRes.data]);
     }).catch((e) => setHata(hataMesajiCikar(e)));
+    api.get('/stok-kartlari').then((r) => setStokKartlari(r.data)).catch(() => {});
     api.get('/cariler').then((r) => setCariler(r.data)).catch(() => {});
     api.get('/banka-bakiyeleri').then((r) => setBankaHesaplari(r.data)).catch(() => {});
   }, []);
+
+  function urunEtiketi(u) {
+    const kart = stokKartlari.find((k) => k.id === u.stok_karti_id);
+    const ad = kart ? `${kart.marka} ${kart.model}` : null;
+    return `${u.seri_no}${ad ? ' — ' + ad : ''} — Maliyet: ${paraFormat(u.toplam_maliyet_try)}`;
+  }
 
   const seciliUrun = urunler.find((u) => String(u.id) === String(urunId));
   const bankaGerekli = odemeTipi === 'PESIN_HAVALE' || odemeTipi === 'PESIN_KART' || odemeTipi === 'LEASINGLI';
@@ -112,8 +120,14 @@ export default function SatisYapSayfasi() {
           <div style={{ color: 'var(--yesil)', fontWeight: 600, fontSize: 15, marginBottom: 8 }}>Satış tamamlandı</div>
           <div style={{ fontSize: 13.5, color: 'var(--metin-ikincil)', marginBottom: 16 }}>
             Ürün "Satıldı" olarak işaretlendi ve ilgili kayıt oluşturuldu.
+            {odemeTipi === 'PESIN_NAKIT' && ' Yanlışlıkla yapıldıysa Stok sayfasından "Satışı Geri Al" ile düzeltebilirsiniz.'}
+            {(odemeTipi === 'PESIN_HAVALE' || odemeTipi === 'PESIN_KART' || odemeTipi === 'LEASINGLI') && ' Yanlışlıkla yapıldıysa Stok sayfasından "Satışı Geri Al" ile düzeltebilirsiniz.'}
+            {odemeTipi === 'TAKSITLI' && ' Yanlışlıkla yapıldıysa Finansal Takip → Taksitli Satış\'tan planı silerek ürünü geri alabilirsiniz.'}
           </div>
-          <Buton onClick={() => window.location.reload()}>Yeni satış yap</Buton>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <Buton onClick={() => window.location.reload()}>Yeni satış yap</Buton>
+            <Link to="/stok"><Buton variant="ikincil">Stok sayfasına dön</Buton></Link>
+          </div>
         </Kart>
       </div>
     );
@@ -131,9 +145,7 @@ export default function SatisYapSayfasi() {
               <select required value={urunId} onChange={(e) => setUrunId(e.target.value)} style={girdiStili}>
                 <option value="">Seçin...</option>
                 {urunler.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.seri_no} — Maliyet: {paraFormat(u.toplam_maliyet_try)}
-                  </option>
+                  <option key={u.id} value={u.id}>{urunEtiketi(u)}</option>
                 ))}
               </select>
               {urunler.length === 0 && (
