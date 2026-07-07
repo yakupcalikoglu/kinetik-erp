@@ -10,6 +10,24 @@ function useHarcamaTurleri() {
   return turler;
 }
 
+const BEKLEYEN_ENDPOINT_MAP = {
+  LEASING_ODEME: (id) => `/leasing-odemeleri/${id}/ode`,
+  KIRALAMA_ODEME: (id) => `/kiralama-odemeleri/${id}/tahsil-et`,
+  TAKSIT_DETAY: (id) => `/taksit-detay/${id}/tahsil-et`,
+  PERSONEL_ODEME: (id) => `/personel-odemeleri/${id}/ode`,
+  SABIT_GIDER: (id) => `/sabit-giderler/${id}/ode`,
+  AKREDITIF_KALEMI: (id) => `/akreditif-kalemleri/${id}/ode`,
+  AKREDITIF_KALEM_TAKSIT: (id) => `/akreditif-kalem-taksitleri/${id}/ode`,
+};
+
+function useBekleyenOdemeler() {
+  const [liste, setListe] = useState([]);
+  useEffect(() => {
+    api.get('/kaynak-detay/bekleyen-odemeler').then((r) => setListe(r.data)).catch(() => {});
+  }, []);
+  return liste;
+}
+
 const SEKMELER = [
   { deger: 'hareketler', etiket: 'Hareketler' },
   { deger: 'hesaplar', etiket: 'Hesaplar' },
@@ -221,6 +239,12 @@ const BANKA_HAREKET_TIP_METIN = {
 };
 
 function YeniBankaHareketiFormu({ hesaplar, onKaydedildi, onVazgec }) {
+  const [baglantiliModu, setBaglantiliModu] = useState(false);
+  const bekleyenler = useBekleyenOdemeler();
+  const [seciliBekleyenAnahtar, setSeciliBekleyenAnahtar] = useState('');
+  const [baglantiliBankaHesapId, setBaglantiliBankaHesapId] = useState('');
+  const [baglantiliTarih, setBaglantiliTarih] = useState(new Date().toISOString().slice(0, 10));
+
   const [form, setForm] = useState({
     banka_hesap_id: '', tarih: new Date().toISOString().slice(0, 10), tip: 'GIRIS',
     tutar: '', aciklama: '', karsi_hesap_id: '', kullanilan_kur: '',
@@ -230,21 +254,42 @@ function YeniBankaHareketiFormu({ hesaplar, onKaydedildi, onVazgec }) {
   const [kaydediliyor, setKaydediliyor] = useState(false);
 
   const ciftTarafli = ['HESAPLAR_ARASI_TRANSFER', 'DOVIZ_ALIM', 'DOVIZ_SATIM'].includes(form.tip);
+  const seciliBekleyen = bekleyenler.find((b) => `${b.kaynak_tablo}:${b.kaynak_id}` === seciliBekleyenAnahtar);
 
   async function kaydet(e) {
     e.preventDefault();
     setHata(null);
     setKaydediliyor(true);
     try {
-      await api.post('/banka-hareketleri', {
-        banka_hesap_id: Number(form.banka_hesap_id),
-        tarih: form.tarih,
-        tip: form.tip,
-        tutar: Number(form.tutar),
-        aciklama: form.aciklama || null,
-        karsi_hesap_id: form.karsi_hesap_id ? Number(form.karsi_hesap_id) : null,
-        kullanilan_kur: form.kullanilan_kur ? Number(form.kullanilan_kur) : null,
-      });
+      if (baglantiliModu) {
+        if (!seciliBekleyen) {
+          setHata('Lütfen hangi ödemeye/tahsilata karşılık geldiğini seçin.');
+          setKaydediliyor(false);
+          return;
+        }
+        if (!baglantiliBankaHesapId) {
+          setHata('Lütfen hangi banka hesabından işlem yapıldığını seçin.');
+          setKaydediliyor(false);
+          return;
+        }
+        const endpointFn = BEKLEYEN_ENDPOINT_MAP[seciliBekleyen.kaynak_tablo];
+        await api.put(endpointFn(seciliBekleyen.kaynak_id), {
+          odeme_tarihi: baglantiliTarih,
+          odeme_yontemi: 'BANKA',
+          banka_hesap_id: Number(baglantiliBankaHesapId),
+          kur: null,
+        });
+      } else {
+        await api.post('/banka-hareketleri', {
+          banka_hesap_id: Number(form.banka_hesap_id),
+          tarih: form.tarih,
+          tip: form.tip,
+          tutar: Number(form.tutar),
+          aciklama: form.aciklama || null,
+          karsi_hesap_id: form.karsi_hesap_id ? Number(form.karsi_hesap_id) : null,
+          kullanilan_kur: form.kullanilan_kur ? Number(form.kullanilan_kur) : null,
+        });
+      }
       onKaydedildi();
     } catch (err) {
       setHata(hataMesajiCikar(err));
@@ -256,62 +301,96 @@ function YeniBankaHareketiFormu({ hesaplar, onKaydedildi, onVazgec }) {
   return (
     <Kart style={{ marginBottom: 16 }}>
       <form onSubmit={kaydet}>
-        <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 14 }}>Yeni banka hareketi</div>
+        <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 10 }}>Yeni banka hareketi</div>
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 14, cursor: 'pointer' }}>
+          <input type="checkbox" checked={baglantiliModu} onChange={(e) => setBaglantiliModu(e.target.checked)} />
+          Bu hareket bekleyen bir ödeme/tahsilata karşılık geliyor (Leasing, Akreditif, Kiralama, Taksitli Satış, Personel, Sabit Gider)
+        </label>
+
         <HataMesaji>{hata}</HataMesaji>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-          <Alan etiket="Hesap">
-            <select required value={form.banka_hesap_id} onChange={(e) => setForm((f) => ({ ...f, banka_hesap_id: e.target.value }))} style={girdiStili}>
-              <option value="">Seçin...</option>
-              {hesaplar.map((h) => (
-                <option key={h.banka_hesap_id} value={h.banka_hesap_id}>
-                  {h.banka_adi} — {h.hesap_adi || h.para_birimi}
-                </option>
-              ))}
-            </select>
-          </Alan>
-          <Alan etiket="İşlem türü">
-            <select value={form.tip} onChange={(e) => setForm((f) => ({ ...f, tip: e.target.value }))} style={girdiStili}>
-              <option value="GIRIS">Giriş</option>
-              <option value="CIKIS">Çıkış</option>
-              <option value="HESAPLAR_ARASI_TRANSFER">Hesaplar Arası Transfer</option>
-              <option value="DOVIZ_ALIM">Döviz Alım</option>
-              <option value="DOVIZ_SATIM">Döviz Satım</option>
-            </select>
-          </Alan>
-          <Alan etiket="Tarih">
-            <input required type="date" value={form.tarih} onChange={(e) => setForm((f) => ({ ...f, tarih: e.target.value }))} style={girdiStili} />
-          </Alan>
-          <Alan etiket={ciftTarafli ? 'Tutar (kaynaktan çıkan, negatif girin)' : 'Tutar'}>
-            <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))}
-              placeholder={ciftTarafli ? 'Örn: -10000' : ''} style={girdiStili} />
-          </Alan>
-          {ciftTarafli && (
-            <>
-              <Alan etiket="Karşı hesap">
-                <select required value={form.karsi_hesap_id} onChange={(e) => setForm((f) => ({ ...f, karsi_hesap_id: e.target.value }))} style={girdiStili}>
-                  <option value="">Seçin...</option>
-                  {hesaplar.filter((h) => String(h.banka_hesap_id) !== form.banka_hesap_id).map((h) => (
-                    <option key={h.banka_hesap_id} value={h.banka_hesap_id}>
-                      {h.banka_adi} — {h.hesap_adi || h.para_birimi}
-                    </option>
-                  ))}
-                </select>
-              </Alan>
-              <Alan etiket="Kullanılan kur">
-                <input required type="number" step="0.0001" value={form.kullanilan_kur} onChange={(e) => setForm((f) => ({ ...f, kullanilan_kur: e.target.value }))} style={girdiStili} />
-              </Alan>
-            </>
-          )}
-          <Alan etiket="Açıklama">
-            <OtomatikTamamlamaGirdisi
-              value={form.aciklama}
-              onChange={(v) => setForm((f) => ({ ...f, aciklama: v }))}
-              secenekler={harcamaTurleri}
-              listeId="harcama-turleri-yeni-banka"
-              placeholder="Yazmaya başlayın veya listeden seçin"
-            />
-          </Alan>
-        </div>
+
+        {baglantiliModu ? (
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 12 }}>
+            <Alan etiket="Hangi kayıt?">
+              <select required value={seciliBekleyenAnahtar} onChange={(e) => setSeciliBekleyenAnahtar(e.target.value)} style={girdiStili}>
+                <option value="">Seçin...</option>
+                {bekleyenler.map((b) => (
+                  <option key={`${b.kaynak_tablo}:${b.kaynak_id}`} value={`${b.kaynak_tablo}:${b.kaynak_id}`}>
+                    {b.etiket} — {paraFormat(b.tutar, b.para_birimi)} {b.vade_tarihi ? `(${b.vade_tarihi})` : ''}
+                  </option>
+                ))}
+              </select>
+            </Alan>
+            <Alan etiket="Hangi banka hesabı?">
+              <select required value={baglantiliBankaHesapId} onChange={(e) => setBaglantiliBankaHesapId(e.target.value)} style={girdiStili}>
+                <option value="">Seçin...</option>
+                {hesaplar.map((h) => (
+                  <option key={h.banka_hesap_id} value={h.banka_hesap_id}>{h.banka_adi} — {h.hesap_adi || h.para_birimi}</option>
+                ))}
+              </select>
+            </Alan>
+            <Alan etiket="Tarih">
+              <input required type="date" value={baglantiliTarih} onChange={(e) => setBaglantiliTarih(e.target.value)} style={girdiStili} />
+            </Alan>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+            <Alan etiket="Hesap">
+              <select required value={form.banka_hesap_id} onChange={(e) => setForm((f) => ({ ...f, banka_hesap_id: e.target.value }))} style={girdiStili}>
+                <option value="">Seçin...</option>
+                {hesaplar.map((h) => (
+                  <option key={h.banka_hesap_id} value={h.banka_hesap_id}>
+                    {h.banka_adi} — {h.hesap_adi || h.para_birimi}
+                  </option>
+                ))}
+              </select>
+            </Alan>
+            <Alan etiket="İşlem türü">
+              <select value={form.tip} onChange={(e) => setForm((f) => ({ ...f, tip: e.target.value }))} style={girdiStili}>
+                <option value="GIRIS">Giriş</option>
+                <option value="CIKIS">Çıkış</option>
+                <option value="HESAPLAR_ARASI_TRANSFER">Hesaplar Arası Transfer</option>
+                <option value="DOVIZ_ALIM">Döviz Alım</option>
+                <option value="DOVIZ_SATIM">Döviz Satım</option>
+              </select>
+            </Alan>
+            <Alan etiket="Tarih">
+              <input required type="date" value={form.tarih} onChange={(e) => setForm((f) => ({ ...f, tarih: e.target.value }))} style={girdiStili} />
+            </Alan>
+            <Alan etiket={ciftTarafli ? 'Tutar (kaynaktan çıkan, negatif girin)' : 'Tutar'}>
+              <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))}
+                placeholder={ciftTarafli ? 'Örn: -10000' : ''} style={girdiStili} />
+            </Alan>
+            {ciftTarafli && (
+              <>
+                <Alan etiket="Karşı hesap">
+                  <select required value={form.karsi_hesap_id} onChange={(e) => setForm((f) => ({ ...f, karsi_hesap_id: e.target.value }))} style={girdiStili}>
+                    <option value="">Seçin...</option>
+                    {hesaplar.filter((h) => String(h.banka_hesap_id) !== form.banka_hesap_id).map((h) => (
+                      <option key={h.banka_hesap_id} value={h.banka_hesap_id}>
+                        {h.banka_adi} — {h.hesap_adi || h.para_birimi}
+                      </option>
+                    ))}
+                  </select>
+                </Alan>
+                <Alan etiket="Kullanılan kur">
+                  <input required type="number" step="0.0001" value={form.kullanilan_kur} onChange={(e) => setForm((f) => ({ ...f, kullanilan_kur: e.target.value }))} style={girdiStili} />
+                </Alan>
+              </>
+            )}
+            <Alan etiket="Açıklama">
+              <OtomatikTamamlamaGirdisi
+                value={form.aciklama}
+                onChange={(v) => setForm((f) => ({ ...f, aciklama: v }))}
+                secenekler={harcamaTurleri}
+                listeId="harcama-turleri-yeni-banka"
+                placeholder="Yazmaya başlayın veya listeden seçin"
+              />
+            </Alan>
+          </div>
+        )}
+
         <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
           <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Kaydediliyor...' : 'Hareketi kaydet'}</Buton>
           <Buton type="button" variant="ikincil" onClick={onVazgec}>Vazgeç</Buton>
