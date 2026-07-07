@@ -10,6 +10,46 @@ function useHarcamaTurleri() {
   return turler;
 }
 
+function useBekleyenOdemeler() {
+  const [liste, setListe] = useState([]);
+  useEffect(() => {
+    api.get('/kaynak-detay/bekleyen-odemeler').then((r) => setListe(r.data)).catch(() => {});
+  }, []);
+  return liste;
+}
+
+// Odeme turu -> hangi kaynak_tablo degerlerini kapsadigi
+const TUR_GRUPLARI = {
+  AKREDITIF: ['AKREDITIF_KALEMI', 'AKREDITIF_KALEM_TAKSIT'],
+  LEASING: ['LEASING_ODEME'],
+  CEK: ['CEKLER'],
+  KIRALAMA: ['KIRALAMA_ODEME'],
+  TAKSIT: ['TAKSIT_DETAY'],
+  PERSONEL: ['PERSONEL_ODEME'],
+  SABIT_GIDER: ['SABIT_GIDER'],
+};
+
+const TUR_METIN = {
+  SERBEST: 'Serbest (bağımsız hareket)',
+  AKREDITIF: 'Akreditif',
+  LEASING: 'Leasing',
+  CEK: 'Çek',
+  KIRALAMA: 'Kiralama',
+  TAKSIT: 'Taksitli Satış',
+  PERSONEL: 'Personel',
+  SABIT_GIDER: 'Sabit Gider',
+};
+
+const UST_BASLIK_ETIKET = {
+  AKREDITIF: 'Akreditif No',
+  LEASING: 'Leasing Sözleşme No',
+  CEK: 'Çek',
+  KIRALAMA: 'Kiralama Sözleşmesi',
+  TAKSIT: 'Taksitli Satış Planı',
+  PERSONEL: 'Personel',
+  SABIT_GIDER: 'Kategori',
+};
+
 const BEKLEYEN_ENDPOINT_MAP = {
   LEASING_ODEME: (id) => `/leasing-odemeleri/${id}/ode`,
   KIRALAMA_ODEME: (id) => `/kiralama-odemeleri/${id}/tahsil-et`,
@@ -20,22 +60,15 @@ const BEKLEYEN_ENDPOINT_MAP = {
   AKREDITIF_KALEM_TAKSIT: (id) => `/akreditif-kalem-taksitleri/${id}/ode`,
 };
 
-const BEKLEYEN_TUR_METIN = {
-  LEASING_ODEME: 'Leasing Ödemesi',
-  AKREDITIF_KALEMI: 'Akreditif Kalemi',
-  AKREDITIF_KALEM_TAKSIT: 'Akreditif Taksiti',
-  KIRALAMA_ODEME: 'Kiralama Ödemesi (Tahsilat)',
-  TAKSIT_DETAY: 'Taksitli Satış Tahsilatı',
-  PERSONEL_ODEME: 'Personel Ödemesi',
-  SABIT_GIDER: 'Sabit Gider',
-};
-
-function useBekleyenOdemeler() {
-  const [liste, setListe] = useState([]);
-  useEffect(() => {
-    api.get('/kaynak-detay/bekleyen-odemeler').then((r) => setListe(r.data)).catch(() => {});
-  }, []);
-  return liste;
+async function bekleyenOdemeyiGonder(secili, { odeme_tarihi, odeme_yontemi, banka_hesap_id, kur }) {
+  if (secili.kaynak_tablo === 'CEKLER') {
+    return api.put(`/cekler/${secili.kaynak_id}/durum`, {
+      yeni_durum: secili.yon === 'GIRIS' ? 'TAHSIL_EDILDI' : 'ODENDI',
+      odeme_yontemi, banka_hesap_id, kur,
+    });
+  }
+  const endpointFn = BEKLEYEN_ENDPOINT_MAP[secili.kaynak_tablo];
+  return api.put(endpointFn(secili.kaynak_id), { odeme_tarihi, odeme_yontemi, banka_hesap_id, kur });
 }
 
 function KaynakDetayi({ kaynakTablo, kaynakId }) {
@@ -65,20 +98,18 @@ function KaynakDetayi({ kaynakTablo, kaynakId }) {
 }
 
 function YeniKasaHareketiFormu({ onKaydedildi, onVazgec }) {
-  const [baglantiliModu, setBaglantiliModu] = useState(false);
   const bekleyenler = useBekleyenOdemeler();
-  const [bekleyenTur, setBekleyenTur] = useState('');
-  const [seciliBekleyenAnahtar, setSeciliBekleyenAnahtar] = useState('');
-  const [bekleyenKur, setBekleyenKur] = useState('1');
+  const harcamaTurleri = useHarcamaTurleri();
 
-  const mevcutTurler = [...new Set(bekleyenler.map((b) => b.kaynak_tablo))];
-  const turaGoreFiltrelenmis = bekleyenTur ? bekleyenler.filter((b) => b.kaynak_tablo === bekleyenTur) : [];
+  const [odemeTuru, setOdemeTuru] = useState('SERBEST');
+  const [ustBaslik, setUstBaslik] = useState('');
+  const [seciliAnahtar, setSeciliAnahtar] = useState('');
+  const [kur, setKur] = useState('1');
 
   const [form, setForm] = useState({
     tarih: new Date().toISOString().slice(0, 10), yon: 'GIRIS', tutar: '', para_birimi: 'TRY',
     tutar_try_karsiligi: '', aciklama: '',
   });
-  const harcamaTurleri = useHarcamaTurleri();
   const [kurYukleniyor, setKurYukleniyor] = useState(false);
   const [hata, setHata] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
@@ -92,34 +123,43 @@ function YeniKasaHareketiFormu({ onKaydedildi, onVazgec }) {
     setKurYukleniyor(true);
     api.get(`/kur/${form.para_birimi}`)
       .then((r) => {
-        const kur = Number(r.data.kur);
+        const k = Number(r.data.kur);
         const tutarSayi = Number(form.tutar) || 0;
-        setForm((f) => ({ ...f, tutar_try_karsiligi: (tutarSayi * kur).toFixed(2) }));
+        setForm((f) => ({ ...f, tutar_try_karsiligi: (tutarSayi * k).toFixed(2) }));
       })
       .catch(() => {})
       .finally(() => setKurYukleniyor(false));
   }, [form.para_birimi]); // eslint-disable-line
 
-  const seciliBekleyen = bekleyenler.find((b) => `${b.kaynak_tablo}:${b.kaynak_id}` === seciliBekleyenAnahtar);
-  const bekleyenKurGerekli = baglantiliModu && seciliBekleyen && seciliBekleyen.para_birimi !== 'TRY';
+  const kapsananTablolar = odemeTuru !== 'SERBEST' ? TUR_GRUPLARI[odemeTuru] : [];
+  const buTurdekiBekleyenler = bekleyenler.filter((b) => kapsananTablolar.includes(b.kaynak_tablo));
+  const ustBasliklar = [...new Set(buTurdekiBekleyenler.map((b) => b.ust_baslik))];
+  const altKayitlar = ustBaslik ? buTurdekiBekleyenler.filter((b) => b.ust_baslik === ustBaslik) : [];
+  const seciliKayit = altKayitlar.find((b) => `${b.kaynak_tablo}:${b.kaynak_id}` === seciliAnahtar);
+  const kurGerekli = odemeTuru !== 'SERBEST' && seciliKayit && seciliKayit.para_birimi !== 'TRY';
+
+  function turDegistir(yeniTur) {
+    setOdemeTuru(yeniTur);
+    setUstBaslik('');
+    setSeciliAnahtar('');
+  }
 
   async function kaydet(e) {
     e.preventDefault();
     setHata(null);
     setKaydediliyor(true);
     try {
-      if (baglantiliModu) {
-        if (!seciliBekleyen) {
-          setHata('Lütfen hangi ödemeye/tahsilata karşılık geldiğini seçin.');
+      if (odemeTuru !== 'SERBEST') {
+        if (!seciliKayit) {
+          setHata('Lütfen hangi kayda ait olduğunu seçin.');
           setKaydediliyor(false);
           return;
         }
-        const endpointFn = BEKLEYEN_ENDPOINT_MAP[seciliBekleyen.kaynak_tablo];
-        await api.put(endpointFn(seciliBekleyen.kaynak_id), {
+        await bekleyenOdemeyiGonder(seciliKayit, {
           odeme_tarihi: form.tarih,
           odeme_yontemi: 'NAKIT',
           banka_hesap_id: null,
-          kur: bekleyenKurGerekli ? Number(bekleyenKur) : null,
+          kur: kurGerekli ? Number(kur) : null,
         });
       } else {
         await api.post('/kasa-hareketleri', {
@@ -139,73 +179,30 @@ function YeniKasaHareketiFormu({ onKaydedildi, onVazgec }) {
   return (
     <Kart style={{ marginBottom: 16 }}>
       <form onSubmit={kaydet}>
-        <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 10 }}>Yeni kasa hareketi</div>
-
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 14, cursor: 'pointer' }}>
-          <input type="checkbox" checked={baglantiliModu} onChange={(e) => setBaglantiliModu(e.target.checked)} />
-          Bu hareket bekleyen bir ödeme/tahsilata karşılık geliyor (Leasing, Akreditif, Kiralama, Taksitli Satış, Personel, Sabit Gider)
-        </label>
-
+        <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 14 }}>Yeni kasa hareketi</div>
         <HataMesaji>{hata}</HataMesaji>
 
-        {baglantiliModu ? (
-          <div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-              <Alan etiket="1) Ödeme Türü">
-                <select
-                  required
-                  value={bekleyenTur}
-                  onChange={(e) => { setBekleyenTur(e.target.value); setSeciliBekleyenAnahtar(''); }}
-                  style={girdiStili}
-                >
-                  <option value="">Seçin...</option>
-                  {mevcutTurler.map((t) => (
-                    <option key={t} value={t}>{BEKLEYEN_TUR_METIN[t] || t}</option>
-                  ))}
-                </select>
-              </Alan>
-              <Alan etiket="2) Hangi kayıt?">
-                <select
-                  required
-                  disabled={!bekleyenTur}
-                  value={seciliBekleyenAnahtar}
-                  onChange={(e) => setSeciliBekleyenAnahtar(e.target.value)}
-                  style={girdiStili}
-                >
-                  <option value="">{bekleyenTur ? 'Seçin...' : 'Önce tür seçin'}</option>
-                  {turaGoreFiltrelenmis.map((b) => (
-                    <option key={`${b.kaynak_tablo}:${b.kaynak_id}`} value={`${b.kaynak_tablo}:${b.kaynak_id}`}>
-                      {b.etiket} — {paraFormat(b.tutar, b.para_birimi)} {b.vade_tarihi ? `(${b.vade_tarihi})` : ''}
-                    </option>
-                  ))}
-                </select>
-                {bekleyenTur && turaGoreFiltrelenmis.length === 0 && (
-                  <div style={{ fontSize: 12, color: 'var(--metin-soluk)', marginTop: 4 }}>Bu türde ödenmemiş kayıt yok.</div>
-                )}
-              </Alan>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: bekleyenKurGerekli ? '1fr 1fr' : '1fr', gap: 12 }}>
-              <Alan etiket="Tarih">
-                <input required type="date" value={form.tarih} onChange={(e) => setForm((f) => ({ ...f, tarih: e.target.value }))} style={girdiStili} />
-              </Alan>
-              {bekleyenKurGerekli && (
-                <Alan etiket={`${seciliBekleyen.para_birimi} için TL kuru`}>
-                  <input required type="number" step="0.0001" value={bekleyenKur} onChange={(e) => setBekleyenKur(e.target.value)} style={girdiStili} />
-                </Alan>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12 }}>
-            <Alan etiket="Tarih">
-              <input required type="date" value={form.tarih} onChange={(e) => setForm((f) => ({ ...f, tarih: e.target.value }))} style={girdiStili} />
-            </Alan>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: odemeTuru === 'SERBEST' ? 0 : 12 }}>
+          <Alan etiket="Tarih">
+            <input required type="date" value={form.tarih} onChange={(e) => setForm((f) => ({ ...f, tarih: e.target.value }))} style={girdiStili} />
+          </Alan>
+          {odemeTuru === 'SERBEST' && (
             <Alan etiket="Yön">
               <select value={form.yon} onChange={(e) => setForm((f) => ({ ...f, yon: e.target.value }))} style={girdiStili}>
                 <option value="GIRIS">Giriş</option>
                 <option value="CIKIS">Çıkış</option>
               </select>
             </Alan>
+          )}
+          <Alan etiket="Ödeme Türü">
+            <select value={odemeTuru} onChange={(e) => turDegistir(e.target.value)} style={girdiStili}>
+              {Object.entries(TUR_METIN).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+          </Alan>
+        </div>
+
+        {odemeTuru === 'SERBEST' ? (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
             <Alan etiket="Para birimi">
               <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={girdiStili}>
                 <option value="TRY">TRY</option>
@@ -231,6 +228,44 @@ function YeniKasaHareketiFormu({ onKaydedildi, onVazgec }) {
                 placeholder="Yazmaya başlayın veya listeden seçin"
               />
             </Alan>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: kurGerekli ? '1fr 1fr 1fr' : '1fr 1fr', gap: 12 }}>
+            <Alan etiket={UST_BASLIK_ETIKET[odemeTuru]}>
+              <select
+                required
+                value={ustBaslik}
+                onChange={(e) => { setUstBaslik(e.target.value); setSeciliAnahtar(''); }}
+                style={girdiStili}
+              >
+                <option value="">Seçin...</option>
+                {ustBasliklar.map((u) => <option key={u} value={u}>{u}</option>)}
+              </select>
+              {ustBasliklar.length === 0 && (
+                <div style={{ fontSize: 12, color: 'var(--metin-soluk)', marginTop: 4 }}>Bu türde bekleyen kayıt yok.</div>
+              )}
+            </Alan>
+            <Alan etiket="Kalem / Taksit / Dönem">
+              <select
+                required
+                disabled={!ustBaslik}
+                value={seciliAnahtar}
+                onChange={(e) => setSeciliAnahtar(e.target.value)}
+                style={girdiStili}
+              >
+                <option value="">{ustBaslik ? 'Seçin...' : 'Önce üstteki seçimi yapın'}</option>
+                {altKayitlar.map((b) => (
+                  <option key={`${b.kaynak_tablo}:${b.kaynak_id}`} value={`${b.kaynak_tablo}:${b.kaynak_id}`}>
+                    {b.etiket} — {paraFormat(b.tutar, b.para_birimi)} {b.vade_tarihi ? `(${b.vade_tarihi})` : ''}
+                  </option>
+                ))}
+              </select>
+            </Alan>
+            {kurGerekli && (
+              <Alan etiket={`${seciliKayit.para_birimi} için TL kuru`}>
+                <input required type="number" step="0.0001" value={kur} onChange={(e) => setKur(e.target.value)} style={girdiStili} />
+              </Alan>
+            )}
           </div>
         )}
 
