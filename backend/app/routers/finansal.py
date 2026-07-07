@@ -7,7 +7,7 @@ from app.db.session import get_db
 from app.core.deps import aktif_sirket_id_getir, izin_gerektir, aktif_kullanici_getir
 from app.models.auth import Kullanici
 from app.models.cari import CariHesap
-from app.models.stok import StokSeriNo, StokKarti
+from app.models.stok import StokSeriNo, StokKarti, StokDurum
 from app.models.finansal import (
     Cek, CekGecmis, CekDurum, CekTip,
     LeasingSozlesme, LeasingOdeme,
@@ -528,6 +528,12 @@ def leasing_sil(leasing_id: int, sirket_id: int = Depends(aktif_sirket_id_getir)
 # =================================================================== TAKSİTLİ SATIŞ - SİL
 @router.delete("/taksitli-satis-planlari/{plan_id}", dependencies=[Depends(izin_gerektir("TAKSIT_DUZENLE"))])
 def taksitli_satis_plani_sil(plan_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
+    """
+    Plani siler. Eger plan belirli bir urune (stok_seri_no_id) bagliysa VE
+    o urun bu satis nedeniyle SATILDI isaretlenmisse, urun otomatik olarak
+    DEPODA durumuna ve satis bilgileri temizlenmis haline dondurulur -
+    aksi halde urun sonsuza kadar "Satildi" gorunup asla tekrar satilamazdi.
+    """
     plan = db.get(TaksitliSatisPlani, plan_id)
     if plan is None or plan.sirket_id != sirket_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Taksit planı bulunamadı.")
@@ -536,6 +542,15 @@ def taksitli_satis_plani_sil(plan_id: int, sirket_id: int = Depends(aktif_sirket
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Tahsil edilmiş taksiti olan bir plan silinemez.")
     for t in taksitler:
         db.delete(t)
+
+    if plan.stok_seri_no_id:
+        urun = db.get(StokSeriNo, plan.stok_seri_no_id)
+        if urun is not None and urun.durum == StokDurum.SATILDI:
+            urun.durum = StokDurum.DEPODA
+            urun.musteri_cari_id = None
+            urun.satis_fiyati_try = None
+            urun.satis_tarihi = None
+
     db.delete(plan)
     db.commit()
     return {"silindi": True}
