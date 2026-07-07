@@ -375,8 +375,9 @@ def kasa_bakiye(
     ]
 
     return KasaBakiyeYanit(bakiyeler=bakiyeler, net_bakiye_try_toplam=try_toplam)
-    # --------------------------------------------------------- KASA HAREKETİ - SİL
-@router.delete("/kasa-hareketleri/{hareket_id}", dependencies=[Depends(izin_gerektir("KASA_DUZENLE"))])
+
+
+# --------------------------------------------------------------- Yardımcı
 def _kaynak_kaydi_var_mi(db: Session, kaynak_tablo: str, kaynak_id: int) -> bool:
     """
     Bir hareketin kaynak_tablo/kaynak_id ikilisinin hala gecerli bir kayda
@@ -425,6 +426,7 @@ def _kaynak_kaydi_var_mi(db: Session, kaynak_tablo: str, kaynak_id: int) -> bool
     return True
 
 
+# --------------------------------------------------------- KASA HAREKETİ - SİL
 @router.delete("/kasa-hareketleri/{hareket_id}", dependencies=[Depends(izin_gerektir("KASA_DUZENLE"))])
 def kasa_hareketi_sil(
     hareket_id: int,
@@ -452,6 +454,7 @@ def kasa_hareketi_sil(
     return {"silindi": True}
 
 
+# ------------------------------------------------------- BANKA HAREKETİ - SİL
 @router.delete("/banka-hareketleri/{hareket_id}", dependencies=[Depends(izin_gerektir("BANKA_DUZENLE"))])
 def banka_hareketi_sil(
     hareket_id: int,
