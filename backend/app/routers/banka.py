@@ -377,24 +377,74 @@ def kasa_bakiye(
     return KasaBakiyeYanit(bakiyeler=bakiyeler, net_bakiye_try_toplam=try_toplam)
     # --------------------------------------------------------- KASA HAREKETİ - SİL
 @router.delete("/kasa-hareketleri/{hareket_id}", dependencies=[Depends(izin_gerektir("KASA_DUZENLE"))])
+def _kaynak_kaydi_var_mi(db: Session, kaynak_tablo: str, kaynak_id: int) -> bool:
+    """
+    Bir hareketin kaynak_tablo/kaynak_id ikilisinin hala gecerli bir kayda
+    isaret edip etmedigini kontrol eder. Kaynak baska bir yoldan (dogrudan
+    silme, veri duzeltme vb.) kaldirilmissa (orphan/hayalet kayit), bu
+    hareketin manuel silinmesine izin verilir - aksi halde sonsuza kadar
+    silinemez bir kayit olarak kalir.
+    """
+    try:
+        if kaynak_tablo == "AKREDITIF_KALEMI":
+            from app.models.akreditif import AkreditifKalemi
+            return db.get(AkreditifKalemi, kaynak_id) is not None
+        if kaynak_tablo == "AKREDITIF_KALEM_TAKSIT":
+            from app.models.akreditif_taksit import AkreditifKalemTaksiti
+            return db.get(AkreditifKalemTaksiti, kaynak_id) is not None
+        if kaynak_tablo == "CEKLER":
+            from app.models.finansal import Cek
+            return db.get(Cek, kaynak_id) is not None
+        if kaynak_tablo == "LEASING_ODEME":
+            from app.models.finansal import LeasingOdeme
+            return db.get(LeasingOdeme, kaynak_id) is not None
+        if kaynak_tablo == "TAKSIT_DETAY":
+            from app.models.finansal import TaksitDetay
+            return db.get(TaksitDetay, kaynak_id) is not None
+        if kaynak_tablo == "KIRALAMA_ODEME":
+            from app.models.finansal import KiralamaOdeme
+            return db.get(KiralamaOdeme, kaynak_id) is not None
+        if kaynak_tablo == "PERSONEL_ODEME":
+            from app.models.diger import PersonelOdeme
+            return db.get(PersonelOdeme, kaynak_id) is not None
+        if kaynak_tablo == "SABIT_GIDER":
+            from app.models.diger import SabitGider
+            return db.get(SabitGider, kaynak_id) is not None
+        if kaynak_tablo == "BORC_ODEME":
+            from app.models.diger import BorcOdeme
+            return db.get(BorcOdeme, kaynak_id) is not None
+        if kaynak_tablo == "BAKIM_KAYDI":
+            from app.models.finansal import BakimKaydi
+            return db.get(BakimKaydi, kaynak_id) is not None
+        if kaynak_tablo == "STOK_SATIS":
+            from app.models.stok import StokSeriNo
+            return db.get(StokSeriNo, kaynak_id) is not None
+    except Exception:
+        pass
+    # Bilinmeyen bir kaynak_tablo ise, guvenli tarafta kalip "hala var" sayariz.
+    return True
+
+
+@router.delete("/kasa-hareketleri/{hareket_id}", dependencies=[Depends(izin_gerektir("KASA_DUZENLE"))])
 def kasa_hareketi_sil(
     hareket_id: int,
     sirket_id: int = Depends(aktif_sirket_id_getir),
     db: Session = Depends(get_db),
 ):
     """
-    Sadece MANUEL girilmis (kaynak_tablo=None) kasa hareketleri silinebilir.
-    Baska bir modulden (Akreditif, Bakim, Sabit Gider vb.) otomatik acilmis
-    bir hareketi buradan silmek, o modulun kaydiyla senkronu bozar; bu yuzden
-    kaynagi olan hareketler icin "Odemeyi Geri Al" (ilgili modulde) kullanilmalidir.
+    Manuel girilmis (kaynak_tablo=None) kasa hareketleri her zaman silinebilir.
+    Otomatik gelen (kaynak_tablo dolu) bir hareket icin, ONCE kaynagin hala
+    gecerli olup olmadigina bakilir: kaynak hala varsa silme reddedilir (o
+    modulde "Odemeyi Geri Al" kullanilmali); kaynak artik yoksa (hayalet
+    kayit), bu hareketin dogrudan silinmesine izin verilir.
     """
     kayit = db.get(KasaHareketi, hareket_id)
     if kayit is None or kayit.sirket_id != sirket_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Kasa hareketi bulunamadı.")
-    if kayit.kaynak_tablo is not None:
+    if kayit.kaynak_tablo is not None and _kaynak_kaydi_var_mi(db, kayit.kaynak_tablo, kayit.kaynak_id):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            f"Bu hareket '{kayit.kaynak_tablo}' modülünden otomatik oluşturulmuştur; "
+            f"Bu hareket '{kayit.kaynak_tablo}' modülünden otomatik oluşturulmuştur ve kaynağı hâlâ mevcut; "
             "buradan silinemez. İlgili modülde 'Ödemeyi Geri Al' seçeneğini kullanın."
         )
     db.delete(kayit)
@@ -402,7 +452,6 @@ def kasa_hareketi_sil(
     return {"silindi": True}
 
 
-# ------------------------------------------------------- BANKA HAREKETİ - SİL
 @router.delete("/banka-hareketleri/{hareket_id}", dependencies=[Depends(izin_gerektir("BANKA_DUZENLE"))])
 def banka_hareketi_sil(
     hareket_id: int,
@@ -410,17 +459,19 @@ def banka_hareketi_sil(
     db: Session = Depends(get_db),
 ):
     """
-    Sadece MANUEL girilmis (kaynak_tablo=None) banka hareketleri silinebilir.
+    Manuel girilmis (kaynak_tablo=None) banka hareketleri her zaman silinebilir.
+    Otomatik gelen bir hareket icin, kaynak hala geçerliyse silme reddedilir;
+    kaynak artik yoksa (hayalet kayit) silinmesine izin verilir.
     Cift-tarafli (transfer/doviz) hareketlerde SADECE bu satir silinir; karsi
-    hesaptaki es kaydi ayrica silinmelidir (otomatik eslestirme ID'si tutulmuyor).
+    hesaptaki es kaydi ayrica silinmelidir.
     """
     kayit = db.get(BankaHareketi, hareket_id)
     if kayit is None or kayit.sirket_id != sirket_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Banka hareketi bulunamadı.")
-    if kayit.kaynak_tablo is not None:
+    if kayit.kaynak_tablo is not None and _kaynak_kaydi_var_mi(db, kayit.kaynak_tablo, kayit.kaynak_id):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            f"Bu hareket '{kayit.kaynak_tablo}' modülünden otomatik oluşturulmuştur; "
+            f"Bu hareket '{kayit.kaynak_tablo}' modülünden otomatik oluşturulmuştur ve kaynağı hâlâ mevcut; "
             "buradan silinemez. İlgili modülde 'Ödemeyi Geri Al' seçeneğini kullanın."
         )
     db.delete(kayit)
