@@ -23,6 +23,7 @@ class CekYanit(BaseModel):
     cek_no: str | None
     banka_adi: str | None
     cari_id: int | None
+    cari_unvan: str | None = None
     tutar: Decimal
     para_birimi: ParaBirimi
     vade_tarihi: date
@@ -70,7 +71,10 @@ class LeasingOlusturIstegi(BaseModel):
 class LeasingYanit(BaseModel):
     id: int
     leasing_firmasi_cari_id: int
+    leasing_firmasi_unvan: str | None = None
     stok_seri_no_id: int | None
+    urun_seri_no: str | None = None
+    urun_adi: str | None = None
     sozlesme_no: str | None
     baslangic_tarihi: date | None
     toplam_tutar: Decimal | None
@@ -115,7 +119,10 @@ class TaksitliSatisOlusturIstegi(BaseModel):
 class TaksitliSatisYanit(BaseModel):
     id: int
     musteri_cari_id: int
+    musteri_unvan: str | None = None
     stok_seri_no_id: int | None
+    urun_seri_no: str | None = None
+    urun_adi: str | None = None
     toplam_tutar: Decimal
     para_birimi: ParaBirimi
     pesinat: Decimal
@@ -128,6 +135,9 @@ class TaksitliSatisYanit(BaseModel):
 
 class TaksitDetayYanit(BaseModel):
     id: int
+    plan_id: int | None = None
+    musteri_unvan: str | None = None
+    urun_seri_no: str | None = None
     taksit_no: int
     vade_tarihi: date
     tutar: Decimal
@@ -162,7 +172,10 @@ class KiralamaOlusturIstegi(BaseModel):
 class KiralamaYanit(BaseModel):
     id: int
     stok_seri_no_id: int
+    urun_seri_no: str | None = None
+    urun_adi: str | None = None
     kiraci_cari_id: int
+    kiraci_unvan: str | None = None
     baslangic_tarihi: date
     bitis_tarihi: date | None
     aylik_kira_tutari: Decimal
@@ -209,9 +222,13 @@ class BakimOlusturIstegi(BaseModel):
 class BakimYanit(BaseModel):
     id: int
     stok_seri_no_id: int
+    urun_seri_no: str | None = None
+    urun_adi: str | None = None
     tarih: date
     tip: BakimTip
     aciklama: str | None
+    ilgili_cari_id: int | None = None
+    ilgili_cari_unvan: str | None = None
     tutar: Decimal
     para_birimi: ParaBirimi
     odendi_tahsil_edildi_mi: bool
