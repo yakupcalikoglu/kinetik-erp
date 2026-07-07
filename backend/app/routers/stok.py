@@ -323,6 +323,56 @@ def maliyet_kalemi_ekle(
     return kayit
 
 
+@router.put("/stok-seri-no/{seri_id}/satisi-geri-al", response_model=StokSeriNoYanit,
+            dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
+def stok_satisini_geri_al(
+    seri_id: int,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Pesin (Nakit/Havale/Kart) yapilmis bir satisi geri alir: urunun durumunu
+    DEPODA'ya dondurur, satis bilgilerini temizler ve olusan Kasa/Banka
+    hareketini siler. Taksitli veya cek ile yapilan satislar bu yoldan
+    GERI ALINAMAZ - taksitli icin Finansal Takip -> Taksitli Satis Plani
+    silinmeli (bu da urunu otomatik geri dondurur); cek ile satislar icin
+    once ilgili cek incelenmelidir.
+    """
+    kayit = _seri_no_getir_veya_404(db, seri_id, sirket_id)
+    if kayit.durum != StokDurum.SATILDI:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bu ürün zaten satılmış durumda değil.")
+
+    from app.models.banka import KasaHareketi, BankaHareketi
+    kasa_kayitlari = list(db.execute(
+        select(KasaHareketi).where(KasaHareketi.kaynak_tablo == "STOK_SATIS", KasaHareketi.kaynak_id == seri_id)
+    ).scalars())
+    banka_kayitlari = list(db.execute(
+        select(BankaHareketi).where(BankaHareketi.kaynak_tablo == "STOK_SATIS", BankaHareketi.kaynak_id == seri_id)
+    ).scalars())
+
+    if not kasa_kayitlari and not banka_kayitlari:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Bu ürün peşin satış yoluyla satılmamış (muhtemelen taksitli veya çek ile satıldı). "
+            "Taksitli satışlar için Finansal Takip → Taksitli Satış'tan planı silin; "
+            "çek ile satışlar için önce ilgili çeki inceleyin."
+        )
+
+    for h in kasa_kayitlari:
+        db.delete(h)
+    for h in banka_kayitlari:
+        db.delete(h)
+
+    kayit.durum = StokDurum.DEPODA
+    kayit.musteri_cari_id = None
+    kayit.satis_fiyati_try = None
+    kayit.satis_tarihi = None
+
+    db.commit()
+    db.refresh(kayit)
+    return kayit
+
+
 @router.get("/stok-seri-no/{seri_id}/kar-raporu", response_model=KarRaporuYanit,
             dependencies=[Depends(izin_gerektir("STOK_GORUNTULE"))])
 def kar_raporu(
