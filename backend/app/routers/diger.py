@@ -462,3 +462,41 @@ def borc_odemesini_sil(
     db.delete(odeme)
     db.commit()
     return {"silindi": True}
+# =================================================================== PROFORMA - LİSTE / SİL
+@router.get("/proforma-faturalar", response_model=list[ProformaYanit],
+            dependencies=[Depends(izin_gerektir("FATURA_GORUNTULE"))])
+def proformalari_listele(sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
+    """Sirketin tum proforma faturalarini en yeniden eskiye siralar (kalemleri de dahil)."""
+    sorgu = (
+        select(ProformaFatura)
+        .where(ProformaFatura.sirket_id == sirket_id)
+        .order_by(ProformaFatura.id.desc())
+    )
+    sonuclar = list(db.execute(sorgu).scalars())
+    for p in sonuclar:
+        p.kalemler = list(db.execute(
+            select(ProformaDetay).where(ProformaDetay.proforma_id == p.id)
+        ).scalars())
+    return sonuclar
+
+
+@router.delete("/proforma-faturalar/{proforma_id}", dependencies=[Depends(izin_gerektir("FATURA_DUZENLE"))])
+def proforma_sil(
+    proforma_id: int,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """Sadece HENUZ faturaya cevrilmemis bir proforma silinebilir."""
+    proforma = db.get(ProformaFatura, proforma_id)
+    if proforma is None or proforma.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Proforma fatura bulunamadı.")
+    if proforma.durum == "FATURALASTI":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Faturalaştırılmış bir proforma silinemez.")
+
+    for k in list(db.execute(
+        select(ProformaDetay).where(ProformaDetay.proforma_id == proforma_id)
+    ).scalars()):
+        db.delete(k)
+    db.delete(proforma)
+    db.commit()
+    return {"silindi": True}
