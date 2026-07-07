@@ -221,7 +221,7 @@ class BekleyenOdemeYanit(BaseModel):
     yon: str  # GIRIS | CIKIS
 
 
-bekleyen_router = APIRouter(tags=["Kaynak Detay"])
+bekleyen_router = APIRouter(prefix="/kaynak-detay", tags=["Kaynak Detay"])
 
 
 @bekleyen_router.get("/bekleyen-odemeler", response_model=list[BekleyenOdemeYanit])
