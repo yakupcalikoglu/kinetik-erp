@@ -344,7 +344,9 @@ def kar_raporu(
         kar_zarar_try=kar_zarar,
         durum=kayit.durum,
     )
-  # ------------------------------------------------------- MALİYET KALEMİ DÜZENLE/SİL
+
+
+# ------------------------------------------------------- MALİYET KALEMİ DÜZENLE/SİL
 @router.put("/stok-seri-no/{seri_id}/maliyet-kalemi/{kalem_id}", response_model=StokSeriNoYanit,
             dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
 def maliyet_kalemi_duzenle(
