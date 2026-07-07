@@ -214,7 +214,8 @@ def kaynak_detayi_getir(
 class BekleyenOdemeYanit(BaseModel):
     kaynak_tablo: str
     kaynak_id: int
-    etiket: str
+    ust_baslik: str  # Gruplama icin: "Akreditif KRD-001", "Leasing #3 - X Firma", "Çek #12" vb.
+    etiket: str       # Alt secimde gorunen kisa aciklama: "Ödeme - Nakliye bedeli", "3. Taksit" vb.
     tutar: Decimal
     para_birimi: str
     vade_tarihi: date | None = None
@@ -240,11 +241,23 @@ def bekleyen_odemeleri_listele(
 
     from app.models.finansal import (
         LeasingOdeme, LeasingSozlesme, KiralamaOdeme, KiralamaSozlesme,
-        TaksitDetay, TaksitliSatisPlani,
+        TaksitDetay, TaksitliSatisPlani, Cek, CekDurum,
     )
     from app.models.diger import PersonelOdeme, Personel, SabitGider, SabitGiderKategori
     from app.models.akreditif import AkreditifKalemi, Akreditif, AkreditifKalemTip
     from app.models.akreditif_taksit import AkreditifKalemTaksiti
+
+    # --- Çekler (portföyde bekleyenler; ALINAN -> tahsil edilecek GIRIS, VERILEN -> odenecek CIKIS)
+    for c in db.execute(
+        select(Cek).where(Cek.sirket_id == sirket_id, Cek.durum == CekDurum.PORTFOYDE)
+    ).scalars():
+        ust_baslik = f"Çek {c.cek_no or '#' + str(c.id)} — {cari_unvan_hizli(db, c.cari_id)}"
+        sonuc.append(BekleyenOdemeYanit(
+            kaynak_tablo="CEKLER", kaynak_id=c.id, ust_baslik=ust_baslik,
+            etiket=f"{'Tahsilat' if c.tip.value == 'ALINAN' else 'Ödeme'} — Vade {c.vade_tarihi}",
+            tutar=c.tutar, para_birimi=c.para_birimi.value, vade_tarihi=c.vade_tarihi,
+            yon="GIRIS" if c.tip.value == "ALINAN" else "CIKIS",
+        ))
 
     # --- Leasing taksitleri
     for o in db.execute(
@@ -252,9 +265,10 @@ def bekleyen_odemeleri_listele(
         .where(LeasingSozlesme.sirket_id == sirket_id, LeasingOdeme.odendi_mi.is_(False))
     ).scalars():
         sozlesme = db.get(LeasingSozlesme, o.leasing_id)
-        etiket = f"Leasing {sozlesme.sozlesme_no or '#' + str(sozlesme.id)} — {cari_unvan_hizli(db, sozlesme.leasing_firmasi_cari_id)} — Taksit {o.taksit_no}"
+        ust_baslik = f"Leasing {sozlesme.sozlesme_no or '#' + str(sozlesme.id)} — {cari_unvan_hizli(db, sozlesme.leasing_firmasi_cari_id)}"
         sonuc.append(BekleyenOdemeYanit(
-            kaynak_tablo="LEASING_ODEME", kaynak_id=o.id, etiket=etiket,
+            kaynak_tablo="LEASING_ODEME", kaynak_id=o.id, ust_baslik=ust_baslik,
+            etiket=f"Taksit {o.taksit_no}",
             tutar=o.tutar, para_birimi=sozlesme.para_birimi.value, vade_tarihi=o.vade_tarihi, yon="CIKIS",
         ))
 
@@ -264,9 +278,10 @@ def bekleyen_odemeleri_listele(
         .where(KiralamaSozlesme.sirket_id == sirket_id, KiralamaOdeme.odendi_mi.is_(False))
     ).scalars():
         sozlesme = db.get(KiralamaSozlesme, o.sozlesme_id)
-        etiket = f"Kiralama — {cari_unvan_hizli(db, sozlesme.kiraci_cari_id)} — {o.donem_basi}→{o.donem_sonu}"
+        ust_baslik = f"Kiralama #{sozlesme.id} — {cari_unvan_hizli(db, sozlesme.kiraci_cari_id)}"
         sonuc.append(BekleyenOdemeYanit(
-            kaynak_tablo="KIRALAMA_ODEME", kaynak_id=o.id, etiket=etiket,
+            kaynak_tablo="KIRALAMA_ODEME", kaynak_id=o.id, ust_baslik=ust_baslik,
+            etiket=f"{o.donem_basi} → {o.donem_sonu}",
             tutar=o.tutar, para_birimi=sozlesme.para_birimi.value, vade_tarihi=o.donem_basi, yon="GIRIS",
         ))
 
@@ -276,9 +291,10 @@ def bekleyen_odemeleri_listele(
         .where(TaksitliSatisPlani.sirket_id == sirket_id, TaksitDetay.odendi_mi.is_(False))
     ).scalars():
         plan = db.get(TaksitliSatisPlani, t.plan_id)
-        etiket = f"Taksitli Satış — {cari_unvan_hizli(db, plan.musteri_cari_id)} — Taksit {t.taksit_no}"
+        ust_baslik = f"Taksitli Satış #{plan.id} — {cari_unvan_hizli(db, plan.musteri_cari_id)}"
         sonuc.append(BekleyenOdemeYanit(
-            kaynak_tablo="TAKSIT_DETAY", kaynak_id=t.id, etiket=etiket,
+            kaynak_tablo="TAKSIT_DETAY", kaynak_id=t.id, ust_baslik=ust_baslik,
+            etiket=f"Taksit {t.taksit_no}",
             tutar=t.tutar, para_birimi=plan.para_birimi.value, vade_tarihi=t.vade_tarihi, yon="GIRIS",
         ))
 
@@ -288,9 +304,10 @@ def bekleyen_odemeleri_listele(
         .where(Personel.sirket_id == sirket_id, PersonelOdeme.odendi_mi.is_(False))
     ).scalars():
         personel = db.get(Personel, o.personel_id)
-        etiket = f"Personel — {personel.ad_soyad if personel else ''} — {o.tip.value} ({o.donem})"
+        ust_baslik = f"Personel — {personel.ad_soyad if personel else ''}"
         sonuc.append(BekleyenOdemeYanit(
-            kaynak_tablo="PERSONEL_ODEME", kaynak_id=o.id, etiket=etiket,
+            kaynak_tablo="PERSONEL_ODEME", kaynak_id=o.id, ust_baslik=ust_baslik,
+            etiket=f"{o.tip.value} ({o.donem})",
             tutar=o.tutar, para_birimi="TRY", vade_tarihi=o.donem, yon="CIKIS",
         ))
 
@@ -299,9 +316,10 @@ def bekleyen_odemeleri_listele(
         select(SabitGider).where(SabitGider.sirket_id == sirket_id, SabitGider.odendi_mi.is_(False))
     ).scalars():
         kategori = db.get(SabitGiderKategori, g.kategori_id)
-        etiket = f"Sabit Gider — {kategori.ad if kategori else ''} ({g.donem})"
+        ust_baslik = f"Sabit Gider — {kategori.ad if kategori else ''}"
         sonuc.append(BekleyenOdemeYanit(
-            kaynak_tablo="SABIT_GIDER", kaynak_id=g.id, etiket=etiket,
+            kaynak_tablo="SABIT_GIDER", kaynak_id=g.id, ust_baslik=ust_baslik,
+            etiket=f"Dönem {g.donem}",
             tutar=g.tutar, para_birimi="TRY", vade_tarihi=g.donem, yon="CIKIS",
         ))
 
@@ -316,9 +334,10 @@ def bekleyen_odemeleri_listele(
         if taksit_var_mi is not None:
             continue  # taksitlendirilmis kalemler yerine kendi taksitleri listelenir
         akreditif = db.get(Akreditif, k.akreditif_id)
-        etiket = f"Akreditif {akreditif.akreditif_no or '#' + str(akreditif.id)} — {k.tip.value} — {k.aciklama or ''}"
+        ust_baslik = f"Akreditif {akreditif.akreditif_no or '#' + str(akreditif.id)}"
         sonuc.append(BekleyenOdemeYanit(
-            kaynak_tablo="AKREDITIF_KALEMI", kaynak_id=k.id, etiket=etiket,
+            kaynak_tablo="AKREDITIF_KALEMI", kaynak_id=k.id, ust_baslik=ust_baslik,
+            etiket=f"{k.tip.value} — {k.aciklama or ''}",
             tutar=k.tutar, para_birimi=akreditif.para_birimi.value, vade_tarihi=k.vade_tarihi, yon="CIKIS",
         ))
 
@@ -330,9 +349,10 @@ def bekleyen_odemeleri_listele(
     ).scalars():
         kalem = db.get(AkreditifKalemi, t.kalem_id)
         akreditif = db.get(Akreditif, kalem.akreditif_id) if kalem else None
-        etiket = f"Akreditif {akreditif.akreditif_no or '#' + str(akreditif.id) if akreditif else ''} — {kalem.tip.value if kalem else ''} — Taksit {t.taksit_no}"
+        ust_baslik = f"Akreditif {akreditif.akreditif_no or '#' + str(akreditif.id) if akreditif else ''}"
         sonuc.append(BekleyenOdemeYanit(
-            kaynak_tablo="AKREDITIF_KALEM_TAKSIT", kaynak_id=t.id, etiket=etiket,
+            kaynak_tablo="AKREDITIF_KALEM_TAKSIT", kaynak_id=t.id, ust_baslik=ust_baslik,
+            etiket=f"{kalem.tip.value if kalem else ''} — Taksit {t.taksit_no}",
             tutar=t.tutar, para_birimi=akreditif.para_birimi.value if akreditif else "TRY",
             vade_tarihi=t.vade_tarihi, yon="CIKIS",
         ))
