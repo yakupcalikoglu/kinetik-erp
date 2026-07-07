@@ -442,7 +442,72 @@ const YONETICI_SEKMELERI = [
   { deger: 'sirket', etiket: 'Şirket Bilgileri' },
   { deger: 'kullanicilar', etiket: 'Kullanıcılar' },
   { deger: 'roller', etiket: 'Rol / İzinler' },
+  { deger: 'tehlikeli', etiket: 'Tehlikeli İşlemler' },
 ];
+
+function TehlikeliIslemlerSekmesi() {
+  const [onayMetni, setOnayMetni] = useState('');
+  const [calisiyor, setCalisiyor] = useState(false);
+  const [sonuc, setSonuc] = useState(null);
+  const [hata, setHata] = useState(null);
+
+  async function temizle() {
+    if (onayMetni !== 'EVET SİL') {
+      setHata('Devam etmek için kutuya tam olarak "EVET SİL" yazmalısınız.');
+      return;
+    }
+    if (!window.confirm('Bu işlem TÜM cari/sipariş/stok/finansal takip/kasa-banka verilerini KALICI olarak silecek. Emin misiniz?')) return;
+    setHata(null);
+    setSonuc(null);
+    setCalisiyor(true);
+    try {
+      const { data } = await api.post('/admin/test-verilerini-temizle', { onay_metni: onayMetni });
+      setSonuc(data);
+      setOnayMetni('');
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setCalisiyor(false);
+    }
+  }
+
+  return (
+    <Kart style={{ borderLeft: '4px solid var(--kirmizi)' }}>
+      <div style={{ fontWeight: 600, fontSize: 14.5, marginBottom: 8, color: 'var(--kirmizi)' }}>
+        Test Verilerini Temizle
+      </div>
+      <div style={{ fontSize: 13, color: 'var(--metin-ikincil)', marginBottom: 16 }}>
+        Bu işlem <strong>geri alınamaz</strong>. Şunlar hariç her şey silinir: Şirket bilgisi, Kullanıcılar/Roller/İzinler,
+        Ürün Tanımları, Banka Hesapları, Sabit Gider Kategorileri, Harcama Türleri.
+        Silinenler: tüm Cariler, Siparişler, Stok, Akreditif/Leasing/Çek/Kiralama/Taksitli Satış/Bakım/Personel/Sabit Gider/Borç
+        kayıtları, Proforma/Fatura, Kasa/Banka hareketleri, Virman geçmişi.
+      </div>
+      <HataMesaji>{hata}</HataMesaji>
+      {sonuc && (
+        <div style={{ background: 'var(--yesil-acik)', color: 'var(--yesil)', padding: '10px 14px', borderRadius: 8, fontSize: 13, marginBottom: 14 }}>
+          Temizlik tamamlandı. Toplam {sonuc.toplam_silinen} kayıt silindi.
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', maxWidth: 480 }}>
+        <div style={{ flex: 1 }}>
+          <Alan etiket='Devam etmek için "EVET SİL" yazın'>
+            <input value={onayMetni} onChange={(e) => setOnayMetni(e.target.value)} style={girdiStili} />
+          </Alan>
+        </div>
+        <button
+          onClick={temizle}
+          disabled={calisiyor}
+          style={{
+            padding: '10px 18px', borderRadius: 8, border: 'none', background: 'var(--kirmizi)', color: 'white',
+            fontWeight: 600, cursor: calisiyor ? 'default' : 'pointer', marginBottom: 14,
+          }}
+        >
+          {calisiyor ? 'Siliniyor...' : 'Kalıcı Olarak Sil'}
+        </button>
+      </div>
+    </Kart>
+  );
+}
 
 export default function YoneticiPaneliSayfasi() {
   const [sekme, setSekme] = useState('sirket');
@@ -458,6 +523,7 @@ export default function YoneticiPaneliSayfasi() {
       {sekme === 'sirket' && <SirketBilgileriSekmesi />}
       {sekme === 'kullanicilar' && <KullanicilarSekmesi />}
       {sekme === 'roller' && <RolIzinleriSekmesi />}
+      {sekme === 'tehlikeli' && <TehlikeliIslemlerSekmesi />}
     </div>
   );
 }
