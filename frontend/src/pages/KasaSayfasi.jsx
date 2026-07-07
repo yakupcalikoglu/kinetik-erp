@@ -10,6 +10,24 @@ function useHarcamaTurleri() {
   return turler;
 }
 
+const BEKLEYEN_ENDPOINT_MAP = {
+  LEASING_ODEME: (id) => `/leasing-odemeleri/${id}/ode`,
+  KIRALAMA_ODEME: (id) => `/kiralama-odemeleri/${id}/tahsil-et`,
+  TAKSIT_DETAY: (id) => `/taksit-detay/${id}/tahsil-et`,
+  PERSONEL_ODEME: (id) => `/personel-odemeleri/${id}/ode`,
+  SABIT_GIDER: (id) => `/sabit-giderler/${id}/ode`,
+  AKREDITIF_KALEMI: (id) => `/akreditif-kalemleri/${id}/ode`,
+  AKREDITIF_KALEM_TAKSIT: (id) => `/akreditif-kalem-taksitleri/${id}/ode`,
+};
+
+function useBekleyenOdemeler() {
+  const [liste, setListe] = useState([]);
+  useEffect(() => {
+    api.get('/kaynak-detay/bekleyen-odemeler').then((r) => setListe(r.data)).catch(() => {});
+  }, []);
+  return liste;
+}
+
 function KaynakDetayi({ kaynakTablo, kaynakId }) {
   const [detay, setDetay] = useState(null);
   const [hata, setHata] = useState(null);
@@ -37,6 +55,11 @@ function KaynakDetayi({ kaynakTablo, kaynakId }) {
 }
 
 function YeniKasaHareketiFormu({ onKaydedildi, onVazgec }) {
+  const [baglantiliModu, setBaglantiliModu] = useState(false);
+  const bekleyenler = useBekleyenOdemeler();
+  const [seciliBekleyenAnahtar, setSeciliBekleyenAnahtar] = useState('');
+  const [bekleyenKur, setBekleyenKur] = useState('1');
+
   const [form, setForm] = useState({
     tarih: new Date().toISOString().slice(0, 10), yon: 'GIRIS', tutar: '', para_birimi: 'TRY',
     tutar_try_karsiligi: '', aciklama: '',
@@ -63,16 +86,34 @@ function YeniKasaHareketiFormu({ onKaydedildi, onVazgec }) {
       .finally(() => setKurYukleniyor(false));
   }, [form.para_birimi]); // eslint-disable-line
 
+  const seciliBekleyen = bekleyenler.find((b) => `${b.kaynak_tablo}:${b.kaynak_id}` === seciliBekleyenAnahtar);
+  const bekleyenKurGerekli = baglantiliModu && seciliBekleyen && seciliBekleyen.para_birimi !== 'TRY';
+
   async function kaydet(e) {
     e.preventDefault();
     setHata(null);
     setKaydediliyor(true);
     try {
-      await api.post('/kasa-hareketleri', {
-        ...form,
-        tutar: Number(form.tutar),
-        tutar_try_karsiligi: form.para_birimi === 'TRY' ? null : Number(form.tutar_try_karsiligi),
-      });
+      if (baglantiliModu) {
+        if (!seciliBekleyen) {
+          setHata('Lütfen hangi ödemeye/tahsilata karşılık geldiğini seçin.');
+          setKaydediliyor(false);
+          return;
+        }
+        const endpointFn = BEKLEYEN_ENDPOINT_MAP[seciliBekleyen.kaynak_tablo];
+        await api.put(endpointFn(seciliBekleyen.kaynak_id), {
+          odeme_tarihi: form.tarih,
+          odeme_yontemi: 'NAKIT',
+          banka_hesap_id: null,
+          kur: bekleyenKurGerekli ? Number(bekleyenKur) : null,
+        });
+      } else {
+        await api.post('/kasa-hareketleri', {
+          ...form,
+          tutar: Number(form.tutar),
+          tutar_try_karsiligi: form.para_birimi === 'TRY' ? null : Number(form.tutar_try_karsiligi),
+        });
+      }
       onKaydedildi();
     } catch (err) {
       setHata(hataMesajiCikar(err));
@@ -84,44 +125,75 @@ function YeniKasaHareketiFormu({ onKaydedildi, onVazgec }) {
   return (
     <Kart style={{ marginBottom: 16 }}>
       <form onSubmit={kaydet}>
-        <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 14 }}>Yeni kasa hareketi</div>
+        <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 10 }}>Yeni kasa hareketi</div>
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 14, cursor: 'pointer' }}>
+          <input type="checkbox" checked={baglantiliModu} onChange={(e) => setBaglantiliModu(e.target.checked)} />
+          Bu hareket bekleyen bir ödeme/tahsilata karşılık geliyor (Leasing, Akreditif, Kiralama, Taksitli Satış, Personel, Sabit Gider)
+        </label>
+
         <HataMesaji>{hata}</HataMesaji>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12 }}>
-          <Alan etiket="Tarih">
-            <input required type="date" value={form.tarih} onChange={(e) => setForm((f) => ({ ...f, tarih: e.target.value }))} style={girdiStili} />
-          </Alan>
-          <Alan etiket="Yön">
-            <select value={form.yon} onChange={(e) => setForm((f) => ({ ...f, yon: e.target.value }))} style={girdiStili}>
-              <option value="GIRIS">Giriş</option>
-              <option value="CIKIS">Çıkış</option>
-            </select>
-          </Alan>
-          <Alan etiket="Para birimi">
-            <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={girdiStili}>
-              <option value="TRY">TRY</option>
-              <option value="USD">USD</option>
-              <option value="EUR">EUR</option>
-              <option value="ALTIN">ALTIN</option>
-            </select>
-          </Alan>
-          <Alan etiket="Tutar">
-            <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
-          </Alan>
-          {form.para_birimi !== 'TRY' && (
-            <Alan etiket={kurYukleniyor ? 'TL karşılığı (kur yükleniyor...)' : 'TL karşılığı (otomatik, elle değiştirilebilir)'}>
-              <input required type="number" step="0.01" value={form.tutar_try_karsiligi} onChange={(e) => setForm((f) => ({ ...f, tutar_try_karsiligi: e.target.value }))} style={girdiStili} />
+
+        {baglantiliModu ? (
+          <div style={{ display: 'grid', gridTemplateColumns: bekleyenKurGerekli ? '2fr 1fr 1fr' : '2fr 1fr', gap: 12 }}>
+            <Alan etiket="Hangi kayıt?">
+              <select required value={seciliBekleyenAnahtar} onChange={(e) => setSeciliBekleyenAnahtar(e.target.value)} style={girdiStili}>
+                <option value="">Seçin...</option>
+                {bekleyenler.map((b) => (
+                  <option key={`${b.kaynak_tablo}:${b.kaynak_id}`} value={`${b.kaynak_tablo}:${b.kaynak_id}`}>
+                    {b.etiket} — {paraFormat(b.tutar, b.para_birimi)} {b.vade_tarihi ? `(${b.vade_tarihi})` : ''}
+                  </option>
+                ))}
+              </select>
             </Alan>
-          )}
-          <Alan etiket="Açıklama">
-            <OtomatikTamamlamaGirdisi
-              value={form.aciklama}
-              onChange={(v) => setForm((f) => ({ ...f, aciklama: v }))}
-              secenekler={harcamaTurleri}
-              listeId="harcama-turleri-yeni-kasa"
-              placeholder="Yazmaya başlayın veya listeden seçin"
-            />
-          </Alan>
-        </div>
+            <Alan etiket="Tarih">
+              <input required type="date" value={form.tarih} onChange={(e) => setForm((f) => ({ ...f, tarih: e.target.value }))} style={girdiStili} />
+            </Alan>
+            {bekleyenKurGerekli && (
+              <Alan etiket={`${seciliBekleyen.para_birimi} için TL kuru`}>
+                <input required type="number" step="0.0001" value={bekleyenKur} onChange={(e) => setBekleyenKur(e.target.value)} style={girdiStili} />
+              </Alan>
+            )}
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12 }}>
+            <Alan etiket="Tarih">
+              <input required type="date" value={form.tarih} onChange={(e) => setForm((f) => ({ ...f, tarih: e.target.value }))} style={girdiStili} />
+            </Alan>
+            <Alan etiket="Yön">
+              <select value={form.yon} onChange={(e) => setForm((f) => ({ ...f, yon: e.target.value }))} style={girdiStili}>
+                <option value="GIRIS">Giriş</option>
+                <option value="CIKIS">Çıkış</option>
+              </select>
+            </Alan>
+            <Alan etiket="Para birimi">
+              <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={girdiStili}>
+                <option value="TRY">TRY</option>
+                <option value="USD">USD</option>
+                <option value="EUR">EUR</option>
+                <option value="ALTIN">ALTIN</option>
+              </select>
+            </Alan>
+            <Alan etiket="Tutar">
+              <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
+            </Alan>
+            {form.para_birimi !== 'TRY' && (
+              <Alan etiket={kurYukleniyor ? 'TL karşılığı (kur yükleniyor...)' : 'TL karşılığı (otomatik, elle değiştirilebilir)'}>
+                <input required type="number" step="0.01" value={form.tutar_try_karsiligi} onChange={(e) => setForm((f) => ({ ...f, tutar_try_karsiligi: e.target.value }))} style={girdiStili} />
+              </Alan>
+            )}
+            <Alan etiket="Açıklama">
+              <OtomatikTamamlamaGirdisi
+                value={form.aciklama}
+                onChange={(v) => setForm((f) => ({ ...f, aciklama: v }))}
+                secenekler={harcamaTurleri}
+                listeId="harcama-turleri-yeni-kasa"
+                placeholder="Yazmaya başlayın veya listeden seçin"
+              />
+            </Alan>
+          </div>
+        )}
+
         <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
           <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Kaydediliyor...' : 'Hareketi kaydet'}</Buton>
           <Buton type="button" variant="ikincil" onClick={onVazgec}>Vazgeç</Buton>
