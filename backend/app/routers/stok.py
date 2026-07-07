@@ -344,3 +344,70 @@ def kar_raporu(
         kar_zarar_try=kar_zarar,
         durum=kayit.durum,
     )
+  # ------------------------------------------------------- MALİYET KALEMİ DÜZENLE/SİL
+@router.put("/stok-seri-no/{seri_id}/maliyet-kalemi/{kalem_id}", response_model=StokSeriNoYanit,
+            dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
+def maliyet_kalemi_duzenle(
+    seri_id: int,
+    kalem_id: int,
+    istek: MaliyetKalemiEkleIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Yanlis girilmis bir maliyet kalemini duzeltir. Ozet sutun (orn.
+    nakliye_maliyeti_try) once eski tutar dusulerek, sonra yeni tutar
+    eklenerek guncellenir - tip degisse bile (orn. Nakliye -> Gumruk)
+    dogru sutunlar etkilenir.
+    """
+    kayit = _seri_no_getir_veya_404(db, seri_id, sirket_id)
+    kalem = db.get(StokMaliyetKalemi, kalem_id)
+    if kalem is None or kalem.stok_seri_no_id != seri_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Maliyet kalemi bulunamadı.")
+
+    eski_ozet_sutun = MALIYET_TIP_SUTUN_ESLEME[kalem.tip]
+    eski_deger = getattr(kayit, eski_ozet_sutun) or 0
+    setattr(kayit, eski_ozet_sutun, eski_deger - kalem.tutar_try)
+
+    yeni_tutar_try = istek.tutar * istek.kur
+    kalem.tip = istek.tip
+    kalem.aciklama = istek.aciklama
+    kalem.tedarikci_cari_id = istek.tedarikci_cari_id
+    kalem.para_birimi = istek.para_birimi
+    kalem.tutar = istek.tutar
+    kalem.kur = istek.kur
+    kalem.tutar_try = yeni_tutar_try
+    kalem.belge_no = istek.belge_no
+    kalem.tarih = istek.tarih
+
+    yeni_ozet_sutun = MALIYET_TIP_SUTUN_ESLEME[istek.tip]
+    yeni_deger = getattr(kayit, yeni_ozet_sutun) or 0
+    setattr(kayit, yeni_ozet_sutun, yeni_deger + yeni_tutar_try)
+
+    db.commit()
+    db.refresh(kayit)
+    return kayit
+
+
+@router.delete("/stok-seri-no/{seri_id}/maliyet-kalemi/{kalem_id}", response_model=StokSeriNoYanit,
+               dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
+def maliyet_kalemi_sil(
+    seri_id: int,
+    kalem_id: int,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """Bir maliyet kalemini siler ve tutarini ilgili ozet sutundan geri duser."""
+    kayit = _seri_no_getir_veya_404(db, seri_id, sirket_id)
+    kalem = db.get(StokMaliyetKalemi, kalem_id)
+    if kalem is None or kalem.stok_seri_no_id != seri_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Maliyet kalemi bulunamadı.")
+
+    ozet_sutun = MALIYET_TIP_SUTUN_ESLEME[kalem.tip]
+    mevcut_deger = getattr(kayit, ozet_sutun) or 0
+    setattr(kayit, ozet_sutun, mevcut_deger - kalem.tutar_try)
+
+    db.delete(kalem)
+    db.commit()
+    db.refresh(kayit)
+    return kayit
