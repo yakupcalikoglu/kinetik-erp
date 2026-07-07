@@ -180,7 +180,9 @@ def kullanici_rolu_guncelle(
     rol = db.get(Rol, istek.rol_id)
     return KullaniciYanit(id=kullanici.id, ad_soyad=kullanici.ad_soyad, email=kullanici.email,
                            aktif=kullanici.aktif, roller=[rol.ad] if rol else [])
-  class KullaniciDurumGuncelleIstegi(BaseModel):
+
+
+class KullaniciDurumGuncelleIstegi(BaseModel):
     aktif: bool
 
 
