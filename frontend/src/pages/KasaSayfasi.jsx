@@ -1,6 +1,6 @@
 import { useEffect, useState, Fragment } from 'react';
 import { api, hataMesajiCikar } from '../api/client';
-import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat, OtomatikTamamlamaGirdisi } from '../components/Ortak';
+import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat, eylemChipStili, OtomatikTamamlamaGirdisi } from '../components/Ortak';
 
 function useHarcamaTurleri() {
   const [turler, setTurler] = useState([]);
@@ -160,7 +160,7 @@ function KasaHareketiDuzenleFormu({ hareket, onKaydedildi, onVazgec }) {
 
   return (
     <tr>
-      <td colSpan={5} style={{ padding: 0 }}>
+      <td colSpan={6} style={{ padding: 0 }}>
         <div style={{ padding: 16, background: 'var(--zemin)' }}>
           <form onSubmit={kaydet}>
             <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 12 }}>Hareketi düzenle</div>
@@ -244,6 +244,16 @@ export default function KasaSayfasi() {
     setAcikDetayId((mevcut) => (mevcut === h.id ? null : h.id));
   }
 
+  async function hareketiSil(hareketId) {
+    if (!window.confirm('Bu kasa hareketini silmek istediğinize emin misiniz?')) return;
+    try {
+      await api.delete(`/kasa-hareketleri/${hareketId}`);
+      yukle();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    }
+  }
+
   let gosterilecekHareketler = kasaHareketleri;
   if (yonFiltre) gosterilecekHareketler = gosterilecekHareketler.filter((h) => h.yon === yonFiltre);
   if (paraBirimiFiltre) gosterilecekHareketler = gosterilecekHareketler.filter((h) => h.para_birimi === paraBirimiFiltre);
@@ -303,7 +313,7 @@ export default function KasaSayfasi() {
           <table>
             <thead>
               <tr style={{ background: 'var(--zemin)' }}>
-                {['Tarih', 'Yön', 'Tutar', 'TL Karşılığı', 'Açıklama'].map((b) => (
+                {['Tarih', 'Yön', 'Tutar', 'TL Karşılığı', 'Açıklama', 'İşlem'].map((b) => (
                   <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
                 ))}
               </tr>
@@ -311,6 +321,7 @@ export default function KasaSayfasi() {
             <tbody>
               {gosterilecekHareketler.map((h) => {
                 const tiklanabilir = !!(h.kaynak_tablo && h.kaynak_id);
+                const otomatikGeldi = !!h.kaynak_tablo;
                 if (duzenlenenId === h.id) {
                   return (
                     <KasaHareketiDuzenleFormu
@@ -346,20 +357,23 @@ export default function KasaSayfasi() {
                             </span>
                           )}
                         </span>
-                        <button
-                          onClick={() => setDuzenlenenId(h.id)}
-                          style={{
-                            marginLeft: 10, fontSize: 11, color: 'var(--lacivert)', background: 'none',
-                            border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0,
-                          }}
-                        >
-                          Düzenle
-                        </button>
+                      </td>
+                      <td style={{ padding: '10px 16px' }}>
+                        {otomatikGeldi ? (
+                          <span style={{ fontSize: 11.5, color: 'var(--metin-soluk)', fontStyle: 'italic' }}>
+                            Otomatik ({h.kaynak_tablo}) — geri almak için kaynağa gidin
+                          </span>
+                        ) : (
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <button onClick={() => setDuzenlenenId(h.id)} style={eylemChipStili('lacivert')}>Düzenle</button>
+                            <button onClick={() => hareketiSil(h.id)} style={eylemChipStili('kirmizi')}>Sil</button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                     {acikDetayId === h.id && (
                       <tr>
-                        <td colSpan={5} style={{ padding: 0 }}>
+                        <td colSpan={6} style={{ padding: 0 }}>
                           <KaynakDetayi kaynakTablo={h.kaynak_tablo} kaynakId={h.kaynak_id} />
                         </td>
                       </tr>
