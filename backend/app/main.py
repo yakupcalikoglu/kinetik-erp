@@ -44,6 +44,7 @@ app.include_router(akreditif.kalem_router)
 app.include_router(virman.router)
 app.include_router(harcama_turu.router)
 app.include_router(kaynak_detay.router)
+app.include_router(kaynak_detay.bekleyen_router)
 
 @app.get("/")
 def saglik_kontrolu():
