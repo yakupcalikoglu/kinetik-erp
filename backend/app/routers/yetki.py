@@ -272,3 +272,103 @@ def rol_sil(
     db.delete(rol)
     db.commit()
     return {"silindi": True}
+# ============================================================== TEHLİKELİ İŞLEM: TEST VERİLERİNİ TEMİZLE
+class TemizlikOnayIstegi(BaseModel):
+    onay_metni: str
+
+
+@router.post("/admin/test-verilerini-temizle",
+             dependencies=[Depends(izin_gerektir("KULLANICI_YONET"))])
+def test_verilerini_temizle(istek: TemizlikOnayIstegi, db: Session = Depends(get_db)):
+    """
+    GERI ALINAMAZ: Sirket bilgisi, Kullanicilar/Roller/Izinler, Urun
+    Tanimlari, Banka Hesaplari, Sabit Gider Kategorileri ve Harcama Turleri
+    HARIC tum islem/kayit verisini siler (Cariler, Siparisler, Stok,
+    Akreditif/Leasing/Cek/Kiralama/Taksit/Bakim/Personel/Sabit Gider/Borc,
+    Proforma/Fatura, Kasa/Banka hareketleri, Virman gecmisi).
+    Sadece KULLANICI_YONET iznine sahip kullanicilar cagirabilir.
+    """
+    if istek.onay_metni != "EVET SİL":
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Onay metni hatalı. Devam etmek için tam olarak 'EVET SİL' yazmalısınız."
+        )
+
+    from sqlalchemy import delete as sa_delete
+
+    from app.models.finansal import (
+        Cek, CekGecmis, LeasingSozlesme, LeasingOdeme,
+        TaksitliSatisPlani, TaksitDetay, KiralamaSozlesme, KiralamaOdeme, BakimKaydi,
+    )
+    from app.models.akreditif import Akreditif, AkreditifKalemi
+    from app.models.akreditif_maliyet import AkreditifMaliyetDagitimi
+    from app.models.akreditif_taksit import AkreditifKalemTaksiti
+    from app.models.diger import (
+        PersonelOdeme, Personel, SabitGider, Borc, BorcOdeme,
+        ProformaDetay, ProformaFatura, FaturaDetay, Fatura,
+    )
+    from app.models.stok import Siparis, SiparisDetay, StokSeriNo, StokMaliyetKalemi
+    from app.models.cari import CariHesap, CariHareket
+    from app.models.banka import KasaHareketi, BankaHareketi
+    from app.models.virman import UrunSahiplikGecmisi
+
+    # Silme sirasi onemli: cocuk kayitlar ebeveynden ONCE silinir.
+    modeller = [
+        AkreditifKalemTaksiti,
+        AkreditifMaliyetDagitimi,
+        AkreditifKalemi,
+        Akreditif,
+
+        LeasingOdeme,
+        LeasingSozlesme,
+
+        TaksitDetay,
+        TaksitliSatisPlani,
+
+        KiralamaOdeme,
+        KiralamaSozlesme,
+
+        BakimKaydi,
+
+        CekGecmis,
+        Cek,
+
+        PersonelOdeme,
+        Personel,
+
+        SabitGider,
+
+        BorcOdeme,
+        Borc,
+
+        ProformaDetay,
+        ProformaFatura,
+        FaturaDetay,
+        Fatura,
+
+        UrunSahiplikGecmisi,
+
+        KasaHareketi,
+        BankaHareketi,
+
+        CariHareket,
+
+        StokMaliyetKalemi,
+        StokSeriNo,
+
+        SiparisDetay,
+        Siparis,
+
+        CariHesap,
+    ]
+
+    sonuclar = {}
+    toplam = 0
+    for model in modeller:
+        sonuc = db.execute(sa_delete(model))
+        adet = sonuc.rowcount or 0
+        sonuclar[model.__tablename__] = adet
+        toplam += adet
+
+    db.commit()
+    return {"toplam_silinen": toplam, "detaylar": sonuclar}
