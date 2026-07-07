@@ -57,6 +57,19 @@ function useCariler() {
   return cariler;
 }
 
+function useUrunSecenekleri() {
+  const [urunler, setUrunler] = useState([]);
+  const [kartlar, setKartlar] = useState([]);
+  useEffect(() => {
+    api.get('/stok-seri-no').then((r) => setUrunler(r.data)).catch(() => {});
+    api.get('/stok-kartlari').then((r) => setKartlar(r.data)).catch(() => {});
+  }, []);
+  return urunler.map((u) => {
+    const kart = kartlar.find((k) => k.id === u.stok_karti_id);
+    return { ...u, etiket: kart ? `${u.seri_no} — ${kart.marka} ${kart.model}` : u.seri_no };
+  });
+}
+
 function useHarcamaTurleri() {
   const [turler, setTurler] = useState([]);
   useEffect(() => {
@@ -1352,9 +1365,11 @@ function BakimSekmesi() {
   const [liste, setListe] = useState([]);
   const [bankaHesaplari, setBankaHesaplari] = useState([]);
   const harcamaTurleri = useHarcamaTurleri();
+  const urunSecenekleri = useUrunSecenekleri();
+  const cariler = useCariler();
   const [formAcik, setFormAcik] = useState(false);
   const [form, setForm] = useState({
-    stok_seri_no_id: '', tarih: new Date().toISOString().slice(0, 10), tip: 'GIDER', aciklama: '', tutar: '',
+    stok_seri_no_id: '', tarih: new Date().toISOString().slice(0, 10), tip: 'GIDER', aciklama: '', ilgili_cari_id: '', tutar: '',
     odeme_yontemi: 'NAKIT', banka_hesap_id: '',
   });
   const [hata, setHata] = useState(null);
@@ -1374,6 +1389,7 @@ function BakimSekmesi() {
       await api.post('/bakim-kayitlari', {
         ...form,
         stok_seri_no_id: Number(form.stok_seri_no_id),
+        ilgili_cari_id: form.ilgili_cari_id ? Number(form.ilgili_cari_id) : null,
         tutar: Number(form.tutar),
         banka_hesap_id: form.odeme_yontemi === 'BANKA' ? Number(form.banka_hesap_id) : null,
       });
@@ -1400,8 +1416,17 @@ function BakimSekmesi() {
       {formAcik && (
         <Kart style={{ marginBottom: 16 }}>
           <form onSubmit={kaydet} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-            <Alan etiket="Stok seri no ID">
-              <input required type="number" value={form.stok_seri_no_id} onChange={(e) => setForm((f) => ({ ...f, stok_seri_no_id: e.target.value }))} style={girdiStili} />
+            <Alan etiket="Ürün">
+              <select required value={form.stok_seri_no_id} onChange={(e) => setForm((f) => ({ ...f, stok_seri_no_id: e.target.value }))} style={girdiStili}>
+                <option value="">Seçin...</option>
+                {urunSecenekleri.map((u) => <option key={u.id} value={u.id}>{u.etiket}</option>)}
+              </select>
+            </Alan>
+            <Alan etiket="İlgili cari (opsiyonel)">
+              <select value={form.ilgili_cari_id} onChange={(e) => setForm((f) => ({ ...f, ilgili_cari_id: e.target.value }))} style={girdiStili}>
+                <option value="">Seçin...</option>
+                {cariler.map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
+              </select>
             </Alan>
             <Alan etiket="Tarih">
               <input required type="date" value={form.tarih} onChange={(e) => setForm((f) => ({ ...f, tarih: e.target.value }))} style={girdiStili} />
@@ -1447,11 +1472,12 @@ function BakimSekmesi() {
 
       <Kart style={{ padding: 0 }}>
         <BasitTablo
-          basliklar={['Seri No ID', 'Tarih', 'Tip', 'Açıklama', 'Tutar', '']}
+          basliklar={['Ürün', 'İlgili Cari', 'Tarih', 'Tip', 'Açıklama', 'Tutar', '']}
           satirlar={liste}
           render={(b) => (
             <tr key={b.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
-              <td style={{ padding: '10px 16px' }}>{b.stok_seri_no_id}</td>
+              <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{b.urun_adi ? `${b.urun_adi} (${b.urun_seri_no})` : (b.urun_seri_no || `#${b.stok_seri_no_id}`)}</td>
+              <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{b.ilgili_cari_unvan || '—'}</td>
               <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{b.tarih}</td>
               <td style={{ padding: '10px 16px' }}><Etiket ton={b.tip === 'GELIR' ? 'yesil' : 'kirmizi'}>{b.tip === 'GELIR' ? 'Gelir' : 'Gider'}</Etiket></td>
               <td style={{ padding: '10px 16px' }}>{b.aciklama || '—'}</td>
@@ -1471,11 +1497,12 @@ function BakimSekmesi() {
 function LeasingSekmesi() {
   const [liste, setListe] = useState([]);
   const cariler = useCariler();
+  const urunSecenekleri = useUrunSecenekleri();
   const [hata, setHata] = useState(null);
   const [seciliPlan, setSeciliPlan] = useState(null);
   const [formAcik, setFormAcik] = useState(false);
   const [form, setForm] = useState({
-    sozlesme_no: '', leasing_firmasi_cari_id: '', toplam_tutar: '', para_birimi: 'TRY',
+    sozlesme_no: '', leasing_firmasi_cari_id: '', stok_seri_no_id: '', toplam_tutar: '', para_birimi: 'TRY',
     taksit_sayisi: 12, baslangic_tarihi: new Date().toISOString().slice(0, 10),
   });
 
@@ -1491,11 +1518,12 @@ function LeasingSekmesi() {
       await api.post('/leasing-sozlesmeleri', {
         ...form,
         leasing_firmasi_cari_id: Number(form.leasing_firmasi_cari_id),
+        stok_seri_no_id: form.stok_seri_no_id ? Number(form.stok_seri_no_id) : null,
         toplam_tutar: Number(form.toplam_tutar),
         taksit_sayisi: Number(form.taksit_sayisi),
       });
       setFormAcik(false);
-      setForm({ sozlesme_no: '', leasing_firmasi_cari_id: '', toplam_tutar: '', para_birimi: 'TRY', taksit_sayisi: 12, baslangic_tarihi: new Date().toISOString().slice(0, 10) });
+      setForm({ sozlesme_no: '', leasing_firmasi_cari_id: '', stok_seri_no_id: '', toplam_tutar: '', para_birimi: 'TRY', taksit_sayisi: 12, baslangic_tarihi: new Date().toISOString().slice(0, 10) });
       yukle();
     } catch (err) { setHata(hataMesajiCikar(err)); }
   }
@@ -1553,6 +1581,12 @@ function LeasingSekmesi() {
                 {cariler.map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
               </select>
             </Alan>
+            <Alan etiket="Ürün (opsiyonel)">
+              <select value={form.stok_seri_no_id} onChange={(e) => setForm((f) => ({ ...f, stok_seri_no_id: e.target.value }))} style={girdiStili}>
+                <option value="">Seçin...</option>
+                {urunSecenekleri.map((u) => <option key={u.id} value={u.id}>{u.etiket}</option>)}
+              </select>
+            </Alan>
             <Alan etiket="Para birimi">
               <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={girdiStili}>
                 <option value="TRY">TRY</option>
@@ -1576,11 +1610,13 @@ function LeasingSekmesi() {
 
       <Kart style={{ padding: 0, marginBottom: 16 }}>
         <BasitTablo
-          basliklar={['Sözleşme No', 'Toplam Tutar', 'Taksit Sayısı', 'İşlem']}
+          basliklar={['Sözleşme No', 'Leasing Firması', 'Ürün', 'Toplam Tutar', 'Taksit Sayısı', 'İşlem']}
           satirlar={liste}
           render={(l) => (
             <tr key={l.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
               <td style={{ padding: '10px 16px', fontWeight: 500 }}>{l.sozlesme_no || `#${l.id}`}</td>
+              <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{l.leasing_firmasi_unvan || `#${l.leasing_firmasi_cari_id}`}</td>
+              <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{l.urun_adi ? `${l.urun_adi} (${l.urun_seri_no})` : (l.urun_seri_no || '—')}</td>
               <td style={{ padding: '10px 16px' }}>{paraFormat(l.toplam_tutar, l.para_birimi)}</td>
               <td style={{ padding: '10px 16px' }}>{l.taksit_sayisi}</td>
               <td style={{ padding: '10px 16px' }}>
@@ -1634,6 +1670,7 @@ function KiralamaSekmesi() {
   const [hata, setHata] = useState(null);
   const cariHaritasi = useCariHaritasi();
   const cariler = useCariler();
+  const urunSecenekleri = useUrunSecenekleri();
   const [seciliSozlesme, setSeciliSozlesme] = useState(null);
   const [odemeler, setOdemeler] = useState(null);
   const [odemeForm, setOdemeForm] = useState({ donem_basi: '', donem_sonu: '', tutar: '' });
@@ -1703,8 +1740,11 @@ function KiralamaSekmesi() {
       {formAcik && (
         <Kart style={{ marginBottom: 16 }}>
           <form onSubmit={kaydet} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-            <Alan etiket="Stok seri no ID">
-              <input required type="number" value={form.stok_seri_no_id} onChange={(e) => setForm((f) => ({ ...f, stok_seri_no_id: e.target.value }))} style={girdiStili} />
+            <Alan etiket="Ürün">
+              <select required value={form.stok_seri_no_id} onChange={(e) => setForm((f) => ({ ...f, stok_seri_no_id: e.target.value }))} style={girdiStili}>
+                <option value="">Seçin...</option>
+                {urunSecenekleri.map((u) => <option key={u.id} value={u.id}>{u.etiket}</option>)}
+              </select>
             </Alan>
             <Alan etiket="Kiracı">
               <select required value={form.kiraci_cari_id} onChange={(e) => setForm((f) => ({ ...f, kiraci_cari_id: e.target.value }))} style={girdiStili}>
@@ -1725,12 +1765,12 @@ function KiralamaSekmesi() {
 
       <Kart style={{ padding: 0, marginBottom: 16 }}>
         <BasitTablo
-          basliklar={['Seri No ID', 'Kiracı', 'Aylık Kira', 'Durum', '']}
+          basliklar={['Ürün', 'Kiracı', 'Aylık Kira', 'Durum', '']}
           satirlar={liste}
           render={(k) => (
             <tr key={k.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
-              <td style={{ padding: '10px 16px' }}>{k.stok_seri_no_id}</td>
-              <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{cariGoster(k.kiraci_cari_id, cariHaritasi)}</td>
+              <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{k.urun_adi ? `${k.urun_adi} (${k.urun_seri_no})` : (k.urun_seri_no || `#${k.stok_seri_no_id}`)}</td>
+              <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{k.kiraci_unvan || cariGoster(k.kiraci_cari_id, cariHaritasi)}</td>
               <td style={{ padding: '10px 16px' }}>{paraFormat(k.aylik_kira_tutari, k.para_birimi)}</td>
               <td style={{ padding: '10px 16px' }}><Etiket ton={k.durum === 'AKTIF' ? 'yesil' : 'notr'}>{k.durum}</Etiket></td>
               <td style={{ padding: '10px 16px' }}>
@@ -1792,6 +1832,7 @@ function KiralamaSekmesi() {
 function TaksitSekmesi() {
   const [hata, setHata] = useState(null);
   const cariler = useCariler();
+  const urunSecenekleri = useUrunSecenekleri();
   const [vadesiGecenler, setVadesiGecenler] = useState([]);
   const [formAcik, setFormAcik] = useState(false);
   const [form, setForm] = useState({
@@ -1863,8 +1904,11 @@ function TaksitSekmesi() {
                 {cariler.map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
               </select>
             </Alan>
-            <Alan etiket="Stok seri no ID (opsiyonel)">
-              <input type="number" value={form.stok_seri_no_id} onChange={(e) => setForm((f) => ({ ...f, stok_seri_no_id: e.target.value }))} style={girdiStili} />
+            <Alan etiket="Ürün (opsiyonel)">
+              <select value={form.stok_seri_no_id} onChange={(e) => setForm((f) => ({ ...f, stok_seri_no_id: e.target.value }))} style={girdiStili}>
+                <option value="">Seçin...</option>
+                {urunSecenekleri.map((u) => <option key={u.id} value={u.id}>{u.etiket}</option>)}
+              </select>
             </Alan>
             <Alan etiket="Toplam tutar (TL)">
               <input required type="number" step="0.01" value={form.toplam_tutar} onChange={(e) => setForm((f) => ({ ...f, toplam_tutar: e.target.value }))} style={girdiStili} />
@@ -1886,7 +1930,8 @@ function TaksitSekmesi() {
       {taksitler && (
         <Kart style={{ padding: 0, marginBottom: 16 }}>
           <div style={{ padding: '12px 16px', fontWeight: 600, fontSize: 13.5, borderBottom: '1px solid var(--kenarlik)' }}>
-            Plan #{olusanPlan.id} — oluşturulan taksitler
+            Plan #{olusanPlan.id} — {olusanPlan.musteri_unvan || 'Müşteri'}
+            {olusanPlan.urun_adi ? ` — ${olusanPlan.urun_adi} (${olusanPlan.urun_seri_no})` : ''}
           </div>
           <BasitTablo
             basliklar={['Taksit No', 'Vade', 'Tutar', 'Durum', '']}
@@ -1915,10 +1960,12 @@ function TaksitSekmesi() {
           Vadesi geçen taksitler (tüm planlar)
         </div>
         <BasitTablo
-          basliklar={['Taksit No', 'Vade', 'Tutar']}
+          basliklar={['Müşteri', 'Ürün', 'Taksit No', 'Vade', 'Tutar']}
           satirlar={vadesiGecenler}
           render={(t) => (
             <tr key={t.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+              <td style={{ padding: '10px 16px' }}>{t.musteri_unvan || '—'}</td>
+              <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{t.urun_seri_no || '—'}</td>
               <td style={{ padding: '10px 16px' }}>{t.taksit_no}</td>
               <td style={{ padding: '10px 16px', color: 'var(--kirmizi)' }}>{t.vade_tarihi}</td>
               <td style={{ padding: '10px 16px', fontWeight: 500 }}>{paraFormat(t.tutar)}</td>
