@@ -111,10 +111,100 @@ function MaliyetKalemiEkleFormu({ urun, onKaydedildi }) {
   );
 }
 
+function MaliyetKalemiDuzenleFormu({ kalem, onKaydedildi, onVazgec }) {
+  const [cariler, setCariler] = useState([]);
+  const [form, setForm] = useState({
+    tip: kalem.tip, tutar: kalem.tutar, para_birimi: kalem.para_birimi, kur: kalem.kur,
+    tedarikci_cari_id: kalem.tedarikci_cari_id || '', belge_no: kalem.belge_no || '',
+    tarih: kalem.tarih, aciklama: kalem.aciklama || '',
+  });
+  const [hata, setHata] = useState(null);
+  const [kaydediliyor, setKaydediliyor] = useState(false);
+
+  useEffect(() => {
+    api.get('/cariler').then((r) => setCariler(r.data)).catch(() => {});
+  }, []);
+
+  async function kaydet(e) {
+    e.preventDefault();
+    setHata(null);
+    setKaydediliyor(true);
+    try {
+      await api.put(`/stok-seri-no/${kalem.stok_seri_no_id}/maliyet-kalemi/${kalem.id}`, {
+        tip: form.tip,
+        tutar: Number(form.tutar),
+        para_birimi: form.para_birimi,
+        kur: Number(form.kur),
+        tedarikci_cari_id: form.tedarikci_cari_id ? Number(form.tedarikci_cari_id) : null,
+        belge_no: form.belge_no || null,
+        tarih: form.tarih,
+        aciklama: form.aciklama || null,
+      });
+      onKaydedildi();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setKaydediliyor(false);
+    }
+  }
+
+  return (
+    <tr>
+      <td colSpan={6} style={{ padding: 0 }}>
+        <div style={{ padding: 14, background: 'var(--zemin)' }}>
+          <form onSubmit={kaydet}>
+            <HataMesaji>{hata}</HataMesaji>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10 }}>
+              <Alan etiket="Maliyet tipi">
+                <select value={form.tip} onChange={(e) => setForm((f) => ({ ...f, tip: e.target.value }))} style={girdiStili}>
+                  {Object.entries(MALIYET_TIP_METIN).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+              </Alan>
+              <Alan etiket="Para birimi">
+                <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={girdiStili}>
+                  <option value="TRY">TRY</option>
+                  <option value="USD">USD</option>
+                  <option value="EUR">EUR</option>
+                </select>
+              </Alan>
+              <Alan etiket="Tutar">
+                <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
+              </Alan>
+              <Alan etiket="Kur">
+                <input required type="number" step="0.0001" value={form.kur} onChange={(e) => setForm((f) => ({ ...f, kur: e.target.value }))} style={girdiStili} />
+              </Alan>
+              <Alan etiket="Tedarikçi/firma">
+                <select value={form.tedarikci_cari_id} onChange={(e) => setForm((f) => ({ ...f, tedarikci_cari_id: e.target.value }))} style={girdiStili}>
+                  <option value="">Seçin...</option>
+                  {cariler.map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
+                </select>
+              </Alan>
+              <Alan etiket="Belge/fatura no">
+                <input value={form.belge_no} onChange={(e) => setForm((f) => ({ ...f, belge_no: e.target.value }))} style={girdiStili} />
+              </Alan>
+              <Alan etiket="Tarih">
+                <input required type="date" value={form.tarih} onChange={(e) => setForm((f) => ({ ...f, tarih: e.target.value }))} style={girdiStili} />
+              </Alan>
+              <Alan etiket="Açıklama">
+                <input value={form.aciklama} onChange={(e) => setForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
+              </Alan>
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Kaydediliyor...' : 'Değişiklikleri kaydet'}</Buton>
+              <Buton type="button" variant="ikincil" onClick={onVazgec}>Vazgeç</Buton>
+            </div>
+          </form>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 function MaliyetDetayi({ urun, onKapat }) {
   const [kalemler, setKalemler] = useState([]);
   const [yukleniyor, setYukleniyor] = useState(true);
   const [hata, setHata] = useState(null);
+  const [duzenlenenId, setDuzenlenenId] = useState(null);
 
   function yukle() {
     setYukleniyor(true);
@@ -124,6 +214,16 @@ function MaliyetDetayi({ urun, onKapat }) {
       .finally(() => setYukleniyor(false));
   }
   useEffect(yukle, [urun.id]); // eslint-disable-line
+
+  async function sil(kalemId) {
+    if (!window.confirm('Bu maliyet kalemini silmek istediğinize emin misiniz? Ürünün toplam maliyeti buna göre azaltılacak.')) return;
+    try {
+      await api.delete(`/stok-seri-no/${urun.id}/maliyet-kalemi/${kalemId}`);
+      yukle();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    }
+  }
 
   return (
     <Kart style={{ marginBottom: 16 }}>
@@ -143,22 +243,40 @@ function MaliyetDetayi({ urun, onKapat }) {
         <table>
           <thead>
             <tr style={{ background: 'var(--zemin)' }}>
-              {['Tip', 'Tutar', 'TL Karşılığı', 'Belge No', 'Tarih', 'Açıklama'].map((b) => (
+              {['Tip', 'Tutar', 'TL Karşılığı', 'Belge No', 'Tarih', 'Açıklama', ''].map((b) => (
                 <th key={b} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {kalemler.map((k) => (
-              <tr key={k.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
-                <td style={{ padding: '8px 12px' }}><Etiket ton="notr">{MALIYET_TIP_METIN[k.tip] || k.tip}</Etiket></td>
-                <td style={{ padding: '8px 12px' }}>{paraFormat(k.tutar, k.para_birimi)}</td>
-                <td style={{ padding: '8px 12px', fontWeight: 500 }}>{paraFormat(k.tutar_try)}</td>
-                <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{k.belge_no || '—'}</td>
-                <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{k.tarih}</td>
-                <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{k.aciklama || '—'}</td>
-              </tr>
-            ))}
+            {kalemler.map((k) => {
+              if (duzenlenenId === k.id) {
+                return (
+                  <MaliyetKalemiDuzenleFormu
+                    key={k.id}
+                    kalem={k}
+                    onKaydedildi={() => { setDuzenlenenId(null); yukle(); }}
+                    onVazgec={() => setDuzenlenenId(null)}
+                  />
+                );
+              }
+              return (
+                <tr key={k.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                  <td style={{ padding: '8px 12px' }}><Etiket ton="notr">{MALIYET_TIP_METIN[k.tip] || k.tip}</Etiket></td>
+                  <td style={{ padding: '8px 12px' }}>{paraFormat(k.tutar, k.para_birimi)}</td>
+                  <td style={{ padding: '8px 12px', fontWeight: 500 }}>{paraFormat(k.tutar_try)}</td>
+                  <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{k.belge_no || '—'}</td>
+                  <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{k.tarih}</td>
+                  <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{k.aciklama || '—'}</td>
+                  <td style={{ padding: '8px 12px' }}>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button onClick={() => setDuzenlenenId(k.id)} style={eylemChipStili('lacivert')}>Düzenle</button>
+                      <button onClick={() => sil(k.id)} style={eylemChipStili('kirmizi')}>Sil</button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}
@@ -277,7 +395,6 @@ export default function StokSayfasi() {
   }
 
   function tumUrunleriYukle() {
-    // Durum ozet kartlari icin filtresiz TAM liste
     api.get('/stok-seri-no').then((r) => setTumUrunler(r.data)).catch(() => {});
   }
 
@@ -310,7 +427,6 @@ export default function StokSayfasi() {
     return k ? `${k.marka} ${k.model}` : `#${stokKartiId}`;
   }
 
-  // Durum bazli ozet: hangi durumdan kac adet var
   const durumOzet = {};
   tumUrunler.forEach((u) => {
     durumOzet[u.durum] = (durumOzet[u.durum] || 0) + 1;
