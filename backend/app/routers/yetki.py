@@ -180,3 +180,93 @@ def kullanici_rolu_guncelle(
     rol = db.get(Rol, istek.rol_id)
     return KullaniciYanit(id=kullanici.id, ad_soyad=kullanici.ad_soyad, email=kullanici.email,
                            aktif=kullanici.aktif, roller=[rol.ad] if rol else [])
+  class KullaniciDurumGuncelleIstegi(BaseModel):
+    aktif: bool
+
+
+class KullaniciSifreSifirlaIstegi(BaseModel):
+    yeni_sifre: str
+
+
+class RolOlusturIstegi(BaseModel):
+    ad: str
+    aciklama: str | None = None
+
+
+@router.put("/kullanicilar/{kullanici_id}/durum", response_model=KullaniciYanit,
+            dependencies=[Depends(izin_gerektir("KULLANICI_YONET"))])
+def kullanici_durumunu_guncelle(
+    kullanici_id: int,
+    istek: KullaniciDurumGuncelleIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """Kullaniciyi aktif/pasif yapar (ornegin isten ayrilan bir calisanin erisimini kapatmak icin)."""
+    kullanici = db.get(Kullanici, kullanici_id)
+    if kullanici is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Kullanıcı bulunamadı.")
+    kullanici.aktif = istek.aktif
+    db.commit()
+    roller = list(db.execute(
+        select(Rol.ad).join(KullaniciRolu, KullaniciRolu.rol_id == Rol.id)
+        .where(KullaniciRolu.kullanici_id == kullanici_id, KullaniciRolu.sirket_id == sirket_id)
+    ).scalars())
+    return KullaniciYanit(id=kullanici.id, ad_soyad=kullanici.ad_soyad, email=kullanici.email,
+                           aktif=kullanici.aktif, roller=roller)
+
+
+@router.put("/kullanicilar/{kullanici_id}/sifre-sifirla",
+            dependencies=[Depends(izin_gerektir("KULLANICI_YONET"))])
+def kullanici_sifresini_sifirla(
+    kullanici_id: int,
+    istek: KullaniciSifreSifirlaIstegi,
+    db: Session = Depends(get_db),
+):
+    """Yonetici, bir kullanicinin sifresini e-posta akisi olmadan dogrudan degistirir."""
+    kullanici = db.get(Kullanici, kullanici_id)
+    if kullanici is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Kullanıcı bulunamadı.")
+    if len(istek.yeni_sifre) < 6:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Şifre en az 6 karakter olmalıdır.")
+    kullanici.sifre_hash = sifre_hashle(istek.yeni_sifre)
+    db.commit()
+    return {"guncellendi": True}
+
+
+# ============================================================== ROL YÖNETİMİ
+@router.post("/roller", response_model=RolYanit, dependencies=[Depends(izin_gerektir("KULLANICI_YONET"))])
+def rol_olustur(
+    istek: RolOlusturIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    yeni = Rol(sirket_id=sirket_id, ad=istek.ad, aciklama=istek.aciklama)
+    db.add(yeni)
+    db.commit()
+    db.refresh(yeni)
+    return RolYanit(id=yeni.id, ad=yeni.ad, aciklama=yeni.aciklama, izin_kodlari=[])
+
+
+@router.delete("/roller/{rol_id}", dependencies=[Depends(izin_gerektir("KULLANICI_YONET"))])
+def rol_sil(
+    rol_id: int,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """Sadece bu sirkete ait ozel roller silinebilir (sistem varsayilan rolleri sirket_id=None'dir, silinemez)."""
+    rol = db.get(Rol, rol_id)
+    if rol is None or rol.sirket_id != sirket_id:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "Rol bulunamadı ya da bu bir sistem varsayılan rolü olduğu için silinemez."
+        )
+    kullanim_var_mi = db.execute(select(KullaniciRolu).where(KullaniciRolu.rol_id == rol_id)).first()
+    if kullanim_var_mi is not None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Bu role sahip kullanıcılar olduğu için silinemiyor. Önce onların rolünü değiştirin."
+        )
+    db.execute(rol_izinleri.delete().where(rol_izinleri.c.rol_id == rol_id))
+    db.delete(rol)
+    db.commit()
+    return {"silindi": True}
