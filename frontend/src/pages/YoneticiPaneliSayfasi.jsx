@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, hataMesajiCikar } from '../api/client';
 import { useAuth } from '../context/AuthContext';
-import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, BosDurum, Sekmeler, Etiket } from '../components/Ortak';
+import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, BosDurum, Sekmeler, Etiket, eylemChipStili } from '../components/Ortak';
 
 function SirketBilgileriSekmesi() {
   const { oturum } = useAuth();
@@ -89,12 +89,55 @@ function SirketBilgileriSekmesi() {
   );
 }
 
+function KullaniciRolDuzenle({ kullanici, roller, onKaydedildi, onVazgec }) {
+  const [rolId, setRolId] = useState('');
+  const [hata, setHata] = useState(null);
+  const [kaydediliyor, setKaydediliyor] = useState(false);
+
+  async function kaydet(e) {
+    e.preventDefault();
+    setHata(null);
+    setKaydediliyor(true);
+    try {
+      await api.put(`/kullanicilar/${kullanici.id}/rol`, { rol_id: Number(rolId) });
+      onKaydedildi();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setKaydediliyor(false);
+    }
+  }
+
+  return (
+    <tr>
+      <td colSpan={5} style={{ padding: 0 }}>
+        <div style={{ padding: 14, background: 'var(--zemin)' }}>
+          <form onSubmit={kaydet} style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
+            <div style={{ flex: 1, maxWidth: 260 }}>
+              <Alan etiket="Yeni rol">
+                <select required value={rolId} onChange={(e) => setRolId(e.target.value)} style={girdiStili}>
+                  <option value="">Seçin...</option>
+                  {roller.map((r) => <option key={r.id} value={r.id}>{r.ad}</option>)}
+                </select>
+              </Alan>
+            </div>
+            <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Kaydediliyor...' : 'Rolü değiştir'}</Buton>
+            <Buton type="button" variant="ikincil" onClick={onVazgec}>Vazgeç</Buton>
+          </form>
+          {hata && <div style={{ marginTop: 8 }}><HataMesaji>{hata}</HataMesaji></div>}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 function KullanicilarSekmesi() {
   const [kullanicilar, setKullanicilar] = useState([]);
   const [roller, setRoller] = useState([]);
   const [formAcik, setFormAcik] = useState(false);
   const [form, setForm] = useState({ ad_soyad: '', email: '', sifre: '', rol_id: '' });
   const [hata, setHata] = useState(null);
+  const [rolDuzenlenenId, setRolDuzenlenenId] = useState(null);
 
   function yukle() {
     api.get('/kullanicilar').then((r) => setKullanicilar(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
@@ -110,6 +153,31 @@ function KullanicilarSekmesi() {
       setFormAcik(false);
       setForm({ ad_soyad: '', email: '', sifre: '', rol_id: '' });
       yukle();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    }
+  }
+
+  async function durumDegistir(kullanici) {
+    const yeniDurum = !kullanici.aktif;
+    const uyari = yeniDurum
+      ? `${kullanici.ad_soyad} kullanıcısını tekrar aktif etmek istediğinize emin misiniz?`
+      : `${kullanici.ad_soyad} kullanıcısını pasif yapmak istediğinize emin misiniz? Pasif kullanıcı sisteme giriş yapamaz.`;
+    if (!window.confirm(uyari)) return;
+    try {
+      await api.put(`/kullanicilar/${kullanici.id}/durum`, { aktif: yeniDurum });
+      yukle();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    }
+  }
+
+  async function sifreSifirla(kullanici) {
+    const yeniSifre = window.prompt(`${kullanici.ad_soyad} için yeni şifre (en az 6 karakter):`);
+    if (!yeniSifre) return;
+    try {
+      await api.put(`/kullanicilar/${kullanici.id}/sifre-sifirla`, { yeni_sifre: yeniSifre });
+      window.alert('Şifre güncellendi.');
     } catch (err) {
       setHata(hataMesajiCikar(err));
     }
@@ -152,20 +220,42 @@ function KullanicilarSekmesi() {
           <table>
             <thead>
               <tr style={{ background: 'var(--zemin)' }}>
-                {['Ad Soyad', 'E-posta', 'Roller', 'Durum'].map((b) => (
+                {['Ad Soyad', 'E-posta', 'Roller', 'Durum', 'İşlem'].map((b) => (
                   <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)' }}>{b}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {kullanicilar.map((k) => (
-                <tr key={k.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
-                  <td style={{ padding: '10px 16px', fontWeight: 500 }}>{k.ad_soyad}</td>
-                  <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{k.email}</td>
-                  <td style={{ padding: '10px 16px' }}>{k.roller.join(', ') || '—'}</td>
-                  <td style={{ padding: '10px 16px' }}><Etiket ton={k.aktif ? 'yesil' : 'kirmizi'}>{k.aktif ? 'Aktif' : 'Pasif'}</Etiket></td>
-                </tr>
-              ))}
+              {kullanicilar.map((k) => {
+                if (rolDuzenlenenId === k.id) {
+                  return (
+                    <KullaniciRolDuzenle
+                      key={k.id}
+                      kullanici={k}
+                      roller={roller}
+                      onKaydedildi={() => { setRolDuzenlenenId(null); yukle(); }}
+                      onVazgec={() => setRolDuzenlenenId(null)}
+                    />
+                  );
+                }
+                return (
+                  <tr key={k.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                    <td style={{ padding: '10px 16px', fontWeight: 500 }}>{k.ad_soyad}</td>
+                    <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{k.email}</td>
+                    <td style={{ padding: '10px 16px' }}>{k.roller.join(', ') || '—'}</td>
+                    <td style={{ padding: '10px 16px' }}><Etiket ton={k.aktif ? 'yesil' : 'kirmizi'}>{k.aktif ? 'Aktif' : 'Pasif'}</Etiket></td>
+                    <td style={{ padding: '10px 16px' }}>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        <button onClick={() => setRolDuzenlenenId(k.id)} style={eylemChipStili('lacivert')}>Rolü Değiştir</button>
+                        <button onClick={() => sifreSifirla(k)} style={eylemChipStili('lacivert')}>Şifre Sıfırla</button>
+                        <button onClick={() => durumDegistir(k)} style={eylemChipStili(k.aktif ? 'kirmizi' : 'yesil')}>
+                          {k.aktif ? 'Pasif Yap' : 'Aktif Et'}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
@@ -182,15 +272,19 @@ function RolIzinleriSekmesi() {
   const [hata, setHata] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
   const [kaydedildi, setKaydedildi] = useState(false);
+  const [yeniRolFormuAcik, setYeniRolFormuAcik] = useState(false);
+  const [yeniRolAdi, setYeniRolAdi] = useState('');
+  const [yeniRolAciklama, setYeniRolAciklama] = useState('');
 
-  useEffect(() => {
+  function yukle() {
     Promise.all([api.get('/izinler'), api.get('/roller')])
       .then(([izinRes, rolRes]) => {
         setIzinler(izinRes.data);
         setRoller(rolRes.data);
       })
       .catch((err) => setHata(hataMesajiCikar(err)));
-  }, []);
+  }
+  useEffect(yukle, []);
 
   function rolSec(rol) {
     setSeciliRolId(rol.id);
@@ -220,6 +314,32 @@ function RolIzinleriSekmesi() {
     }
   }
 
+  async function yeniRolEkle(e) {
+    e.preventDefault();
+    setHata(null);
+    try {
+      const { data } = await api.post('/roller', { ad: yeniRolAdi, aciklama: yeniRolAciklama || null });
+      setYeniRolFormuAcik(false);
+      setYeniRolAdi('');
+      setYeniRolAciklama('');
+      yukle();
+      rolSec(data);
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    }
+  }
+
+  async function rolSil(rol) {
+    if (!window.confirm(`"${rol.ad}" rolünü silmek istediğinize emin misiniz?`)) return;
+    try {
+      await api.delete(`/roller/${rol.id}`);
+      if (seciliRolId === rol.id) setSeciliRolId(null);
+      yukle();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    }
+  }
+
   const modullereGoreGrupla = izinler.reduce((acc, izin) => {
     (acc[izin.modul] ||= []).push(izin);
     return acc;
@@ -230,26 +350,55 @@ function RolIzinleriSekmesi() {
       <HataMesaji>{hata}</HataMesaji>
 
       <div style={{ display: 'flex', gap: 20 }}>
-        <Kart style={{ width: 220, padding: 0, flexShrink: 0 }}>
-          <div style={{ padding: '12px 16px', fontWeight: 600, fontSize: 13, borderBottom: '1px solid var(--kenarlik)' }}>
-            Roller
+        <Kart style={{ width: 240, padding: 0, flexShrink: 0 }}>
+          <div style={{ padding: '12px 16px', fontWeight: 600, fontSize: 13, borderBottom: '1px solid var(--kenarlik)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>Roller</span>
+            <button onClick={() => setYeniRolFormuAcik((a) => !a)} style={{ ...eylemChipStili('lacivert'), fontSize: 11 }}>
+              {yeniRolFormuAcik ? 'Kapat' : '+ Yeni'}
+            </button>
           </div>
+
+          {yeniRolFormuAcik && (
+            <form onSubmit={yeniRolEkle} style={{ padding: 12, borderBottom: '1px solid var(--kenarlik)' }}>
+              <Alan etiket="Rol adı">
+                <input required value={yeniRolAdi} onChange={(e) => setYeniRolAdi(e.target.value)} style={girdiStili} />
+              </Alan>
+              <Alan etiket="Açıklama (opsiyonel)">
+                <input value={yeniRolAciklama} onChange={(e) => setYeniRolAciklama(e.target.value)} style={girdiStili} />
+              </Alan>
+              <Buton type="submit" style={{ width: '100%' }}>Rolü oluştur</Buton>
+            </form>
+          )}
+
           {roller.length === 0 ? (
             <div style={{ padding: 16, color: 'var(--metin-soluk)', fontSize: 13 }}>Henüz rol yok</div>
           ) : (
             roller.map((rol) => (
-              <button
+              <div
                 key={rol.id}
-                onClick={() => rolSec(rol)}
                 style={{
-                  display: 'block', width: '100%', textAlign: 'left', padding: '10px 16px',
-                  background: seciliRolId === rol.id ? 'var(--zemin)' : 'transparent',
-                  border: 'none', borderBottom: '1px solid var(--kenarlik)', fontSize: 13.5,
-                  fontWeight: seciliRolId === rol.id ? 600 : 400,
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '10px 16px', background: seciliRolId === rol.id ? 'var(--zemin)' : 'transparent',
+                  borderBottom: '1px solid var(--kenarlik)',
                 }}
               >
-                {rol.ad}
-              </button>
+                <button
+                  onClick={() => rolSec(rol)}
+                  style={{
+                    flex: 1, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer',
+                    fontSize: 13.5, fontWeight: seciliRolId === rol.id ? 600 : 400, padding: 0,
+                  }}
+                >
+                  {rol.ad}
+                </button>
+                <button
+                  onClick={() => rolSil(rol)}
+                  title="Rolü sil"
+                  style={{ background: 'none', border: 'none', color: 'var(--kirmizi)', cursor: 'pointer', fontSize: 12, padding: '2px 6px' }}
+                >
+                  Sil
+                </button>
+              </div>
             ))
           )}
         </Kart>
