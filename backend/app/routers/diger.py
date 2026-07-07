@@ -250,6 +250,23 @@ def _proforma_detayli_getir(db: Session, proforma_id: int) -> ProformaFatura:
     return proforma
 
 
+@router.get("/proforma-faturalar", response_model=list[ProformaYanit],
+            dependencies=[Depends(izin_gerektir("FATURA_GORUNTULE"))])
+def proformalari_listele(sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
+    """Sirketin tum proforma faturalarini en yeniden eskiye siralar (kalemleri de dahil)."""
+    sorgu = (
+        select(ProformaFatura)
+        .where(ProformaFatura.sirket_id == sirket_id)
+        .order_by(ProformaFatura.id.desc())
+    )
+    sonuclar = list(db.execute(sorgu).scalars())
+    for p in sonuclar:
+        p.kalemler = list(db.execute(
+            select(ProformaDetay).where(ProformaDetay.proforma_id == p.id)
+        ).scalars())
+    return sonuclar
+
+
 @router.get("/proforma-faturalar/{proforma_id}", response_model=ProformaYanit,
             dependencies=[Depends(izin_gerektir("FATURA_GORUNTULE"))])
 def proforma_getir(proforma_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
@@ -257,6 +274,28 @@ def proforma_getir(proforma_id: int, sirket_id: int = Depends(aktif_sirket_id_ge
     if proforma is None or proforma.sirket_id != sirket_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Proforma fatura bulunamadı.")
     return _proforma_detayli_getir(db, proforma_id)
+
+
+@router.delete("/proforma-faturalar/{proforma_id}", dependencies=[Depends(izin_gerektir("FATURA_DUZENLE"))])
+def proforma_sil(
+    proforma_id: int,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """Sadece HENUZ faturaya cevrilmemis bir proforma silinebilir."""
+    proforma = db.get(ProformaFatura, proforma_id)
+    if proforma is None or proforma.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Proforma fatura bulunamadı.")
+    if proforma.durum == "FATURALASTI":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Faturalaştırılmış bir proforma silinemez.")
+
+    for k in list(db.execute(
+        select(ProformaDetay).where(ProformaDetay.proforma_id == proforma_id)
+    ).scalars()):
+        db.delete(k)
+    db.delete(proforma)
+    db.commit()
+    return {"silindi": True}
 
 
 @router.post("/proforma-faturalar/{proforma_id}/faturaya-cevir", response_model=FaturayaCevirYaniti,
@@ -311,6 +350,8 @@ def fatura_getir(fatura_id: int, sirket_id: int = Depends(aktif_sirket_id_getir)
     if fatura is None or fatura.sirket_id != sirket_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Fatura bulunamadı.")
     return fatura
+
+
 # ============================================================================ PERSONEL - SİL
 @router.delete("/personel/{personel_id}", dependencies=[Depends(izin_gerektir("PERSONEL_DUZENLE"))])
 def personel_sil(personel_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
@@ -323,32 +364,6 @@ def personel_sil(personel_id: int, sirket_id: int = Depends(aktif_sirket_id_geti
     return {"silindi": True}
 
 
-# ===================================================================== SABİT GİDER - SİL
-@router.delete("/sabit-giderler/{gider_id}", dependencies=[Depends(izin_gerektir("GIDER_DUZENLE"))])
-def sabit_gider_sil(gider_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
-    gider = db.get(SabitGider, gider_id)
-    if gider is None or gider.sirket_id != sirket_id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Gider kaydı bulunamadı.")
-    if gider.odendi_mi:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ödenmiş bir gider kaydı silinemez.")
-    db.delete(gider)
-    db.commit()
-    return {"silindi": True}
-
-
-# ===================================================================== ORTAK/DIŞ BORÇ - SİL
-@router.delete("/borclar/{borc_id}", dependencies=[Depends(izin_gerektir("BORC_DUZENLE"))])
-def borc_sil(borc_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
-    borc = db.get(Borc, borc_id)
-    if borc is None or borc.sirket_id != sirket_id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Borç kaydı bulunamadı.")
-    odeme_var_mi = db.execute(select(BorcOdeme).where(BorcOdeme.borc_id == borc_id)).first()
-    if odeme_var_mi is not None:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ödemesi yapılmış bir borç kaydı silinemez.")
-    db.delete(borc)
-    db.commit()
-    return {"silindi": True}
-    # ============================================================================ PERSONEL - ÖDEME GERİ AL
 @router.put("/personel-odemeleri/{odeme_id}/odemeyi-geri-al", dependencies=[Depends(izin_gerektir("PERSONEL_DUZENLE"))])
 def personel_odemesini_geri_al(
     odeme_id: int,
@@ -401,7 +416,19 @@ def personel_odemesini_sil(
     return {"silindi": True}
 
 
-# ===================================================================== SABİT GİDER - ÖDEME GERİ AL
+# ===================================================================== SABİT GİDER - SİL / GERİ AL
+@router.delete("/sabit-giderler/{gider_id}", dependencies=[Depends(izin_gerektir("GIDER_DUZENLE"))])
+def sabit_gider_sil(gider_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
+    gider = db.get(SabitGider, gider_id)
+    if gider is None or gider.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Gider kaydı bulunamadı.")
+    if gider.odendi_mi:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ödenmiş bir gider kaydı silinemez.")
+    db.delete(gider)
+    db.commit()
+    return {"silindi": True}
+
+
 @router.put("/sabit-giderler/{gider_id}/odemeyi-geri-al", dependencies=[Depends(izin_gerektir("GIDER_DUZENLE"))])
 def sabit_gider_odemesini_geri_al(
     gider_id: int,
@@ -430,7 +457,20 @@ def sabit_gider_odemesini_geri_al(
     return {"geri_alindi": True}
 
 
-# ===================================================================== ORTAK/DIŞ BORÇ - ÖDEME SİL
+# ===================================================================== ORTAK/DIŞ BORÇ - SİL
+@router.delete("/borclar/{borc_id}", dependencies=[Depends(izin_gerektir("BORC_DUZENLE"))])
+def borc_sil(borc_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
+    borc = db.get(Borc, borc_id)
+    if borc is None or borc.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Borç kaydı bulunamadı.")
+    odeme_var_mi = db.execute(select(BorcOdeme).where(BorcOdeme.borc_id == borc_id)).first()
+    if odeme_var_mi is not None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ödemesi yapılmış bir borç kaydı silinemez.")
+    db.delete(borc)
+    db.commit()
+    return {"silindi": True}
+
+
 @router.delete("/borc-odemeleri/{odeme_id}", dependencies=[Depends(izin_gerektir("BORC_DUZENLE"))])
 def borc_odemesini_sil(
     odeme_id: int,
@@ -460,43 +500,5 @@ def borc_odemesini_sil(
         db.delete(h)
 
     db.delete(odeme)
-    db.commit()
-    return {"silindi": True}
-# =================================================================== PROFORMA - LİSTE / SİL
-@router.get("/proforma-faturalar", response_model=list[ProformaYanit],
-            dependencies=[Depends(izin_gerektir("FATURA_GORUNTULE"))])
-def proformalari_listele(sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
-    """Sirketin tum proforma faturalarini en yeniden eskiye siralar (kalemleri de dahil)."""
-    sorgu = (
-        select(ProformaFatura)
-        .where(ProformaFatura.sirket_id == sirket_id)
-        .order_by(ProformaFatura.id.desc())
-    )
-    sonuclar = list(db.execute(sorgu).scalars())
-    for p in sonuclar:
-        p.kalemler = list(db.execute(
-            select(ProformaDetay).where(ProformaDetay.proforma_id == p.id)
-        ).scalars())
-    return sonuclar
-
-
-@router.delete("/proforma-faturalar/{proforma_id}", dependencies=[Depends(izin_gerektir("FATURA_DUZENLE"))])
-def proforma_sil(
-    proforma_id: int,
-    sirket_id: int = Depends(aktif_sirket_id_getir),
-    db: Session = Depends(get_db),
-):
-    """Sadece HENUZ faturaya cevrilmemis bir proforma silinebilir."""
-    proforma = db.get(ProformaFatura, proforma_id)
-    if proforma is None or proforma.sirket_id != sirket_id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Proforma fatura bulunamadı.")
-    if proforma.durum == "FATURALASTI":
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Faturalaştırılmış bir proforma silinemez.")
-
-    for k in list(db.execute(
-        select(ProformaDetay).where(ProformaDetay.proforma_id == proforma_id)
-    ).scalars()):
-        db.delete(k)
-    db.delete(proforma)
     db.commit()
     return {"silindi": True}
