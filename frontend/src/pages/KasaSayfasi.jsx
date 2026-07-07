@@ -20,6 +20,16 @@ const BEKLEYEN_ENDPOINT_MAP = {
   AKREDITIF_KALEM_TAKSIT: (id) => `/akreditif-kalem-taksitleri/${id}/ode`,
 };
 
+const BEKLEYEN_TUR_METIN = {
+  LEASING_ODEME: 'Leasing Ödemesi',
+  AKREDITIF_KALEMI: 'Akreditif Kalemi',
+  AKREDITIF_KALEM_TAKSIT: 'Akreditif Taksiti',
+  KIRALAMA_ODEME: 'Kiralama Ödemesi (Tahsilat)',
+  TAKSIT_DETAY: 'Taksitli Satış Tahsilatı',
+  PERSONEL_ODEME: 'Personel Ödemesi',
+  SABIT_GIDER: 'Sabit Gider',
+};
+
 function useBekleyenOdemeler() {
   const [liste, setListe] = useState([]);
   useEffect(() => {
@@ -57,8 +67,12 @@ function KaynakDetayi({ kaynakTablo, kaynakId }) {
 function YeniKasaHareketiFormu({ onKaydedildi, onVazgec }) {
   const [baglantiliModu, setBaglantiliModu] = useState(false);
   const bekleyenler = useBekleyenOdemeler();
+  const [bekleyenTur, setBekleyenTur] = useState('');
   const [seciliBekleyenAnahtar, setSeciliBekleyenAnahtar] = useState('');
   const [bekleyenKur, setBekleyenKur] = useState('1');
+
+  const mevcutTurler = [...new Set(bekleyenler.map((b) => b.kaynak_tablo))];
+  const turaGoreFiltrelenmis = bekleyenTur ? bekleyenler.filter((b) => b.kaynak_tablo === bekleyenTur) : [];
 
   const [form, setForm] = useState({
     tarih: new Date().toISOString().slice(0, 10), yon: 'GIRIS', tutar: '', para_birimi: 'TRY',
@@ -135,25 +149,51 @@ function YeniKasaHareketiFormu({ onKaydedildi, onVazgec }) {
         <HataMesaji>{hata}</HataMesaji>
 
         {baglantiliModu ? (
-          <div style={{ display: 'grid', gridTemplateColumns: bekleyenKurGerekli ? '2fr 1fr 1fr' : '2fr 1fr', gap: 12 }}>
-            <Alan etiket="Hangi kayıt?">
-              <select required value={seciliBekleyenAnahtar} onChange={(e) => setSeciliBekleyenAnahtar(e.target.value)} style={girdiStili}>
-                <option value="">Seçin...</option>
-                {bekleyenler.map((b) => (
-                  <option key={`${b.kaynak_tablo}:${b.kaynak_id}`} value={`${b.kaynak_tablo}:${b.kaynak_id}`}>
-                    {b.etiket} — {paraFormat(b.tutar, b.para_birimi)} {b.vade_tarihi ? `(${b.vade_tarihi})` : ''}
-                  </option>
-                ))}
-              </select>
-            </Alan>
-            <Alan etiket="Tarih">
-              <input required type="date" value={form.tarih} onChange={(e) => setForm((f) => ({ ...f, tarih: e.target.value }))} style={girdiStili} />
-            </Alan>
-            {bekleyenKurGerekli && (
-              <Alan etiket={`${seciliBekleyen.para_birimi} için TL kuru`}>
-                <input required type="number" step="0.0001" value={bekleyenKur} onChange={(e) => setBekleyenKur(e.target.value)} style={girdiStili} />
+          <div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+              <Alan etiket="1) Ödeme Türü">
+                <select
+                  required
+                  value={bekleyenTur}
+                  onChange={(e) => { setBekleyenTur(e.target.value); setSeciliBekleyenAnahtar(''); }}
+                  style={girdiStili}
+                >
+                  <option value="">Seçin...</option>
+                  {mevcutTurler.map((t) => (
+                    <option key={t} value={t}>{BEKLEYEN_TUR_METIN[t] || t}</option>
+                  ))}
+                </select>
               </Alan>
-            )}
+              <Alan etiket="2) Hangi kayıt?">
+                <select
+                  required
+                  disabled={!bekleyenTur}
+                  value={seciliBekleyenAnahtar}
+                  onChange={(e) => setSeciliBekleyenAnahtar(e.target.value)}
+                  style={girdiStili}
+                >
+                  <option value="">{bekleyenTur ? 'Seçin...' : 'Önce tür seçin'}</option>
+                  {turaGoreFiltrelenmis.map((b) => (
+                    <option key={`${b.kaynak_tablo}:${b.kaynak_id}`} value={`${b.kaynak_tablo}:${b.kaynak_id}`}>
+                      {b.etiket} — {paraFormat(b.tutar, b.para_birimi)} {b.vade_tarihi ? `(${b.vade_tarihi})` : ''}
+                    </option>
+                  ))}
+                </select>
+                {bekleyenTur && turaGoreFiltrelenmis.length === 0 && (
+                  <div style={{ fontSize: 12, color: 'var(--metin-soluk)', marginTop: 4 }}>Bu türde ödenmemiş kayıt yok.</div>
+                )}
+              </Alan>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: bekleyenKurGerekli ? '1fr 1fr' : '1fr', gap: 12 }}>
+              <Alan etiket="Tarih">
+                <input required type="date" value={form.tarih} onChange={(e) => setForm((f) => ({ ...f, tarih: e.target.value }))} style={girdiStili} />
+              </Alan>
+              {bekleyenKurGerekli && (
+                <Alan etiket={`${seciliBekleyen.para_birimi} için TL kuru`}>
+                  <input required type="number" step="0.0001" value={bekleyenKur} onChange={(e) => setBekleyenKur(e.target.value)} style={girdiStili} />
+                </Alan>
+              )}
+            </div>
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12 }}>
@@ -432,9 +472,12 @@ export default function KasaSayfasi() {
                       </td>
                       <td style={{ padding: '10px 16px' }}>
                         {otomatikGeldi ? (
-                          <span style={{ fontSize: 11.5, color: 'var(--metin-soluk)', fontStyle: 'italic' }}>
-                            Otomatik ({h.kaynak_tablo}) — geri almak için kaynağa gidin
-                          </span>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
+                            <span style={{ fontSize: 11.5, color: 'var(--metin-soluk)', fontStyle: 'italic' }}>
+                              Otomatik ({h.kaynak_tablo}) — geri almak için kaynağa gidin
+                            </span>
+                            <button onClick={() => hareketiSil(h.id)} style={eylemChipStili('kirmizi')}>Sil (kaynak yoksa)</button>
+                          </div>
                         ) : (
                           <div style={{ display: 'flex', gap: 6 }}>
                             <button onClick={() => setDuzenlenenId(h.id)} style={eylemChipStili('lacivert')}>Düzenle</button>
