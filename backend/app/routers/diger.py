@@ -343,6 +343,13 @@ def proformayi_faturaya_cevir(
     return FaturayaCevirYaniti(fatura_id=yeni_fatura.id, fatura_no=yeni_fatura.fatura_no)
 
 
+@router.get("/faturalar", response_model=list[FaturaYanit],
+            dependencies=[Depends(izin_gerektir("FATURA_GORUNTULE"))])
+def faturalari_listele(sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
+    sorgu = select(Fatura).where(Fatura.sirket_id == sirket_id).order_by(Fatura.id.desc())
+    return list(db.execute(sorgu).scalars())
+
+
 @router.get("/faturalar/{fatura_id}", response_model=FaturaYanit,
             dependencies=[Depends(izin_gerektir("FATURA_GORUNTULE"))])
 def fatura_getir(fatura_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
@@ -350,6 +357,34 @@ def fatura_getir(fatura_id: int, sirket_id: int = Depends(aktif_sirket_id_getir)
     if fatura is None or fatura.sirket_id != sirket_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Fatura bulunamadı.")
     return fatura
+
+
+@router.delete("/faturalar/{fatura_id}", dependencies=[Depends(izin_gerektir("FATURA_DUZENLE"))])
+def fatura_iptal_et(
+    fatura_id: int,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Faturayi iptal eder (kalemleriyle birlikte siler). Eger bir proformadan
+    donusturulmusse, o proformanin durumu FATURALASTI'dan ONAYLANDI'ya
+    geri alinir - boylece proforma tekrar faturaya cevrilebilir hale gelir.
+    """
+    fatura = db.get(Fatura, fatura_id)
+    if fatura is None or fatura.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Fatura bulunamadı.")
+
+    for k in list(db.execute(select(FaturaDetay).where(FaturaDetay.fatura_id == fatura_id)).scalars()):
+        db.delete(k)
+
+    if fatura.proforma_id:
+        proforma = db.get(ProformaFatura, fatura.proforma_id)
+        if proforma is not None and proforma.durum == "FATURALASTI":
+            proforma.durum = "ONAYLANDI"
+
+    db.delete(fatura)
+    db.commit()
+    return {"iptal_edildi": True}
 
 
 # ============================================================================ PERSONEL - SİL
