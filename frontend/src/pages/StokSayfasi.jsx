@@ -284,6 +284,47 @@ function MaliyetDetayi({ urun, onKapat }) {
   );
 }
 
+function DurumDegistirFormu({ urun, onKaydedildi, onVazgec }) {
+  const [yeniDurum, setYeniDurum] = useState(urun.durum);
+  const [hata, setHata] = useState(null);
+  const [kaydediliyor, setKaydediliyor] = useState(false);
+
+  async function kaydet(e) {
+    e.preventDefault();
+    setHata(null);
+    setKaydediliyor(true);
+    try {
+      await api.put(`/stok-seri-no/${urun.id}/durum`, { durum: yeniDurum });
+      onKaydedildi();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setKaydediliyor(false);
+    }
+  }
+
+  return (
+    <tr>
+      <td colSpan={8} style={{ padding: 0 }}>
+        <div style={{ padding: 16, background: 'var(--zemin)' }}>
+          <form onSubmit={kaydet} style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
+            <div style={{ flex: 1, maxWidth: 220 }}>
+              <Alan etiket="Yeni durum">
+                <select value={yeniDurum} onChange={(e) => setYeniDurum(e.target.value)} style={girdiStili}>
+                  {Object.entries(DURUM_METIN).filter(([k]) => k !== 'SATILDI').map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+              </Alan>
+            </div>
+            <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Kaydediliyor...' : 'Durumu güncelle'}</Buton>
+            <Buton type="button" variant="ikincil" onClick={onVazgec}>Vazgeç</Buton>
+          </form>
+          {hata && <div style={{ marginTop: 8 }}><HataMesaji>{hata}</HataMesaji></div>}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 function UrunDuzenleFormu({ urun, stokKartlari, onKaydedildi, onVazgec }) {
   const [form, setForm] = useState({ seri_no: urun.seri_no, stok_karti_id: String(urun.stok_karti_id) });
   const [hata, setHata] = useState(null);
@@ -344,6 +385,7 @@ export default function StokSayfasi() {
   const [hata, setHata] = useState(null);
   const [maliyetGosterilecekUrun, setMaliyetGosterilecekUrun] = useState(null);
   const [duzenlenenUrunId, setDuzenlenenUrunId] = useState(null);
+  const [durumDegistirilenId, setDurumDegistirilenId] = useState(null);
   const [seciliIdler, setSeciliIdler] = useState([]);
   const [topluDurum, setTopluDurum] = useState('DEPODA');
   const [topluHata, setTopluHata] = useState(null);
@@ -532,6 +574,16 @@ export default function StokSayfasi() {
               {urunler.map((u) => {
                 const karZarar = u.satis_fiyati_try != null ? u.satis_fiyati_try - u.toplam_maliyet_try : null;
                 const satilabilir = u.durum === 'DEPODA' || u.durum === 'ANTREPODA';
+                if (durumDegistirilenId === u.id) {
+                  return (
+                    <DurumDegistirFormu
+                      key={u.id}
+                      urun={u}
+                      onKaydedildi={() => { setDurumDegistirilenId(null); urunleriYukle(); tumUrunleriYukle(); }}
+                      onVazgec={() => setDurumDegistirilenId(null)}
+                    />
+                  );
+                }
                 if (duzenlenenUrunId === u.id) {
                   return (
                     <UrunDuzenleFormu
@@ -564,6 +616,9 @@ export default function StokSayfasi() {
                           <button onClick={() => setMaliyetGosterilecekUrun(u)} style={eylemChipStili('lacivert')}>Maliyet Detayı</button>
                           {satilabilir && (
                             <Link to={`/satis-yap?urun=${u.id}`}><button style={eylemChipStili('yesil')} type="button">Satış yap</button></Link>
+                          )}
+                          {u.durum !== 'SATILDI' && (
+                            <button onClick={() => setDurumDegistirilenId(u.id)} style={eylemChipStili('amber')}>Durum Değiştir</button>
                           )}
                           <button onClick={() => setDuzenlenenUrunId(u.id)} style={eylemChipStili('lacivert')}>Düzenle</button>
                           {u.durum === 'SATILDI' ? (
