@@ -94,15 +94,19 @@ export default function SatisYapSayfasi() {
         });
       } else if (odemeTipi === 'CEK') {
         if (!cekVadeTarihi) { setHata('Lütfen çekin vade tarihini girin.'); setKaydediliyor(false); return; }
-        await api.put(`/stok-seri-no/${urunId}/durum`, {
-          durum: 'SATILDI', musteri_cari_id: Number(musteriCariId),
-          satis_fiyati_try: Number(tutar), satis_tarihi: tarih,
-        });
-        await api.post('/cekler', {
+        // Once cek olusturulur (ID'sini almak icin), sonra urun SATILDI yapilip
+        // cek ID'si urune baglanir - boylece cek silinirse/geri alinirsa urun
+        // otomatik olarak Depoda'ya donebilir.
+        const { data: yeniCek } = await api.post('/cekler', {
           tip: 'ALINAN', cek_no: cekNo || null, banka_adi: cekBankaAdi || null,
           cari_id: Number(musteriCariId), tutar: Number(tutar),
           vade_tarihi: cekVadeTarihi, alinma_verilme_tarihi: tarih,
         });
+        await api.put(`/stok-seri-no/${urunId}/durum`, {
+          durum: 'SATILDI', musteri_cari_id: Number(musteriCariId),
+          satis_fiyati_try: Number(tutar), satis_tarihi: tarih,
+        });
+        await api.put(`/stok-seri-no/${urunId}/satis-cek-baglantisi`, { cek_id: yeniCek.id });
       }
       setTamamlandi(true);
     } catch (err) {
@@ -123,6 +127,7 @@ export default function SatisYapSayfasi() {
             {odemeTipi === 'PESIN_NAKIT' && ' Yanlışlıkla yapıldıysa Stok sayfasından "Satışı Geri Al" ile düzeltebilirsiniz.'}
             {(odemeTipi === 'PESIN_HAVALE' || odemeTipi === 'PESIN_KART' || odemeTipi === 'LEASINGLI') && ' Yanlışlıkla yapıldıysa Stok sayfasından "Satışı Geri Al" ile düzeltebilirsiniz.'}
             {odemeTipi === 'TAKSITLI' && ' Yanlışlıkla yapıldıysa Finansal Takip → Taksitli Satış\'tan planı silerek ürünü geri alabilirsiniz.'}
+            {odemeTipi === 'CEK' && ' Yanlışlıkla yapıldıysa Stok sayfasından "Satışı Geri Al" ile hem çek hem ürün geri alınır (çek henüz ciro/tahsil edilmediyse).'}
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
             <Buton onClick={() => window.location.reload()}>Yeni satış yap</Buton>
