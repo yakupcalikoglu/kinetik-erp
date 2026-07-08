@@ -494,6 +494,12 @@ def bakim_kayitlarini_listele(
 # ============================================================================ ÇEK - SİL
 @router.delete("/cekler/{cek_id}", dependencies=[Depends(izin_gerektir("CEK_DUZENLE"))])
 def cek_sil(cek_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
+    """
+    Sadece 'Portfoyde' durumundaki cekler silinebilir. Eger bu cek bir Stok
+    satisina baglanmissa (SatisYapSayfasi -> Cek akisi), ilgili urun de
+    otomatik olarak DEPODA durumuna dondurulur - aksi halde urun "Satildi"
+    isaretli kalir ama artik hicbir kaydi (ne cek ne kasa/banka) olmaz.
+    """
     cek = db.get(Cek, cek_id)
     if cek is None or cek.sirket_id != sirket_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Çek bulunamadı.")
@@ -504,6 +510,18 @@ def cek_sil(cek_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Se
         )
     for gecmis in list(db.execute(select(CekGecmis).where(CekGecmis.cek_id == cek_id)).scalars()):
         db.delete(gecmis)
+
+    baglantili_urunler = list(db.execute(
+        select(StokSeriNo).where(StokSeriNo.satis_cek_id == cek_id)
+    ).scalars())
+    for urun in baglantili_urunler:
+        if urun.durum == StokDurum.SATILDI:
+            urun.durum = StokDurum.DEPODA
+            urun.musteri_cari_id = None
+            urun.satis_fiyati_try = None
+            urun.satis_tarihi = None
+        urun.satis_cek_id = None
+
     db.delete(cek)
     db.commit()
     return {"silindi": True}
