@@ -14,8 +14,13 @@ from app.schemas.stok import (StokKartiOlusturIstegi, StokKartiYanit,
                                StokMaliyetKalemiYanit, TopluDurumGuncelleIstegi,
                                StokSeriNoDuzenleIstegi)
 from app.services.para_hareketi import para_hareketi_olustur
+from pydantic import BaseModel
 
 router = APIRouter(tags=["Stok"])
+
+
+class SatisCekBaglaIstegi(BaseModel):
+    cek_id: int
 
 
 @router.post("/stok-kartlari", response_model=StokKartiYanit,
@@ -323,6 +328,27 @@ def maliyet_kalemi_ekle(
     return kayit
 
 
+@router.put("/stok-seri-no/{seri_id}/satis-cek-baglantisi", response_model=StokSeriNoYanit,
+            dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
+def stok_satis_cek_baglantisi_kur(
+    seri_id: int,
+    istek: SatisCekBaglaIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Cek ile yapilan bir satista, olusturulan cekin ID'sini urune baglar.
+    Boylece daha sonra bu satis geri alinmak istendiginde hangi cekin de
+    birlikte silinmesi/iptal edilmesi gerektigi bilinir. SatisYapSayfasi,
+    cek olusturulduktan HEMEN SONRA bu uc noktayi cagirir.
+    """
+    kayit = _seri_no_getir_veya_404(db, seri_id, sirket_id)
+    kayit.satis_cek_id = istek.cek_id
+    db.commit()
+    db.refresh(kayit)
+    return kayit
+
+
 @router.put("/stok-seri-no/{seri_id}/satisi-geri-al", response_model=StokSeriNoYanit,
             dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
 def stok_satisini_geri_al(
@@ -331,18 +357,21 @@ def stok_satisini_geri_al(
     db: Session = Depends(get_db),
 ):
     """
-    Pesin (Nakit/Havale/Kart) yapilmis bir satisi geri alir: urunun durumunu
-    DEPODA'ya dondurur, satis bilgilerini temizler ve olusan Kasa/Banka
-    hareketini siler. Taksitli veya cek ile yapilan satislar bu yoldan
-    GERI ALINAMAZ - taksitli icin Finansal Takip -> Taksitli Satis Plani
-    silinmeli (bu da urunu otomatik geri dondurur); cek ile satislar icin
-    once ilgili cek incelenmelidir.
+    Bir satisi geri alir - pesin (Nakit/Havale/Kart), cek veya taksitli
+    (urun uzerinden degil, Taksitli Satis Plani silinerek) satislar icin
+    calisir:
+      - Pesin satis: olusan Kasa/Banka hareketi silinir.
+      - Cek ile satis: bagli cek PORTFOYDE ise cek de silinir; ciro/tahsil
+        edilmisse reddedilir (once Finansal Takip -> Cek'ten durumu geri alin).
+    Urun her durumda DEPODA'ya doner, satis bilgileri temizlenir.
     """
     kayit = _seri_no_getir_veya_404(db, seri_id, sirket_id)
     if kayit.durum != StokDurum.SATILDI:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bu ürün zaten satılmış durumda değil.")
 
     from app.models.banka import KasaHareketi, BankaHareketi
+    from app.models.finansal import Cek, CekGecmis, CekDurum
+
     kasa_kayitlari = list(db.execute(
         select(KasaHareketi).where(KasaHareketi.kaynak_tablo == "STOK_SATIS", KasaHareketi.kaynak_id == seri_id)
     ).scalars())
@@ -350,12 +379,24 @@ def stok_satisini_geri_al(
         select(BankaHareketi).where(BankaHareketi.kaynak_tablo == "STOK_SATIS", BankaHareketi.kaynak_id == seri_id)
     ).scalars())
 
-    if not kasa_kayitlari and not banka_kayitlari:
+    if kayit.satis_cek_id is not None:
+        cek = db.get(Cek, kayit.satis_cek_id)
+        if cek is not None:
+            if cek.durum != CekDurum.PORTFOYDE:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    "Bu satışa bağlı çek zaten ciro edilmiş/tahsil edilmiş; önce Finansal Takip → Çek'ten "
+                    "durumu geri alın, sonra tekrar deneyin."
+                )
+            for g in list(db.execute(select(CekGecmis).where(CekGecmis.cek_id == cek.id)).scalars()):
+                db.delete(g)
+            db.delete(cek)
+    elif not kasa_kayitlari and not banka_kayitlari:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            "Bu ürün peşin satış yoluyla satılmamış (muhtemelen taksitli veya çek ile satıldı). "
+            "Bu ürün peşin satış yoluyla satılmamış (muhtemelen taksitli satıldı). "
             "Taksitli satışlar için Finansal Takip → Taksitli Satış'tan planı silin; "
-            "çek ile satışlar için önce ilgili çeki inceleyin."
+            "bu, ürünü otomatik olarak geri döndürür."
         )
 
     for h in kasa_kayitlari:
@@ -367,6 +408,7 @@ def stok_satisini_geri_al(
     kayit.musteri_cari_id = None
     kayit.satis_fiyati_try = None
     kayit.satis_tarihi = None
+    kayit.satis_cek_id = None
 
     db.commit()
     db.refresh(kayit)
