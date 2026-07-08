@@ -38,6 +38,7 @@ class StokSeriNoYanit(BaseModel):
     sasi_no: str | None
     uretim_yili: int | None
     kaynak: StokKaynak
+    siparis_id: int | None = None
     durum: StokDurum
     tedarikci_cari_id: int | None
     satinalma_maliyeti_try: Decimal
@@ -50,6 +51,7 @@ class StokSeriNoYanit(BaseModel):
     satis_fiyati_try: Decimal | None
     satis_tarihi: date | None
     musteri_cari_id: int | None
+    satis_cek_id: int | None = None
     garanti_bitis_tarihi: date | None
     barkod: str | None
 
