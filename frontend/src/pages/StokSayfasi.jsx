@@ -305,7 +305,7 @@ function DurumDegistirFormu({ urun, onKaydedildi, onVazgec }) {
 
   return (
     <tr>
-      <td colSpan={8} style={{ padding: 0 }}>
+      <td colSpan={9} style={{ padding: 0 }}>
         <div style={{ padding: 16, background: 'var(--zemin)' }}>
           <form onSubmit={kaydet} style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
             <div style={{ flex: 1, maxWidth: 220 }}>
@@ -349,7 +349,7 @@ function UrunDuzenleFormu({ urun, stokKartlari, onKaydedildi, onVazgec }) {
 
   return (
     <tr>
-      <td colSpan={8} style={{ padding: 0 }}>
+      <td colSpan={9} style={{ padding: 0 }}>
         <div style={{ padding: 16, background: 'var(--zemin)' }}>
           <form onSubmit={kaydet}>
             <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 10 }}>Ürünü düzenle</div>
@@ -379,6 +379,7 @@ export default function StokSayfasi() {
   const [tumUrunler, setTumUrunler] = useState([]);
   const [urunler, setUrunler] = useState([]);
   const [stokKartlari, setStokKartlari] = useState([]);
+  const [siparisler, setSiparisler] = useState([]);
   const [durumFiltre, setDurumFiltre] = useState('');
   const [urunFiltre, setUrunFiltre] = useState('');
   const [yukleniyor, setYukleniyor] = useState(true);
@@ -469,6 +470,7 @@ export default function StokSayfasi() {
   useEffect(() => {
     tumUrunleriYukle();
     stokKartlariniYukle();
+    api.get('/siparisler').then((r) => setSiparisler(r.data)).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -479,6 +481,21 @@ export default function StokSayfasi() {
     const k = stokKartlari.find((x) => x.id === stokKartiId);
     return k ? `${k.marka} ${k.model}` : `#${stokKartiId}`;
   }
+
+  function siparisNoGoster(siparisId) {
+    if (!siparisId) return '—';
+    const s = siparisler.find((x) => x.id === siparisId);
+    return s ? s.siparis_no : `#${siparisId}`;
+  }
+
+  // Ayni siparise ait urunler ekranda yan yana gorunsun diye siparis_id'ye
+  // gore grupluyoruz (siparissiz/manuel urunler en sona duser).
+  const gruplananUrunler = [...urunler].sort((a, b) => {
+    if (a.siparis_id === b.siparis_id) return a.id - b.id;
+    if (a.siparis_id == null) return 1;
+    if (b.siparis_id == null) return -1;
+    return a.siparis_id - b.siparis_id;
+  });
 
   const durumOzet = {};
   tumUrunler.forEach((u) => {
@@ -565,15 +582,17 @@ export default function StokSayfasi() {
                     onChange={tumunuSecVeyaKaldir}
                   />
                 </th>
-                {['Seri No', 'Ürün', 'Durum', 'Toplam Maliyet', 'Satış Fiyatı', 'Kâr/Zarar', 'İşlem'].map((b) => (
+                {['Seri No', 'Ürün', 'Sipariş', 'Durum', 'Toplam Maliyet', 'Satış Fiyatı', 'Kâr/Zarar', 'İşlem'].map((b) => (
                   <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {urunler.map((u) => {
+              {gruplananUrunler.map((u, index) => {
                 const karZarar = u.satis_fiyati_try != null ? u.satis_fiyati_try - u.toplam_maliyet_try : null;
                 const satilabilir = u.durum === 'DEPODA' || u.durum === 'ANTREPODA';
+                const oncekiUrun = gruplananUrunler[index - 1];
+                const grupBasi = index > 0 && oncekiUrun && oncekiUrun.siparis_id !== u.siparis_id;
                 if (durumDegistirilenId === u.id) {
                   return (
                     <DurumDegistirFormu
@@ -597,12 +616,16 @@ export default function StokSayfasi() {
                 }
                 return (
                   <Fragment key={u.id}>
-                    <tr style={{ borderTop: '1px solid var(--kenarlik)', background: seciliMi(u.id) ? 'var(--zemin)' : 'transparent' }}>
+                    <tr style={{
+                      borderTop: grupBasi ? '3px solid var(--lacivert)' : '1px solid var(--kenarlik)',
+                      background: seciliMi(u.id) ? 'var(--zemin)' : 'transparent',
+                    }}>
                       <td style={{ padding: '12px 16px' }}>
                         <input type="checkbox" checked={seciliMi(u.id)} onChange={() => secimiDegistir(u.id)} />
                       </td>
                       <td style={{ padding: '12px 16px', fontWeight: 500, fontFamily: 'var(--font-mono)' }}>{u.seri_no}</td>
                       <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>{urunAdiGoster(u.stok_karti_id)}</td>
+                      <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>{siparisNoGoster(u.siparis_id)}</td>
                       <td style={{ padding: '12px 16px' }}>
                         <Etiket ton={DURUM_ETIKET[u.durum]}>{DURUM_METIN[u.durum]}</Etiket>
                       </td>
