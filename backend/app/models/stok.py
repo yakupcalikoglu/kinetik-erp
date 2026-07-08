@@ -103,6 +103,10 @@ class StokSeriNo(Base):
     satis_fiyati_try = Column(Numeric(18, 2))
     satis_tarihi = Column(Date)
     musteri_cari_id = Column(BigInteger, ForeignKey("cari_hesaplar.id"))
+    # Cek ile yapilan satislarda, hangi cekin bu satisa karsilik geldigini
+    # izler - satis geri alinirken (henuz ciro/tahsil edilmemisse) hem
+    # urunu hem cekin kendisini birlikte geri almak icin kullanilir.
+    satis_cek_id = Column(BigInteger, ForeignKey("cekler.id"))
 
     giris_tarihi = Column(Date)
     garanti_bitis_tarihi = Column(Date)
