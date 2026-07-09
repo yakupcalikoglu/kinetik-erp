@@ -3,11 +3,19 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { api, hataMesajiCikar } from '../api/client';
 import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji } from '../components/Ortak';
 
+const HEDEF_DURUM_METIN = {
+  DEPODA: 'Depoda',
+  ANTREPODA: 'Antrepoda',
+  GUMRUKTE: 'Gümrükte',
+  YOLDA: 'Yolda',
+};
+
 export default function SiparisTeslimAlSayfasi() {
   const { siparisId } = useParams();
   const navigate = useNavigate();
   const [siparis, setSiparis] = useState(null);
   const [satirlar, setSatirlar] = useState([]);
+  const [hedefDurum, setHedefDurum] = useState('');
   const [hata, setHata] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
   const [tamamlandi, setTamamlandi] = useState(null);
@@ -16,6 +24,7 @@ export default function SiparisTeslimAlSayfasi() {
     api.get(`/siparisler/${siparisId}`)
       .then((res) => {
         setSiparis(res.data);
+        setHedefDurum(res.data.kaynak === 'ITHALAT' ? 'GUMRUKTE' : 'DEPODA');
         // Her urun satiri icin miktar kadar seri no girisi olustur
         const acilanSatirlar = [];
         for (const urun of res.data.urunler) {
@@ -51,6 +60,7 @@ export default function SiparisTeslimAlSayfasi() {
     setKaydediliyor(true);
     try {
       const { data } = await api.post(`/siparisler/${siparisId}/teslim-al`, {
+        hedef_durum: hedefDurum,
         urunler: satirlar.map((s) => ({
           siparis_detay_id: s.siparis_detay_id,
           seri_no: s.seri_no,
@@ -78,7 +88,7 @@ export default function SiparisTeslimAlSayfasi() {
         <SayfaBasligi baslik="Teslim alma tamamlandı" />
         <Kart style={{ background: 'var(--yesil-acik)' }}>
           <div style={{ color: 'var(--yesil)', fontWeight: 600, marginBottom: 8 }}>
-            {tamamlandi.length} adet ürün stoğa eklendi.
+            {tamamlandi.length} adet ürün "{HEDEF_DURUM_METIN[hedefDurum]}" durumunda stoğa eklendi.
           </div>
           <div style={{ fontSize: 13, color: 'var(--metin-ikincil)', marginBottom: 14 }}>
             Oluşturulan stok kayıt ID'leri: {tamamlandi.join(', ')}
@@ -97,6 +107,16 @@ export default function SiparisTeslimAlSayfasi() {
       />
       <form onSubmit={teslimAl}>
         <HataMesaji>{hata}</HataMesaji>
+
+        <Kart style={{ marginBottom: 16 }}>
+          <div style={{ maxWidth: 320 }}>
+            <Alan etiket="Bu ürünler şu anda fiilen nerede? (hepsi bu durumda stoğa girecek)">
+              <select value={hedefDurum} onChange={(e) => setHedefDurum(e.target.value)} style={girdiStili}>
+                {Object.entries(HEDEF_DURUM_METIN).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            </Alan>
+          </div>
+        </Kart>
 
         <Kart style={{ padding: 0 }}>
           <table>
