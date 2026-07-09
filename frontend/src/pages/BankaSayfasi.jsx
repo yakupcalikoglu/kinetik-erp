@@ -289,6 +289,7 @@ function YeniBankaHareketiFormu({ hesaplar, onKaydedildi, onVazgec }) {
   const [seciliAnahtar, setSeciliAnahtar] = useState('');
   const [baglantiliBankaHesapId, setBaglantiliBankaHesapId] = useState('');
   const [baglantiliTarih, setBaglantiliTarih] = useState(new Date().toISOString().slice(0, 10));
+  const [baglantiliKur, setBaglantiliKur] = useState('1');
 
   const [form, setForm] = useState({
     banka_hesap_id: '', tarih: new Date().toISOString().slice(0, 10), tip: 'GIRIS',
@@ -304,6 +305,13 @@ function YeniBankaHareketiFormu({ hesaplar, onKaydedildi, onVazgec }) {
   const ustBasliklar = [...new Set(buTurdekiBekleyenler.map((b) => b.ust_baslik))];
   const altKayitlar = ustBaslik ? buTurdekiBekleyenler.filter((b) => b.ust_baslik === ustBaslik) : [];
   const seciliKayit = altKayitlar.find((b) => `${b.kaynak_tablo}:${b.kaynak_id}` === seciliAnahtar);
+  const baglantiliDovizli = seciliKayit && seciliKayit.para_birimi !== 'TRY';
+
+  useEffect(() => {
+    if (seciliKayit && seciliKayit.para_birimi !== 'TRY') {
+      api.get(`/kur/${seciliKayit.para_birimi}`).then((r) => setBaglantiliKur(r.data.kur)).catch(() => {});
+    }
+  }, [seciliKayit?.kaynak_tablo, seciliKayit?.kaynak_id]); // eslint-disable-line
 
   function turDegistir(yeniTur) {
     setOdemeTuru(yeniTur);
@@ -331,7 +339,7 @@ function YeniBankaHareketiFormu({ hesaplar, onKaydedildi, onVazgec }) {
           odeme_tarihi: baglantiliTarih,
           odeme_yontemi: 'BANKA',
           banka_hesap_id: Number(baglantiliBankaHesapId),
-          kur: null,
+          kur: baglantiliDovizli ? Number(baglantiliKur) : null,
         });
       } else {
         await api.post('/banka-hareketleri', {
@@ -465,9 +473,19 @@ function YeniBankaHareketiFormu({ hesaplar, onKaydedildi, onVazgec }) {
                 ))}
               </select>
             </Alan>
+            {baglantiliDovizli && (
+              <Alan etiket={`${seciliKayit.para_birimi} için TL kuru (otomatik, elle değiştirilebilir)`}>
+                <input required type="number" step="0.0001" value={baglantiliKur} onChange={(e) => setBaglantiliKur(e.target.value)} style={girdiStili} />
+              </Alan>
+            )}
             <Alan etiket="Tarih">
               <input required type="date" value={baglantiliTarih} onChange={(e) => setBaglantiliTarih(e.target.value)} style={girdiStili} />
             </Alan>
+          </div>
+        )}
+        {baglantiliDovizli && baglantiliKur && seciliKayit && (
+          <div style={{ fontSize: 12.5, color: 'var(--metin-ikincil)', marginTop: -8, marginBottom: 8 }}>
+            TL karşılığı: <strong>{paraFormat(Number(seciliKayit.tutar) * (Number(baglantiliKur) || 0))}</strong>
           </div>
         )}
 
