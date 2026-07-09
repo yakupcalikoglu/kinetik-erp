@@ -187,6 +187,7 @@ class TeslimAlinanUrun(BaseModel):
 class TeslimAlIstegi(BaseModel):
     urunler: list[TeslimAlinanUrun]
     hedef_durum: StokDurum | None = None  # Belirtilmezse eski otomatik kural kullanilir
+    kur: Decimal = Decimal("1")  # Siparis dovizliyse (USD/EUR), birim_fiyat'i TL'ye cevirmek icin
 
 
 class StokMaliyetKalemiYanit(BaseModel):
