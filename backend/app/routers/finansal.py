@@ -301,10 +301,20 @@ def taksit_tahsil_et(
     taksit.tahsilat_kaynak_tablo = istek.tahsilat_kaynak_tablo
     taksit.tahsilat_kaynak_id = istek.tahsilat_kaynak_id
 
+    musteri = db.get(CariHesap, plan.musteri_cari_id)
+    urun_parcasi = ""
+    if plan.stok_seri_no_id:
+        urun = db.get(StokSeriNo, plan.stok_seri_no_id)
+        if urun is not None:
+            kart = db.get(StokKarti, urun.stok_karti_id)
+            urun_adi = f"{kart.marka} {kart.model}" if kart else urun.seri_no
+            urun_parcasi = f" - {urun_adi} ({urun.seri_no})"
+    aciklama = f"Taksit {taksit.taksit_no} - {musteri.unvan if musteri else ''}{urun_parcasi}"
+
     para_hareketi_olustur(
         db, sirket_id, kullanici.id, "GIRIS", taksit.tutar,
         istek.odeme_yontemi, istek.banka_hesap_id,
-        aciklama=f"Taksit {taksit.taksit_no} tahsilatı",
+        aciklama=aciklama,
         kaynak_tablo="TAKSIT_DETAY", kaynak_id=taksit.id,
         cari_id=plan.musteri_cari_id,
         para_birimi=plan.para_birimi.value, kur=istek.kur,
@@ -427,10 +437,18 @@ def kiralama_odemesi_tahsil_et(
     odeme.odendi_mi = True
     odeme.odeme_tarihi = istek.odeme_tarihi
 
+    urun_parcasi = ""
+    urun = db.get(StokSeriNo, sozlesme.stok_seri_no_id)
+    if urun is not None:
+        kart = db.get(StokKarti, urun.stok_karti_id)
+        urun_adi = f"{kart.marka} {kart.model}" if kart else urun.seri_no
+        urun_parcasi = f"{urun_adi} ({urun.seri_no}) - "
+    aciklama = f"Kiralama - {urun_parcasi}{odeme.donem_basi} - {odeme.donem_sonu}"
+
     para_hareketi_olustur(
         db, sirket_id, kullanici.id, "GIRIS", odeme.tutar,
         istek.odeme_yontemi, istek.banka_hesap_id,
-        aciklama=f"Kira dönemi {odeme.donem_basi} - {odeme.donem_sonu}",
+        aciklama=aciklama,
         kaynak_tablo="KIRALAMA_ODEME", kaynak_id=odeme.id,
         cari_id=sozlesme.kiraci_cari_id,
         para_birimi=sozlesme.para_birimi.value, kur=istek.kur,
