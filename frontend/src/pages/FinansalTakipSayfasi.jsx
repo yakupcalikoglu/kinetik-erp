@@ -104,8 +104,8 @@ function OdemeFormu({ tutar, paraBirimi = 'TRY', aksiyonMetni = 'Ödemeyi tamaml
     }
   }, []); // eslint-disable-line
 
-  const kurGerekli = yontem === 'NAKIT' && paraBirimi !== 'TRY';
-  const tlKarsiligi = kurGerekli && tutar ? (Number(tutar) * (Number(kur) || 0)) : null;
+  const dovizli = paraBirimi !== 'TRY';
+  const tlKarsiligi = dovizli && tutar ? (Number(tutar) * (Number(kur) || 0)) : null;
 
   async function gonder(e) {
     e.preventDefault();
@@ -120,7 +120,7 @@ function OdemeFormu({ tutar, paraBirimi = 'TRY', aksiyonMetni = 'Ödemeyi tamaml
         odeme_tarihi: tarih,
         odeme_yontemi: yontem,
         banka_hesap_id: yontem === 'BANKA' ? Number(bankaHesapId) : null,
-        kur: kurGerekli ? Number(kur) : null,
+        kur: dovizli ? Number(kur) : null,
       });
     } catch (err) {
       setHata(hataMesajiCikar(err));
@@ -132,14 +132,14 @@ function OdemeFormu({ tutar, paraBirimi = 'TRY', aksiyonMetni = 'Ödemeyi tamaml
     <div style={{ padding: 14, background: 'var(--zemin)', border: '1px solid var(--kenarlik)', borderRadius: 8, marginTop: 8 }}>
       <form onSubmit={gonder}>
         <HataMesaji>{hata}</HataMesaji>
-        <div style={{ display: 'grid', gridTemplateColumns: kurGerekli ? '1fr 1fr 1fr' : '1fr 1fr', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: dovizli ? (yontem === 'BANKA' ? '1fr 1fr 1fr 1fr' : '1fr 1fr 1fr') : '1fr 1fr', gap: 10 }}>
           <Alan etiket="Ödeme yöntemi">
             <select value={yontem} onChange={(e) => setYontem(e.target.value)} style={girdiStili}>
               <option value="NAKIT">Nakit (Ana Kasa)</option>
               <option value="BANKA">Banka</option>
             </select>
           </Alan>
-          {yontem === 'BANKA' ? (
+          {yontem === 'BANKA' && (
             <Alan etiket="Banka hesabı">
               <select required value={bankaHesapId} onChange={(e) => setBankaHesapId(e.target.value)} style={girdiStili}>
                 <option value="">Seçin...</option>
@@ -150,7 +150,8 @@ function OdemeFormu({ tutar, paraBirimi = 'TRY', aksiyonMetni = 'Ödemeyi tamaml
                 ))}
               </select>
             </Alan>
-          ) : kurGerekli && (
+          )}
+          {dovizli && (
             <Alan etiket={`${paraBirimi} için TL kuru (otomatik, elle değiştirilebilir)`}>
               <input required type="number" step="0.0001" value={kur} onChange={(e) => setKur(e.target.value)} style={girdiStili} />
             </Alan>
@@ -513,7 +514,7 @@ function AkreditifKalemOdemeFormu({ kalem, akreditif, onKaydedildi, onVazgec }) 
         odeme_tarihi: form.odeme_tarihi,
         odeme_yontemi: form.odeme_yontemi,
         banka_hesap_id: form.odeme_yontemi === 'BANKA' ? Number(form.banka_hesap_id) : null,
-        kur: form.odeme_yontemi === 'NAKIT' && akreditif.para_birimi !== 'TRY' ? Number(form.kur) : null,
+        kur: akreditif.para_birimi !== 'TRY' ? Number(form.kur) : null,
       });
       onKaydedildi();
     } catch (err) {
@@ -532,14 +533,14 @@ function AkreditifKalemOdemeFormu({ kalem, akreditif, onKaydedildi, onVazgec }) 
               Kalemi öde — {paraFormat(kalem.tutar, akreditif.para_birimi)}
             </div>
             <HataMesaji>{hata}</HataMesaji>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: akreditif.para_birimi !== 'TRY' ? '1fr 1fr 1fr 1fr' : '1fr 1fr 1fr', gap: 12 }}>
               <Alan etiket="Ödeme yöntemi">
                 <select value={form.odeme_yontemi} onChange={(e) => setForm((f) => ({ ...f, odeme_yontemi: e.target.value }))} style={girdiStili}>
                   <option value="BANKA">Banka</option>
                   <option value="NAKIT">Nakit (Ana Kasa)</option>
                 </select>
               </Alan>
-              {form.odeme_yontemi === 'BANKA' ? (
+              {form.odeme_yontemi === 'BANKA' && (
                 <Alan etiket="Banka hesabı">
                   <select required value={form.banka_hesap_id} onChange={(e) => setForm((f) => ({ ...f, banka_hesap_id: e.target.value }))} style={girdiStili}>
                     <option value="">Seçin...</option>
@@ -550,7 +551,8 @@ function AkreditifKalemOdemeFormu({ kalem, akreditif, onKaydedildi, onVazgec }) 
                     ))}
                   </select>
                 </Alan>
-              ) : akreditif.para_birimi !== 'TRY' && (
+              )}
+              {akreditif.para_birimi !== 'TRY' && (
                 <Alan etiket={`${akreditif.para_birimi} için TL kuru (otomatik, elle değiştirilebilir)`}>
                   <input required type="number" step="0.0001" value={form.kur} onChange={(e) => setForm((f) => ({ ...f, kur: e.target.value }))} style={girdiStili} />
                 </Alan>
@@ -559,7 +561,12 @@ function AkreditifKalemOdemeFormu({ kalem, akreditif, onKaydedildi, onVazgec }) 
                 <input required type="date" value={form.odeme_tarihi} onChange={(e) => setForm((f) => ({ ...f, odeme_tarihi: e.target.value }))} style={girdiStili} />
               </Alan>
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
+            {akreditif.para_birimi !== 'TRY' && form.kur && (
+              <div style={{ fontSize: 12.5, color: 'var(--metin-ikincil)', marginTop: 6 }}>
+                TL karşılığı: <strong>{paraFormat(Number(kalem.tutar) * (Number(form.kur) || 0))}</strong>
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
               <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Kaydediliyor...' : 'Ödemeyi tamamla'}</Buton>
               <Buton type="button" variant="ikincil" onClick={onVazgec}>Vazgeç</Buton>
             </div>
@@ -695,7 +702,7 @@ function TaksitOdemeFormu({ taksit, akreditif, onKaydedildi, onVazgec }) {
         odeme_tarihi: form.odeme_tarihi,
         odeme_yontemi: form.odeme_yontemi,
         banka_hesap_id: form.odeme_yontemi === 'BANKA' ? Number(form.banka_hesap_id) : null,
-        kur: form.odeme_yontemi === 'NAKIT' && akreditif.para_birimi !== 'TRY' ? Number(form.kur) : null,
+        kur: akreditif.para_birimi !== 'TRY' ? Number(form.kur) : null,
       });
       onKaydedildi();
     } catch (err) {
@@ -711,14 +718,14 @@ function TaksitOdemeFormu({ taksit, akreditif, onKaydedildi, onVazgec }) {
         <div style={{ padding: 12, background: 'white', border: '1px solid var(--kenarlik)', borderRadius: 7, margin: '4px 0' }}>
           <form onSubmit={kaydet}>
             <HataMesaji>{hata}</HataMesaji>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: akreditif.para_birimi !== 'TRY' ? '1fr 1fr 1fr 1fr' : '1fr 1fr 1fr', gap: 10 }}>
               <Alan etiket="Ödeme yöntemi">
                 <select value={form.odeme_yontemi} onChange={(e) => setForm((f) => ({ ...f, odeme_yontemi: e.target.value }))} style={girdiStili}>
                   <option value="BANKA">Banka</option>
                   <option value="NAKIT">Nakit (Ana Kasa)</option>
                 </select>
               </Alan>
-              {form.odeme_yontemi === 'BANKA' ? (
+              {form.odeme_yontemi === 'BANKA' && (
                 <Alan etiket="Banka hesabı">
                   <select required value={form.banka_hesap_id} onChange={(e) => setForm((f) => ({ ...f, banka_hesap_id: e.target.value }))} style={girdiStili}>
                     <option value="">Seçin...</option>
@@ -729,7 +736,8 @@ function TaksitOdemeFormu({ taksit, akreditif, onKaydedildi, onVazgec }) {
                     ))}
                   </select>
                 </Alan>
-              ) : akreditif.para_birimi !== 'TRY' && (
+              )}
+              {akreditif.para_birimi !== 'TRY' && (
                 <Alan etiket="Kur">
                   <input required type="number" step="0.0001" value={form.kur} onChange={(e) => setForm((f) => ({ ...f, kur: e.target.value }))} style={girdiStili} />
                 </Alan>
@@ -738,7 +746,12 @@ function TaksitOdemeFormu({ taksit, akreditif, onKaydedildi, onVazgec }) {
                 <input required type="date" value={form.odeme_tarihi} onChange={(e) => setForm((f) => ({ ...f, odeme_tarihi: e.target.value }))} style={girdiStili} />
               </Alan>
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
+            {akreditif.para_birimi !== 'TRY' && form.kur && (
+              <div style={{ fontSize: 12.5, color: 'var(--metin-ikincil)', marginTop: 6 }}>
+                TL karşılığı: <strong>{paraFormat(Number(taksit.tutar) * (Number(form.kur) || 0))}</strong>
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
               <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Kaydediliyor...' : 'Taksidi öde'}</Buton>
               <Buton type="button" variant="ikincil" onClick={onVazgec}>Vazgeç</Buton>
             </div>
