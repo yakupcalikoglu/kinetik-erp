@@ -3,7 +3,7 @@ import { api, hataMesajiCikar } from '../api/client';
 import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, BosDurum, Etiket, paraFormat, eylemChipStili } from '../components/Ortak';
 
 function bosKalem() {
-  return { aciklama: '', miktar: 1, birim_fiyat: '', kdv_orani: 20 };
+  return { stok_karti_id: '', aciklama: '', miktar: 1, birim_fiyat: '', kdv_orani: 20 };
 }
 
 function useCariler() {
@@ -12,6 +12,14 @@ function useCariler() {
     api.get('/cariler').then((r) => setCariler(r.data)).catch(() => {});
   }, []);
   return cariler;
+}
+
+function useStokKartlari() {
+  const [kartlar, setKartlar] = useState([]);
+  useEffect(() => {
+    api.get('/stok-kartlari').then((r) => setKartlar(r.data)).catch(() => {});
+  }, []);
+  return kartlar;
 }
 
 const DURUM_TON = { TASLAK: 'notr', ONAYLANDI: 'amber', FATURALASTI: 'yesil' };
@@ -159,10 +167,17 @@ function GecmisFaturalar({ cariler, yenidenYukleTetik }) {
 
 export default function ProformaFaturaSayfasi() {
   const cariler = useCariler();
+  const stokKartlari = useStokKartlari();
   const [form, setForm] = useState({
     proforma_no: '', cari_id: '', tarih: new Date().toISOString().slice(0, 10), para_birimi: 'TRY', notlar: '',
   });
   const [kalemler, setKalemler] = useState([bosKalem()]);
+
+  useEffect(() => {
+    api.get('/proforma-faturalar/sonraki-no')
+      .then((r) => setForm((f) => (f.proforma_no ? f : { ...f, proforma_no: r.data.proforma_no })))
+      .catch(() => {});
+  }, []);
   const [olusanProforma, setOlusanProforma] = useState(null);
   const [faturaNo, setFaturaNo] = useState('');
   const [olusanFatura, setOlusanFatura] = useState(null);
@@ -171,7 +186,18 @@ export default function ProformaFaturaSayfasi() {
   const [gecmisYenidenYukleTetik, setGecmisYenidenYukleTetik] = useState(0);
 
   function kalemGuncelle(i, alan, deger) {
-    setKalemler((liste) => liste.map((k, idx) => (idx === i ? { ...k, [alan]: deger } : k)));
+    setKalemler((liste) => liste.map((k, idx) => {
+      if (idx !== i) return k;
+      if (alan === 'stok_karti_id' && deger) {
+        const kart = stokKartlari.find((s) => String(s.id) === String(deger));
+        return {
+          ...k,
+          stok_karti_id: deger,
+          aciklama: kart ? `${kart.marka} ${kart.model}` : k.aciklama,
+        };
+      }
+      return { ...k, [alan]: deger };
+    }));
   }
 
   const araToplam = kalemler.reduce((acc, k) => acc + (Number(k.miktar) || 0) * (Number(k.birim_fiyat) || 0), 0);
@@ -186,6 +212,7 @@ export default function ProformaFaturaSayfasi() {
         ...form,
         cari_id: Number(form.cari_id),
         kalemler: kalemler.map((k) => ({
+          stok_karti_id: k.stok_karti_id ? Number(k.stok_karti_id) : null,
           aciklama: k.aciklama, miktar: Number(k.miktar), birim_fiyat: Number(k.birim_fiyat), kdv_orani: Number(k.kdv_orani),
         })),
       });
@@ -222,6 +249,9 @@ export default function ProformaFaturaSayfasi() {
     setFaturaNo('');
     setForm({ proforma_no: '', cari_id: '', tarih: new Date().toISOString().slice(0, 10), para_birimi: 'TRY', notlar: '' });
     setKalemler([bosKalem()]);
+    api.get('/proforma-faturalar/sonraki-no')
+      .then((r) => setForm((f) => ({ ...f, proforma_no: r.data.proforma_no })))
+      .catch(() => {});
   }
 
   function gecmistenGoruntule(proforma) {
@@ -270,7 +300,7 @@ export default function ProformaFaturaSayfasi() {
             <table>
               <thead>
                 <tr style={{ background: 'var(--zemin)' }}>
-                  {['Açıklama', 'Miktar', 'Birim Fiyat', 'KDV %'].map((b) => (
+                  {['Ürün (opsiyonel)', 'Açıklama', 'Miktar', 'Birim Fiyat', 'KDV %', ''].map((b) => (
                     <th key={b} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 12, color: 'var(--metin-ikincil)' }}>{b}</th>
                   ))}
                 </tr>
@@ -279,7 +309,13 @@ export default function ProformaFaturaSayfasi() {
                 {kalemler.map((k, i) => (
                   <tr key={i} style={{ borderTop: '1px solid var(--kenarlik)' }}>
                     <td style={{ padding: 8 }}>
-                      <input required value={k.aciklama} onChange={(e) => kalemGuncelle(i, 'aciklama', e.target.value)} style={{ ...girdiStili, width: 280 }} />
+                      <select value={k.stok_karti_id} onChange={(e) => kalemGuncelle(i, 'stok_karti_id', e.target.value)} style={{ ...girdiStili, width: 200 }}>
+                        <option value="">Seçin (ya da elle yazın)...</option>
+                        {stokKartlari.map((s) => <option key={s.id} value={s.id}>{s.marka} {s.model}</option>)}
+                      </select>
+                    </td>
+                    <td style={{ padding: 8 }}>
+                      <input required value={k.aciklama} onChange={(e) => kalemGuncelle(i, 'aciklama', e.target.value)} style={{ ...girdiStili, width: 220 }} />
                     </td>
                     <td style={{ padding: 8 }}>
                       <input type="number" min="1" value={k.miktar} onChange={(e) => kalemGuncelle(i, 'miktar', e.target.value)} style={{ ...girdiStili, width: 70 }} />
@@ -289,6 +325,11 @@ export default function ProformaFaturaSayfasi() {
                     </td>
                     <td style={{ padding: 8 }}>
                       <input type="number" value={k.kdv_orani} onChange={(e) => kalemGuncelle(i, 'kdv_orani', e.target.value)} style={{ ...girdiStili, width: 70 }} />
+                    </td>
+                    <td style={{ padding: 8 }}>
+                      {kalemler.length > 1 && (
+                        <button type="button" onClick={() => setKalemler((l) => l.filter((_, idx) => idx !== i))} style={eylemChipStili('kirmizi')}>Sil</button>
+                      )}
                     </td>
                   </tr>
                 ))}
