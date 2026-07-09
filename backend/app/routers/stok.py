@@ -120,6 +120,41 @@ def stok_seri_no_getir(
     return _seri_no_getir_veya_404(db, seri_id, sirket_id)
 
 
+@router.put("/stok-seri-no/toplu-durum-guncelle", response_model=list[StokSeriNoYanit],
+            dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
+def stok_toplu_durum_guncelle(
+    istek: TopluDurumGuncelleIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Birden fazla urunun (seri no) durumunu TEK SEFERDE gunceller
+    (orn. gumrukten cikan 10 urunu birden 'Depoda' yapmak icin).
+    SATILDI durumu buradan YAPILAMAZ - odeme/kasa-banka takibinin dogru
+    islenmesi icin satislar tek tek "Satis yap" akisiyla yapilmalidir.
+    """
+    if istek.durum == StokDurum.SATILDI:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Toplu satış desteklenmiyor. Ödeme takibi için ürünleri tek tek 'Satış yap' ile işleyin."
+        )
+    if not istek.stok_seri_no_idleri:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "En az bir ürün seçmelisiniz.")
+
+    guncellenenler = []
+    for seri_id in istek.stok_seri_no_idleri:
+        kayit = db.get(StokSeriNo, seri_id)
+        if kayit is None or kayit.sirket_id != sirket_id:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Ürün bulunamadı (ID={seri_id}).")
+        kayit.durum = istek.durum
+        guncellenenler.append(kayit)
+
+    db.commit()
+    for k in guncellenenler:
+        db.refresh(k)
+    return guncellenenler
+
+
 @router.put("/stok-seri-no/{seri_id}", response_model=StokSeriNoYanit,
             dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
 def stok_seri_no_duzenle(
@@ -198,41 +233,6 @@ def stok_durum_guncelle(
     db.commit()
     db.refresh(kayit)
     return kayit
-
-
-@router.put("/stok-seri-no/toplu-durum-guncelle", response_model=list[StokSeriNoYanit],
-            dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
-def stok_toplu_durum_guncelle(
-    istek: TopluDurumGuncelleIstegi,
-    sirket_id: int = Depends(aktif_sirket_id_getir),
-    db: Session = Depends(get_db),
-):
-    """
-    Birden fazla urunun (seri no) durumunu TEK SEFERDE gunceller
-    (orn. gumrukten cikan 10 urunu birden 'Depoda' yapmak icin).
-    SATILDI durumu buradan YAPILAMAZ - odeme/kasa-banka takibinin dogru
-    islenmesi icin satislar tek tek "Satis yap" akisiyla yapilmalidir.
-    """
-    if istek.durum == StokDurum.SATILDI:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            "Toplu satış desteklenmiyor. Ödeme takibi için ürünleri tek tek 'Satış yap' ile işleyin."
-        )
-    if not istek.stok_seri_no_idleri:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "En az bir ürün seçmelisiniz.")
-
-    guncellenenler = []
-    for seri_id in istek.stok_seri_no_idleri:
-        kayit = db.get(StokSeriNo, seri_id)
-        if kayit is None or kayit.sirket_id != sirket_id:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Ürün bulunamadı (ID={seri_id}).")
-        kayit.durum = istek.durum
-        guncellenenler.append(kayit)
-
-    db.commit()
-    for k in guncellenenler:
-        db.refresh(k)
-    return guncellenenler
 
 
 @router.post("/stok-seri-no/{seri_id}/satis", response_model=StokSeriNoYanit,
@@ -410,6 +410,27 @@ def stok_satisini_geri_al(
     kayit.satis_tarihi = None
     kayit.satis_cek_id = None
 
+    db.commit()
+    db.refresh(kayit)
+    return kayit
+
+
+@router.put("/stok-seri-no/{seri_id}/satinalma-maliyetini-duzelt", response_model=StokSeriNoYanit,
+            dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
+def satinalma_maliyetini_duzelt(
+    seri_id: int,
+    yeni_tutar_try: float,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Bir urunun satinalma_maliyeti_try alanini dogrudan TL tutari vererek
+    duzeltir. Ozellikle Teslim Al akisinda kur cevrimi yapilmadan olusmus
+    (dovizli siparislerde yanlislikla ham dovizin TL sanilarak kaydedildigi)
+    eski kayitlari duzeltmek icin kullanilir.
+    """
+    kayit = _seri_no_getir_veya_404(db, seri_id, sirket_id)
+    kayit.satinalma_maliyeti_try = yeni_tutar_try
     db.commit()
     db.refresh(kayit)
     return kayit
