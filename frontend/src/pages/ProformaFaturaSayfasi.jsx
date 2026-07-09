@@ -1,6 +1,175 @@
 import { useEffect, useState } from 'react';
 import { api, hataMesajiCikar } from '../api/client';
-import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, BosDurum, Etiket, paraFormat, eylemChipStili } from '../components/Ortak';
+import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, BosDurum, Etiket, paraFormat, eylemChipStili, Sekmeler } from '../components/Ortak';
+
+const ODEME_TIPLERI = [
+  { deger: 'PESIN_NAKIT', etiket: 'Nakit' },
+  { deger: 'PESIN_HAVALE', etiket: 'Havale/EFT' },
+  { deger: 'PESIN_KART', etiket: 'Kredi Kartı' },
+  { deger: 'TAKSITLI', etiket: 'Taksitli' },
+  { deger: 'LEASINGLI', etiket: 'Leasing' },
+  { deger: 'CEK', etiket: 'Çek' },
+];
+
+function SatisaCevirFormu({ proforma, kalem, onTamamlandi, onVazgec }) {
+  const [urunler, setUrunler] = useState([]);
+  const [bankaHesaplari, setBankaHesaplari] = useState([]);
+  const [urunId, setUrunId] = useState('');
+  const [odemeTipi, setOdemeTipi] = useState('PESIN_NAKIT');
+  const [tutar, setTutar] = useState(String((Number(kalem.miktar) * Number(kalem.birim_fiyat) * (1 + Number(kalem.kdv_orani) / 100)).toFixed(2)));
+  const [tarih, setTarih] = useState(new Date().toISOString().slice(0, 10));
+  const [bankaHesapId, setBankaHesapId] = useState('');
+  const [taksitSayisi, setTaksitSayisi] = useState(3);
+  const [pesinat, setPesinat] = useState('0');
+  const [cekNo, setCekNo] = useState('');
+  const [cekBankaAdi, setCekBankaAdi] = useState('');
+  const [cekVadeTarihi, setCekVadeTarihi] = useState('');
+  const [hata, setHata] = useState(null);
+  const [kaydediliyor, setKaydediliyor] = useState(false);
+
+  useEffect(() => {
+    Promise.all([
+      api.get('/stok-seri-no', { params: { durum: 'DEPODA', stok_karti_id: kalem.stok_karti_id } }),
+      api.get('/stok-seri-no', { params: { durum: 'ANTREPODA', stok_karti_id: kalem.stok_karti_id } }),
+    ]).then(([a, b]) => {
+      const liste = [...a.data, ...b.data];
+      setUrunler(liste);
+      if (liste.length === 1) setUrunId(String(liste[0].id));
+    }).catch((e) => setHata(hataMesajiCikar(e)));
+    api.get('/banka-bakiyeleri').then((r) => setBankaHesaplari(r.data)).catch(() => {});
+  }, [kalem.stok_karti_id]);
+
+  const bankaGerekli = odemeTipi === 'PESIN_HAVALE' || odemeTipi === 'PESIN_KART' || odemeTipi === 'LEASINGLI';
+
+  async function satisiVeFaturayiTamamla(e) {
+    e.preventDefault();
+    setHata(null);
+    if (!urunId) { setHata('Lütfen satılacak ürünü (seri no) seçin.'); return; }
+    if (!tutar || Number(tutar) <= 0) { setHata('Lütfen geçerli bir tutar girin.'); return; }
+
+    setKaydediliyor(true);
+    try {
+      if (odemeTipi === 'PESIN_NAKIT') {
+        await api.post(`/stok-seri-no/${urunId}/satis`, {
+          musteri_cari_id: proforma.cari_id, satis_fiyati_try: Number(tutar),
+          satis_tarihi: tarih, odeme_yontemi: 'NAKIT', banka_hesap_id: null,
+        });
+      } else if (bankaGerekli) {
+        if (!bankaHesapId) { setHata('Lütfen banka hesabını seçin.'); setKaydediliyor(false); return; }
+        await api.post(`/stok-seri-no/${urunId}/satis`, {
+          musteri_cari_id: proforma.cari_id, satis_fiyati_try: Number(tutar),
+          satis_tarihi: tarih, odeme_yontemi: 'BANKA', banka_hesap_id: Number(bankaHesapId),
+        });
+      } else if (odemeTipi === 'TAKSITLI') {
+        await api.post('/taksitli-satis-planlari', {
+          musteri_cari_id: proforma.cari_id, stok_seri_no_id: Number(urunId),
+          toplam_tutar: Number(tutar), pesinat: Number(pesinat || 0),
+          taksit_sayisi: Number(taksitSayisi), baslangic_tarihi: tarih, para_birimi: 'TRY',
+        });
+      } else if (odemeTipi === 'CEK') {
+        if (!cekVadeTarihi) { setHata('Lütfen çekin vade tarihini girin.'); setKaydediliyor(false); return; }
+        const { data: yeniCek } = await api.post('/cekler', {
+          tip: 'ALINAN', cek_no: cekNo || null, banka_adi: cekBankaAdi || null,
+          cari_id: proforma.cari_id, tutar: Number(tutar),
+          vade_tarihi: cekVadeTarihi, alinma_verilme_tarihi: tarih,
+        });
+        await api.put(`/stok-seri-no/${urunId}/durum`, {
+          durum: 'SATILDI', musteri_cari_id: proforma.cari_id,
+          satis_fiyati_try: Number(tutar), satis_tarihi: tarih,
+        });
+        await api.put(`/stok-seri-no/${urunId}/satis-cek-baglantisi`, { cek_id: yeniCek.id });
+      }
+
+      const { data: sonrakiNo } = await api.get('/faturalar/sonraki-no');
+      await api.post(`/proforma-faturalar/${proforma.id}/faturaya-cevir`, null, {
+        params: { fatura_no: sonrakiNo.fatura_no },
+      });
+
+      onTamamlandi();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setKaydediliyor(false);
+    }
+  }
+
+  return (
+    <div style={{ padding: 14, background: 'var(--zemin)', border: '1px solid var(--kenarlik)', borderRadius: 8, marginTop: 10 }}>
+      <form onSubmit={satisiVeFaturayiTamamla}>
+        <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 10 }}>
+          Satışa çevir — {kalem.aciklama}
+        </div>
+        <HataMesaji>{hata}</HataMesaji>
+
+        <div style={{ marginBottom: 10 }}>
+          <Alan etiket="Hangi ürün (seri no)?">
+            <select required value={urunId} onChange={(e) => setUrunId(e.target.value)} style={girdiStili}>
+              <option value="">Seçin...</option>
+              {urunler.map((u) => <option key={u.id} value={u.id}>{u.seri_no}</option>)}
+            </select>
+            {urunler.length === 0 && (
+              <div style={{ fontSize: 12, color: 'var(--kirmizi)', marginTop: 4 }}>
+                Bu ürün tanımından Depoda/Antrepoda hazır ürün yok. Önce stok girişi yapılmalı.
+              </div>
+            )}
+          </Alan>
+        </div>
+
+        <div style={{ marginBottom: 6 }}>
+          <span style={{ display: 'block', fontSize: 12, color: 'var(--metin-ikincil)', marginBottom: 6 }}>Ödeme Türü</span>
+          <Sekmeler sekmeler={ODEME_TIPLERI} aktif={odemeTipi} onDegistir={setOdemeTipi} />
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginTop: 10 }}>
+          <Alan etiket="Tutar (TL)">
+            <input required type="number" step="0.01" value={tutar} onChange={(e) => setTutar(e.target.value)} style={girdiStili} />
+          </Alan>
+          <Alan etiket="Tarih">
+            <input required type="date" value={tarih} onChange={(e) => setTarih(e.target.value)} style={girdiStili} />
+          </Alan>
+          {bankaGerekli && (
+            <Alan etiket="Banka Hesabı">
+              <select required value={bankaHesapId} onChange={(e) => setBankaHesapId(e.target.value)} style={girdiStili}>
+                <option value="">Seçin...</option>
+                {bankaHesaplari.map((h) => (
+                  <option key={h.banka_hesap_id} value={h.banka_hesap_id}>{h.banka_adi} — {h.hesap_adi || h.para_birimi}</option>
+                ))}
+              </select>
+            </Alan>
+          )}
+          {odemeTipi === 'TAKSITLI' && (
+            <>
+              <Alan etiket="Peşinat (TL)">
+                <input type="number" step="0.01" value={pesinat} onChange={(e) => setPesinat(e.target.value)} style={girdiStili} />
+              </Alan>
+              <Alan etiket="Taksit Sayısı">
+                <input required type="number" min="2" value={taksitSayisi} onChange={(e) => setTaksitSayisi(e.target.value)} style={girdiStili} />
+              </Alan>
+            </>
+          )}
+          {odemeTipi === 'CEK' && (
+            <>
+              <Alan etiket="Çek No">
+                <input value={cekNo} onChange={(e) => setCekNo(e.target.value)} style={girdiStili} />
+              </Alan>
+              <Alan etiket="Çekin Bankası">
+                <input value={cekBankaAdi} onChange={(e) => setCekBankaAdi(e.target.value)} style={girdiStili} />
+              </Alan>
+              <Alan etiket="Vade Tarihi">
+                <input required type="date" value={cekVadeTarihi} onChange={(e) => setCekVadeTarihi(e.target.value)} style={girdiStili} />
+              </Alan>
+            </>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+          <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Tamamlanıyor...' : 'Satışı ve faturayı tamamla'}</Buton>
+          <Buton type="button" variant="ikincil" onClick={onVazgec}>Vazgeç</Buton>
+        </div>
+      </form>
+    </div>
+  );
+}
 
 function bosKalem() {
   return { stok_karti_id: '', aciklama: '', miktar: 1, birim_fiyat: '', kdv_orani: 20 };
@@ -184,6 +353,7 @@ export default function ProformaFaturaSayfasi() {
   const [hata, setHata] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
   const [gecmisYenidenYukleTetik, setGecmisYenidenYukleTetik] = useState(0);
+  const [satisaCevirAcikKalemId, setSatisaCevirAcikKalemId] = useState(null);
 
   function kalemGuncelle(i, alan, deger) {
     setKalemler((liste) => liste.map((k, idx) => {
@@ -357,20 +527,57 @@ export default function ProformaFaturaSayfasi() {
             {' '}— Durum: {DURUM_METIN[olusanProforma.durum] || olusanProforma.durum}
           </div>
 
-          {olusanProforma.durum !== 'FATURALASTI' && !olusanFatura ? (
-            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-              <div style={{ flex: 1, maxWidth: 240 }}>
-                <Alan etiket="Fatura no">
-                  <input value={faturaNo} onChange={(e) => setFaturaNo(e.target.value)} placeholder="FT-2026-001" style={girdiStili} />
-                </Alan>
+          {olusanProforma.durum !== 'FATURALASTI' && !olusanFatura && (
+            <>
+              {(olusanProforma.kalemler || []).filter((k) => k.stok_karti_id).length > 0 && (
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
+                    Anlaşma netleşti mi? Bir ürünü doğrudan satışa çevirip faturayı otomatik oluşturabilirsiniz:
+                  </div>
+                  {olusanProforma.kalemler.filter((k) => k.stok_karti_id).map((k) => (
+                    <div key={k.id} style={{ marginBottom: 8 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', border: '1px solid var(--kenarlik)', borderRadius: 8 }}>
+                        <div style={{ fontSize: 13 }}>{k.aciklama} — {paraFormat(k.miktar * k.birim_fiyat, olusanProforma.para_birimi)}</div>
+                        <button
+                          onClick={() => setSatisaCevirAcikKalemId((mevcut) => (mevcut === k.id ? null : k.id))}
+                          style={eylemChipStili('yesil')}
+                        >
+                          {satisaCevirAcikKalemId === k.id ? 'Kapat' : 'Satışa Çevir'}
+                        </button>
+                      </div>
+                      {satisaCevirAcikKalemId === k.id && (
+                        <SatisaCevirFormu
+                          proforma={olusanProforma}
+                          kalem={k}
+                          onTamamlandi={() => {
+                            setSatisaCevirAcikKalemId(null);
+                            setOlusanProforma((p) => ({ ...p, durum: 'FATURALASTI' }));
+                            setGecmisYenidenYukleTetik((t) => t + 1);
+                          }}
+                          onVazgec={() => setSatisaCevirAcikKalemId(null)}
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+                <div style={{ flex: 1, maxWidth: 240 }}>
+                  <Alan etiket="Ya da manuel: Fatura no">
+                    <input value={faturaNo} onChange={(e) => setFaturaNo(e.target.value)} placeholder="FT-2026-001" style={girdiStili} />
+                  </Alan>
+                </div>
+                <Buton onClick={faturayaCevir} style={{ marginBottom: 14 }}>Faturaya çevir</Buton>
               </div>
-              <Buton onClick={faturayaCevir} style={{ marginBottom: 14 }}>Faturaya çevir</Buton>
-            </div>
-          ) : olusanFatura ? (
+            </>
+          )}
+          {olusanFatura && (
             <div style={{ background: 'var(--yesil-acik)', color: 'var(--yesil)', padding: '12px 16px', borderRadius: 8, fontSize: 13.5 }}>
               Fatura oluşturuldu: <strong>{olusanFatura.fatura_no}</strong>
             </div>
-          ) : (
+          )}
+          {olusanProforma.durum === 'FATURALASTI' && !olusanFatura && (
             <div style={{ fontSize: 13, color: 'var(--metin-soluk)' }}>Bu proforma zaten faturalaştırılmış.</div>
           )}
         </Kart>
