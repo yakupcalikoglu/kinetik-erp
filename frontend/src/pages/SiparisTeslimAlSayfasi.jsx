@@ -16,6 +16,7 @@ export default function SiparisTeslimAlSayfasi() {
   const [siparis, setSiparis] = useState(null);
   const [satirlar, setSatirlar] = useState([]);
   const [hedefDurum, setHedefDurum] = useState('');
+  const [kur, setKur] = useState('1');
   const [hata, setHata] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
   const [tamamlandi, setTamamlandi] = useState(null);
@@ -25,6 +26,9 @@ export default function SiparisTeslimAlSayfasi() {
       .then((res) => {
         setSiparis(res.data);
         setHedefDurum(res.data.kaynak === 'ITHALAT' ? 'GUMRUKTE' : 'DEPODA');
+        if (res.data.para_birimi !== 'TRY') {
+          api.get(`/kur/${res.data.para_birimi}`).then((r) => setKur(r.data.kur)).catch(() => {});
+        }
         // Her urun satiri icin miktar kadar seri no girisi olustur
         const acilanSatirlar = [];
         for (const urun of res.data.urunler) {
@@ -61,6 +65,7 @@ export default function SiparisTeslimAlSayfasi() {
     try {
       const { data } = await api.post(`/siparisler/${siparisId}/teslim-al`, {
         hedef_durum: hedefDurum,
+        kur: siparis.para_birimi !== 'TRY' ? Number(kur) : 1,
         urunler: satirlar.map((s) => ({
           siparis_detay_id: s.siparis_detay_id,
           seri_no: s.seri_no,
@@ -109,13 +114,23 @@ export default function SiparisTeslimAlSayfasi() {
         <HataMesaji>{hata}</HataMesaji>
 
         <Kart style={{ marginBottom: 16 }}>
-          <div style={{ maxWidth: 320 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: siparis.para_birimi !== 'TRY' ? '1fr 1fr' : '1fr', gap: 14, maxWidth: 560 }}>
             <Alan etiket="Bu ürünler şu anda fiilen nerede? (hepsi bu durumda stoğa girecek)">
               <select value={hedefDurum} onChange={(e) => setHedefDurum(e.target.value)} style={girdiStili}>
                 {Object.entries(HEDEF_DURUM_METIN).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
             </Alan>
+            {siparis.para_birimi !== 'TRY' && (
+              <Alan etiket={`Sipariş ${siparis.para_birimi} cinsinden — TL'ye çevirmek için kur (otomatik, elle değiştirilebilir)`}>
+                <input type="number" step="0.0001" value={kur} onChange={(e) => setKur(e.target.value)} style={girdiStili} />
+              </Alan>
+            )}
           </div>
+          {siparis.para_birimi !== 'TRY' && (
+            <div style={{ fontSize: 12.5, color: 'var(--metin-soluk)', marginTop: 8 }}>
+              Birim fiyatlar {siparis.para_birimi} cinsinden girilmişti; stoğa bu kur ile TL karşılığı olarak işlenecek.
+            </div>
+          )}
         </Kart>
 
         <Kart style={{ padding: 0 }}>
