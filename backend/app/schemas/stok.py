@@ -186,6 +186,7 @@ class TeslimAlinanUrun(BaseModel):
 
 class TeslimAlIstegi(BaseModel):
     urunler: list[TeslimAlinanUrun]
+    hedef_durum: StokDurum | None = None  # Belirtilmezse eski otomatik kural kullanilir
 
 
 class StokMaliyetKalemiYanit(BaseModel):
