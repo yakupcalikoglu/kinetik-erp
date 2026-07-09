@@ -205,6 +205,7 @@ function MaliyetDetayi({ urun, onKapat }) {
   const [yukleniyor, setYukleniyor] = useState(true);
   const [hata, setHata] = useState(null);
   const [duzenlenenId, setDuzenlenenId] = useState(null);
+  const [denemeSatisFiyati, setDenemeSatisFiyati] = useState('');
 
   function yukle() {
     setYukleniyor(true);
@@ -225,6 +226,15 @@ function MaliyetDetayi({ urun, onKapat }) {
     }
   }
 
+  // Kalemleri para birimine gore grupla, hem "kac USD/EUR harcandi" hem
+  // "toplam TL karsiligi" gorunsun diye.
+  const dovizToplamlari = {};
+  kalemler.forEach((k) => {
+    dovizToplamlari[k.para_birimi] = (dovizToplamlari[k.para_birimi] || 0) + Number(k.tutar);
+  });
+  const toplamMaliyetTry = urun.toplam_maliyet_try;
+  const denemeKarZarar = denemeSatisFiyati ? Number(denemeSatisFiyati) - toplamMaliyetTry : null;
+
   return (
     <Kart style={{ marginBottom: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
@@ -232,6 +242,41 @@ function MaliyetDetayi({ urun, onKapat }) {
         <Buton variant="ikincil" onClick={onKapat}>Kapat</Buton>
       </div>
       <HataMesaji>{hata}</HataMesaji>
+
+      {kalemler.length > 0 && (
+        <div style={{
+          display: 'flex', gap: 20, flexWrap: 'wrap', padding: '12px 16px', background: 'var(--zemin)',
+          borderRadius: 8, marginBottom: 14, fontSize: 13,
+        }}>
+          {Object.entries(dovizToplamlari).filter(([pb]) => pb !== 'TRY').map(([pb, tutar]) => (
+            <div key={pb}>
+              <div style={{ color: 'var(--metin-ikincil)', fontSize: 11.5 }}>Toplam ({pb} girişleri)</div>
+              <div style={{ fontWeight: 600 }}>{paraFormat(tutar, pb)}</div>
+            </div>
+          ))}
+          <div>
+            <div style={{ color: 'var(--metin-ikincil)', fontSize: 11.5 }}>Toplam maliyet (TL karşılığı)</div>
+            <div style={{ fontWeight: 600 }}>{paraFormat(toplamMaliyetTry)}</div>
+          </div>
+          <div style={{ minWidth: 200 }}>
+            <div style={{ color: 'var(--metin-ikincil)', fontSize: 11.5, marginBottom: 3 }}>Satış fiyatı dene (TL) — net kârlılığı gör</div>
+            <input
+              type="number" step="0.01" value={denemeSatisFiyati}
+              onChange={(e) => setDenemeSatisFiyati(e.target.value)}
+              placeholder="Örn: 55000"
+              style={{ ...girdiStili, width: 160 }}
+            />
+          </div>
+          {denemeKarZarar != null && (
+            <div>
+              <div style={{ color: 'var(--metin-ikincil)', fontSize: 11.5 }}>Tahmini kâr/zarar</div>
+              <div style={{ fontWeight: 600, color: denemeKarZarar >= 0 ? 'var(--yesil)' : 'var(--kirmizi)' }}>
+                {paraFormat(denemeKarZarar)}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <MaliyetKalemiEkleFormu urun={urun} onKaydedildi={yukle} />
 
