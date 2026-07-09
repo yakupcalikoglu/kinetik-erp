@@ -502,6 +502,13 @@ export default function StokSayfasi() {
     durumOzet[u.durum] = (durumOzet[u.durum] || 0) + 1;
   });
 
+  // Urun tanimi (stok karti) basina, stogumuza simdiye kadar girmis toplam
+  // adet - "Uruna gore filtrele" listesinde ve maliyet detayinda gosterilir.
+  const urunAdetOzet = {};
+  tumUrunler.forEach((u) => {
+    urunAdetOzet[u.stok_karti_id] = (urunAdetOzet[u.stok_karti_id] || 0) + 1;
+  });
+
   return (
     <div>
       <SayfaBasligi
@@ -558,7 +565,7 @@ export default function StokSayfasi() {
             <select value={urunFiltre} onChange={(e) => setUrunFiltre(e.target.value)} style={{ ...girdiStili, minWidth: 220 }}>
               <option value="">Tüm ürünler</option>
               {stokKartlari.map((k) => (
-                <option key={k.id} value={k.id}>{k.marka} {k.model}</option>
+                <option key={k.id} value={k.id}>{k.marka} {k.model} ({urunAdetOzet[k.id] || 0} adet)</option>
               ))}
             </select>
           </Alan>
@@ -624,7 +631,12 @@ export default function StokSayfasi() {
                         <input type="checkbox" checked={seciliMi(u.id)} onChange={() => secimiDegistir(u.id)} />
                       </td>
                       <td style={{ padding: '12px 16px', fontWeight: 500, fontFamily: 'var(--font-mono)' }}>{u.seri_no}</td>
-                      <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>{urunAdiGoster(u.stok_karti_id)}</td>
+                      <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>
+                        {urunAdiGoster(u.stok_karti_id)}
+                        <span style={{ fontSize: 11, color: 'var(--metin-soluk)', marginLeft: 6 }}>
+                          (bu üründen toplam {urunAdetOzet[u.stok_karti_id] || 0} adet)
+                        </span>
+                      </td>
                       <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>{siparisNoGoster(u.siparis_id)}</td>
                       <td style={{ padding: '12px 16px' }}>
                         <Etiket ton={DURUM_ETIKET[u.durum]}>{DURUM_METIN[u.durum]}</Etiket>
