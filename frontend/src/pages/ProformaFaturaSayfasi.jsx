@@ -90,6 +90,73 @@ function GecmisProformalar({ cariler, yenidenYukleTetik, onGoruntule }) {
   );
 }
 
+function GecmisFaturalar({ cariler, yenidenYukleTetik }) {
+  const [liste, setListe] = useState([]);
+  const [hata, setHata] = useState(null);
+  const [yukleniyor, setYukleniyor] = useState(true);
+
+  function yukle() {
+    setYukleniyor(true);
+    api.get('/faturalar')
+      .then((r) => setListe(r.data))
+      .catch((e) => setHata(hataMesajiCikar(e)))
+      .finally(() => setYukleniyor(false));
+  }
+  useEffect(yukle, [yenidenYukleTetik]); // eslint-disable-line
+
+  function cariUnvani(id) {
+    const c = cariler.find((x) => x.id === id);
+    return c ? c.unvan : `#${id}`;
+  }
+
+  async function iptalEt(fatura) {
+    if (!window.confirm(`${fatura.fatura_no} numaralı faturayı iptal etmek istediğinize emin misiniz? Bağlı proforma tekrar faturalaştırılabilir hale gelecek.`)) return;
+    try {
+      await api.delete(`/faturalar/${fatura.id}`);
+      yukle();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    }
+  }
+
+  return (
+    <Kart style={{ padding: 0, marginTop: 20 }}>
+      <div style={{ padding: '14px 16px', fontWeight: 600, fontSize: 14, borderBottom: '1px solid var(--kenarlik)' }}>
+        Faturalar
+      </div>
+      <HataMesaji>{hata}</HataMesaji>
+      {yukleniyor ? (
+        <div style={{ padding: 20, color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
+      ) : liste.length === 0 ? (
+        <BosDurum baslik="Henüz fatura oluşturulmadı" />
+      ) : (
+        <table>
+          <thead>
+            <tr style={{ background: 'var(--zemin)' }}>
+              {['Fatura No', 'Cari', 'Tarih', 'Genel Toplam', 'İşlem'].map((b) => (
+                <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {liste.map((f) => (
+              <tr key={f.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                <td style={{ padding: '10px 16px', fontWeight: 500 }}>{f.fatura_no}</td>
+                <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{cariUnvani(f.cari_id)}</td>
+                <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{f.tarih}</td>
+                <td style={{ padding: '10px 16px', fontWeight: 500 }}>{paraFormat(f.genel_toplam, f.para_birimi)}</td>
+                <td style={{ padding: '10px 16px' }}>
+                  <button onClick={() => iptalEt(f)} style={eylemChipStili('kirmizi')}>İptal Et</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </Kart>
+  );
+}
+
 export default function ProformaFaturaSayfasi() {
   const cariler = useCariler();
   const [form, setForm] = useState({
@@ -269,6 +336,7 @@ export default function ProformaFaturaSayfasi() {
       )}
 
       <GecmisProformalar cariler={cariler} yenidenYukleTetik={gecmisYenidenYukleTetik} onGoruntule={gecmistenGoruntule} />
+      <GecmisFaturalar cariler={cariler} yenidenYukleTetik={gecmisYenidenYukleTetik} />
     </div>
   );
 }
