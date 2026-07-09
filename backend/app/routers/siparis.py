@@ -71,7 +71,7 @@ def siparis_olustur(
         notlar=istek.notlar,
     )
     db.add(yeni)
-    db.flush()  # yeni.id'yi almak icin
+    db.flush()
 
     for urun in istek.urunler:
         db.add(SiparisDetay(siparis_id=yeni.id, **urun.model_dump()))
@@ -163,7 +163,6 @@ def siparis_guncelle(
     siparis.varis_limani = istek.varis_limani
     siparis.notlar = istek.notlar
 
-    # Eski urun satirlarini sil, yenilerini ekle.
     eski_detaylar = db.execute(
         select(SiparisDetay).where(SiparisDetay.siparis_id == siparis.id)
     ).scalars()
@@ -286,6 +285,12 @@ def siparis_teslim_al(
     Her siparis_detay satiri icin miktar kadar degil, kullanicinin
     bildirdigi her gercek seri no icin BIR stok_seri_no kaydi acilir
     (forklift gibi tekil urunlerde miktar=2 ise 2 ayri seri no girilir).
+
+    hedef_durum belirtilmisse (Depoda/Antrepoda/Gumrukte/Yolda) tum
+    urunler DOGRUDAN o durumda acilir - kullanici mallarin fiilen nerede
+    oldugunu kendisi secer. Belirtilmezse eski otomatik kural uygulanir
+    (ithalat -> Gumrukte, yurtici -> Depoda).
+
     Donen deger: olusturulan stok_seri_no id'lerinin listesi.
     """
     siparis = _siparis_getir_veya_404(db, siparis_id, sirket_id)
@@ -296,6 +301,9 @@ def siparis_teslim_al(
             select(SiparisDetay).where(SiparisDetay.id.in_(detay_id_seti))
         ).scalars()
     }
+
+    varsayilan_durum = StokDurum.GUMRUKTE if siparis.kaynak.value == "ITHALAT" else StokDurum.DEPODA
+    kullanilacak_durum = istek.hedef_durum if istek.hedef_durum is not None else varsayilan_durum
 
     olusturulan_idler = []
     for urun in istek.urunler:
@@ -316,7 +324,7 @@ def siparis_teslim_al(
             barkod=urun.barkod,
             kaynak=siparis.kaynak,
             siparis_id=siparis.id,
-            durum=StokDurum.GUMRUKTE if siparis.kaynak.value == "ITHALAT" else StokDurum.DEPODA,
+            durum=kullanilacak_durum,
             tedarikci_cari_id=siparis.tedarikci_cari_id,
             satinalma_maliyeti_try=detay.birim_fiyat,
         )
