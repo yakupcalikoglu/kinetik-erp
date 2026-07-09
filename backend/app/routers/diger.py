@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -221,6 +222,23 @@ def borc_bakiyesi(borc_id: int, sirket_id: int = Depends(aktif_sirket_id_getir),
 
 
 # =================================================================== PROFORMA / FATURA
+@router.get("/proforma-faturalar/sonraki-no",
+            dependencies=[Depends(izin_gerektir("FATURA_GORUNTULE"))])
+def proforma_sonraki_no_getir(
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """Bu yil icin bir sonraki proforma numarasini onerir (PRF-YYYY-NNN formatinda)."""
+    yil = date.today().year
+    sayac = db.execute(
+        select(func.count()).select_from(ProformaFatura).where(
+            ProformaFatura.sirket_id == sirket_id,
+            func.extract("year", ProformaFatura.tarih) == yil,
+        )
+    ).scalar_one()
+    return {"proforma_no": f"PRF-{yil}-{sayac + 1:03d}"}
+
+
 @router.post("/proforma-faturalar", response_model=ProformaYanit,
              dependencies=[Depends(izin_gerektir("FATURA_DUZENLE"))])
 def proforma_olustur(istek: ProformaOlusturIstegi, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
