@@ -368,6 +368,23 @@ def faturalari_listele(sirket_id: int = Depends(aktif_sirket_id_getir), db: Sess
     return list(db.execute(sorgu).scalars())
 
 
+@router.get("/faturalar/sonraki-no",
+            dependencies=[Depends(izin_gerektir("FATURA_GORUNTULE"))])
+def fatura_sonraki_no_getir(
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """Bu yil icin bir sonraki fatura numarasini onerir (FT-YYYY-NNN formatinda)."""
+    yil = date.today().year
+    sayac = db.execute(
+        select(func.count()).select_from(Fatura).where(
+            Fatura.sirket_id == sirket_id,
+            func.extract("year", Fatura.tarih) == yil,
+        )
+    ).scalar_one()
+    return {"fatura_no": f"FT-{yil}-{sayac + 1:03d}"}
+
+
 @router.get("/faturalar/{fatura_id}", response_model=FaturaYanit,
             dependencies=[Depends(izin_gerektir("FATURA_GORUNTULE"))])
 def fatura_getir(fatura_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
