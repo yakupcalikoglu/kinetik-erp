@@ -5,8 +5,10 @@ from sqlalchemy import select
 
 from app.db.session import get_db
 from app.core.deps import aktif_sirket_id_getir, izin_gerektir
+from datetime import date as date_cls
+
 from app.models.stok import (Siparis, SiparisDetay, StokSeriNo, StokDurum,
-                              SiparisDurum, StokKarti)
+                              SiparisDurum, StokKarti, StokMaliyetKalemi, MaliyetTip)
 from app.models.auth import Sirket
 from app.models.cari import CariHesap
 from app.schemas.stok import (SiparisOlusturIstegi, SiparisGuncelleIstegi, SiparisYanit,
@@ -186,17 +188,18 @@ def siparis_sil(
     db: Session = Depends(get_db),
 ):
     """
-    Sadece TASLAK durumundaki siparisler silinebilir. Onaylanmis veya
+    TASLAK veya IPTAL durumundaki siparisler silinebilir. Onaylanmis/yolda/
     teslim alinmis siparislerde stok/mali kayitlar olusmus olabileceginden
-    silme yerine IPTAL durumuna cekilmesi onerilir (durum guncelle endpoint'i).
+    (ya da olusabileceginden) bunlar dogrudan silinemez - once IPTAL
+    durumuna cekilmesi (durum guncelle endpoint'i), sonra silinmesi gerekir.
     """
     siparis = _siparis_getir_veya_404(db, siparis_id, sirket_id)
 
-    if siparis.durum != SiparisDurum.TASLAK:
+    if siparis.durum not in (SiparisDurum.TASLAK, SiparisDurum.IPTAL):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            "Sadece taslak durumundaki siparişler silinebilir. "
-            "Diğer siparişler için durumu 'İptal' olarak güncelleyin."
+            "Sadece taslak veya iptal edilmiş siparişler silinebilir. "
+            "Önce durumu 'İptal' olarak güncelleyin, sonra silin."
         )
 
     eski_detaylar = db.execute(
@@ -314,6 +317,12 @@ def siparis_teslim_al(
                 f"siparis_detay_id={urun.siparis_detay_id} bu siparişe ait değil."
             )
 
+        # onemli: detay.birim_fiyat siparisin PARA BIRIMINDE (orn. USD) girilmis
+        # olabilir - stok_seri_no.satinalma_maliyeti_try HER ZAMAN TL bekler.
+        # Bu yuzden kur ile carpilarak TL karsiligina cevriliyor (TRY siparislerde
+        # kur=1 varsayilan oldugu icin deger degismez).
+        satinalma_maliyeti_try = detay.birim_fiyat * istek.kur
+
         yeni_stok = StokSeriNo(
             sirket_id=sirket_id,
             stok_karti_id=detay.stok_karti_id,
@@ -326,11 +335,26 @@ def siparis_teslim_al(
             siparis_id=siparis.id,
             durum=kullanilacak_durum,
             tedarikci_cari_id=siparis.tedarikci_cari_id,
-            satinalma_maliyeti_try=detay.birim_fiyat,
+            satinalma_maliyeti_try=satinalma_maliyeti_try,
         )
         db.add(yeni_stok)
         db.flush()
         olusturulan_idler.append(yeni_stok.id)
+
+        # Satinalma maliyetini de (nakliye/gumruk gibi) bir maliyet kalemi
+        # olarak kaydediyoruz - boylece Stok sayfasindaki maliyet detayi
+        # tablosunda satinalma da hem doviz hem TL karsiligiyla gorunur.
+        db.add(StokMaliyetKalemi(
+            stok_seri_no_id=yeni_stok.id,
+            tip=MaliyetTip.SATINALMA,
+            aciklama="Satınalma (Teslim Al)",
+            tedarikci_cari_id=siparis.tedarikci_cari_id,
+            para_birimi=siparis.para_birimi,
+            tutar=detay.birim_fiyat,
+            kur=istek.kur,
+            tutar_try=satinalma_maliyeti_try,
+            tarih=date_cls.today(),
+        ))
 
     siparis.durum = SiparisDurum.TESLIM_ALINDI
     db.commit()
