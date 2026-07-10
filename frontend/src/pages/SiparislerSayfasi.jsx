@@ -340,6 +340,12 @@ export default function SiparislerSayfasi() {
                           >
                             {odemelerAcikSiparisId === s.id ? 'Ödemeleri Kapat' : 'Ödemeler'}
                           </button>
+                          <Link to={`/siparisler/${s.id}/belge?nusha=ic`} style={eylemChipStili('notr')}>
+                            Belge (şirket içi)
+                          </Link>
+                          <Link to={`/siparisler/${s.id}/belge?nusha=tedarikci`} style={eylemChipStili('notr')}>
+                            Belge (tedarikçi)
+                          </Link>
                           <button onClick={() => pdfIndir(s.id, s.siparis_no, 'ic')} style={eylemChipStili('notr')}>
                             PDF (şirket içi)
                           </button>
