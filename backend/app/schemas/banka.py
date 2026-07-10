@@ -44,6 +44,7 @@ class BankaHareketiOlusturIstegi(BaseModel):
     karsi_hesap_id: int | None = None
     kullanilan_kur: Decimal | None = None
     cari_id: int | None = None
+    tutar_try_karsiligi: Decimal | None = None  # Hesap TRY disi ise TL karsiligi
 
 
 class BankaHareketiYanit(BaseModel):
@@ -58,6 +59,7 @@ class BankaHareketiYanit(BaseModel):
     kaynak_tablo: str | None
     kaynak_id: int | None
     cari_id: int | None = None
+    tutar_try_karsiligi: Decimal | None = None
 
     class Config:
         from_attributes = True
