@@ -163,15 +163,32 @@ class ProformaYanit(BaseModel):
     kdv_tutari: Decimal
     genel_toplam: Decimal
     durum: str
+    notlar: str | None = None
     kalemler: list[ProformaKalemYanit] = []
 
     class Config:
         from_attributes = True
 
 
+class NotGuncelleIstegi(BaseModel):
+    notlar: str | None = None
+
+
 class FaturayaCevirYaniti(BaseModel):
     fatura_id: int
     fatura_no: str
+
+
+class FaturaKalemYanit(BaseModel):
+    id: int
+    stok_karti_id: int | None
+    aciklama: str | None
+    miktar: Decimal
+    birim_fiyat: Decimal
+    kdv_orani: Decimal
+
+    class Config:
+        from_attributes = True
 
 
 class FaturaYanit(BaseModel):
@@ -185,6 +202,8 @@ class FaturaYanit(BaseModel):
     kdv_tutari: Decimal
     genel_toplam: Decimal
     odeme_durumu: str
+    notlar: str | None = None
+    kalemler: list[FaturaKalemYanit] = []
 
     class Config:
         from_attributes = True
