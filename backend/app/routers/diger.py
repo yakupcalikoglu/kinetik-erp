@@ -15,7 +15,7 @@ from app.schemas.diger import (
     PersonelOlusturIstegi, PersonelYanit, PersonelOdemeOlusturIstegi, PersonelOdemeYanit, OdeIstegi,
     SabitGiderOlusturIstegi, SabitGiderYanit,
     BorcOlusturIstegi, BorcYanit, BorcOdemeOlusturIstegi, BorcOdemeYanit, BorcBakiyeYanit,
-    ProformaOlusturIstegi, ProformaYanit, FaturayaCevirYaniti, FaturaYanit,
+    ProformaOlusturIstegi, ProformaYanit, FaturayaCevirYaniti, FaturaYanit, NotGuncelleIstegi,
 )
 from app.services.para_hareketi import para_hareketi_olustur
 
@@ -386,6 +386,41 @@ def fatura_getir(fatura_id: int, sirket_id: int = Depends(aktif_sirket_id_getir)
     fatura = db.get(Fatura, fatura_id)
     if fatura is None or fatura.sirket_id != sirket_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Fatura bulunamadı.")
+    fatura.kalemler = list(db.execute(
+        select(FaturaDetay).where(FaturaDetay.fatura_id == fatura_id)
+    ).scalars())
+    return fatura
+
+
+@router.put("/proforma-faturalar/{proforma_id}/notlar", response_model=ProformaYanit,
+            dependencies=[Depends(izin_gerektir("FATURA_DUZENLE"))])
+def proforma_notunu_guncelle(
+    proforma_id: int, istek: NotGuncelleIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
+):
+    """Bir proformanin notlarini gunceller - proforma FATURALASTI olsa bile calisir (notlar salt bilgi amaclidir)."""
+    proforma = db.get(ProformaFatura, proforma_id)
+    if proforma is None or proforma.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Proforma fatura bulunamadı.")
+    proforma.notlar = istek.notlar
+    db.commit()
+    return _proforma_detayli_getir(db, proforma_id)
+
+
+@router.put("/faturalar/{fatura_id}/notlar", response_model=FaturaYanit,
+            dependencies=[Depends(izin_gerektir("FATURA_DUZENLE"))])
+def fatura_notunu_guncelle(
+    fatura_id: int, istek: NotGuncelleIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
+):
+    fatura = db.get(Fatura, fatura_id)
+    if fatura is None or fatura.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Fatura bulunamadı.")
+    fatura.notlar = istek.notlar
+    db.commit()
+    fatura.kalemler = list(db.execute(
+        select(FaturaDetay).where(FaturaDetay.fatura_id == fatura_id)
+    ).scalars())
     return fatura
 
 
