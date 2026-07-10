@@ -293,6 +293,7 @@ def kasa_hareketi_olustur(
         tutar=istek.tutar,
         tutar_try_karsiligi=tutar_try_karsiligi,
         aciklama=istek.aciklama,
+        cari_id=istek.cari_id,
     )
     db.add(yeni)
     db.commit()
@@ -340,6 +341,7 @@ def kasa_hareketi_guncelle(
     kayit.tutar = istek.tutar
     kayit.tutar_try_karsiligi = tutar_try_karsiligi
     kayit.aciklama = istek.aciklama
+    kayit.cari_id = istek.cari_id
 
     db.commit()
     db.refresh(kayit)
