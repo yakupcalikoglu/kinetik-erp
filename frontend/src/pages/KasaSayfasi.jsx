@@ -10,6 +10,26 @@ function useHarcamaTurleri() {
   return turler;
 }
 
+function useCariHaritasi() {
+  const [harita, setHarita] = useState({});
+  useEffect(() => {
+    api.get('/cariler').then((r) => {
+      const h = {};
+      r.data.forEach((c) => { h[c.id] = c.unvan; });
+      setHarita(h);
+    }).catch(() => {});
+  }, []);
+  return harita;
+}
+
+function useCariler() {
+  const [cariler, setCariler] = useState([]);
+  useEffect(() => {
+    api.get('/cariler').then((r) => setCariler(r.data)).catch(() => {});
+  }, []);
+  return cariler;
+}
+
 const BEKLEYEN_ENDPOINT_MAP = {
   LEASING_ODEME: (id) => `/leasing-odemeleri/${id}/ode`,
   KIRALAMA_ODEME: (id) => `/kiralama-odemeleri/${id}/tahsil-et`,
@@ -119,9 +139,10 @@ function YeniKasaHareketiFormu({ onKaydedildi, onVazgec }) {
 
   const [form, setForm] = useState({
     tarih: new Date().toISOString().slice(0, 10), yon: 'GIRIS', tutar: '', para_birimi: 'TRY',
-    tutar_try_karsiligi: '', aciklama: '',
+    tutar_try_karsiligi: '', aciklama: '', cari_id: '',
   });
   const harcamaTurleri = useHarcamaTurleri();
+  const cariler = useCariler();
   const [kurYukleniyor, setKurYukleniyor] = useState(false);
   const [hata, setHata] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
@@ -169,6 +190,7 @@ function YeniKasaHareketiFormu({ onKaydedildi, onVazgec }) {
           ...form,
           tutar: Number(form.tutar),
           tutar_try_karsiligi: form.para_birimi === 'TRY' ? null : Number(form.tutar_try_karsiligi),
+          cari_id: form.cari_id ? Number(form.cari_id) : null,
         });
       }
       onKaydedildi();
@@ -265,6 +287,12 @@ function YeniKasaHareketiFormu({ onKaydedildi, onVazgec }) {
                 <input required type="number" step="0.01" value={form.tutar_try_karsiligi} onChange={(e) => setForm((f) => ({ ...f, tutar_try_karsiligi: e.target.value }))} style={girdiStili} />
               </Alan>
             )}
+            <Alan etiket="Cari (opsiyonel)">
+              <select value={form.cari_id} onChange={(e) => setForm((f) => ({ ...f, cari_id: e.target.value }))} style={girdiStili}>
+                <option value="">Seçin...</option>
+                {cariler.map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
+              </select>
+            </Alan>
             <Alan etiket="Açıklama">
               <OtomatikTamamlamaGirdisi
                 value={form.aciklama}
@@ -315,7 +343,7 @@ function KasaHareketiDuzenleFormu({ hareket, onKaydedildi, onVazgec }) {
 
   return (
     <tr>
-      <td colSpan={6} style={{ padding: 0 }}>
+      <td colSpan={7} style={{ padding: 0 }}>
         <div style={{ padding: 16, background: 'var(--zemin)' }}>
           <form onSubmit={kaydet}>
             <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 12 }}>Hareketi düzenle</div>
@@ -368,6 +396,7 @@ function KasaHareketiDuzenleFormu({ hareket, onKaydedildi, onVazgec }) {
 }
 
 export default function KasaSayfasi() {
+  const cariHaritasi = useCariHaritasi();
   const [kasaBakiye, setKasaBakiye] = useState(null);
   const [kasaHareketleri, setKasaHareketleri] = useState([]);
   const [yonFiltre, setYonFiltre] = useState('');
@@ -468,7 +497,7 @@ export default function KasaSayfasi() {
           <table>
             <thead>
               <tr style={{ background: 'var(--zemin)' }}>
-                {['Tarih', 'Yön', 'Tutar', 'TL Karşılığı', 'Açıklama', 'İşlem'].map((b) => (
+                {['Tarih', 'Yön', 'Tutar', 'TL Karşılığı', 'Cari', 'Açıklama', 'İşlem'].map((b) => (
                   <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
                 ))}
               </tr>
@@ -503,6 +532,9 @@ export default function KasaSayfasi() {
                       <td onClick={() => satiraTikla(h)} style={{ padding: '10px 16px', color: 'var(--metin-ikincil)', cursor: tiklanabilir ? 'pointer' : 'default' }}>
                         {h.tutar_try_karsiligi != null ? paraFormat(h.tutar_try_karsiligi) : '—'}
                       </td>
+                      <td onClick={() => satiraTikla(h)} style={{ padding: '10px 16px', color: 'var(--metin-ikincil)', cursor: tiklanabilir ? 'pointer' : 'default' }}>
+                        {h.cari_id ? (cariHaritasi[h.cari_id] || `#${h.cari_id}`) : '—'}
+                      </td>
                       <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>
                         <span onClick={() => satiraTikla(h)} style={{ cursor: tiklanabilir ? 'pointer' : 'default' }}>
                           {h.aciklama || '—'}
@@ -531,7 +563,7 @@ export default function KasaSayfasi() {
                     </tr>
                     {acikDetayId === h.id && (
                       <tr>
-                        <td colSpan={6} style={{ padding: 0 }}>
+                        <td colSpan={7} style={{ padding: 0 }}>
                           <KaynakDetayi kaynakTablo={h.kaynak_tablo} kaynakId={h.kaynak_id} onIslemTamamlandi={() => { setAcikDetayId(null); yukle(); }} />
                         </td>
                       </tr>
