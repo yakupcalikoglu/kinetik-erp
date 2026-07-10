@@ -8,12 +8,12 @@ from app.db.session import get_db
 from app.core.deps import aktif_sirket_id_getir, izin_gerektir, aktif_kullanici_getir
 from app.models.auth import Kullanici
 from app.models.diger import (
-    Personel, PersonelOdeme, SabitGiderKategori, SabitGider,
+    Personel, PersonelOdeme, SabitGider,
     Borc, BorcOdeme, BorcTip, ProformaFatura, ProformaDetay, Fatura, FaturaDetay,
 )
 from app.schemas.diger import (
     PersonelOlusturIstegi, PersonelYanit, PersonelOdemeOlusturIstegi, PersonelOdemeYanit, OdeIstegi,
-    SabitGiderOlusturIstegi, SabitGiderYanit, SabitGiderKategoriYanit,
+    SabitGiderOlusturIstegi, SabitGiderYanit,
     BorcOlusturIstegi, BorcYanit, BorcOdemeOlusturIstegi, BorcOdemeYanit, BorcBakiyeYanit,
     ProformaOlusturIstegi, ProformaYanit, FaturayaCevirYaniti, FaturaYanit,
 )
@@ -101,11 +101,6 @@ def personel_odemesi_yap(
 
 
 # ===================================================================== SABİT GİDERLER
-@router.get("/sabit-gider-kategorileri", response_model=list[SabitGiderKategoriYanit])
-def sabit_gider_kategorilerini_listele(db: Session = Depends(get_db)):
-    return list(db.execute(select(SabitGiderKategori)).scalars())
-
-
 @router.post("/sabit-giderler", response_model=SabitGiderYanit, dependencies=[Depends(izin_gerektir("GIDER_DUZENLE"))])
 def sabit_gider_ekle(istek: SabitGiderOlusturIstegi, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
     yeni = SabitGider(sirket_id=sirket_id, **istek.model_dump())
