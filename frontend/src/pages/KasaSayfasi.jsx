@@ -320,10 +320,27 @@ function KasaHareketiDuzenleFormu({ hareket, onKaydedildi, onVazgec }) {
     tutar_try_karsiligi: hareket.tutar_try_karsiligi ?? '', aciklama: hareket.aciklama || '',
     cari_id: hareket.cari_id ? String(hareket.cari_id) : '',
   });
+  const [kur, setKur] = useState(() => (
+    hareket.para_birimi !== 'TRY' && hareket.tutar_try_karsiligi
+      ? (Number(hareket.tutar_try_karsiligi) / Number(hareket.tutar)).toFixed(4)
+      : '1'
+  ));
   const harcamaTurleri = useHarcamaTurleri();
   const cariler = useCariler();
   const [hata, setHata] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
+
+  function kuruUygula(yeniKur) {
+    setKur(yeniKur);
+    if (form.tutar && yeniKur) {
+      setForm((f) => ({ ...f, tutar_try_karsiligi: (Number(f.tutar) * Number(yeniKur)).toFixed(2) }));
+    }
+  }
+
+  function guncelKuruGetir() {
+    if (form.para_birimi === 'TRY') return;
+    api.get(`/kur/${form.para_birimi}`).then((r) => kuruUygula(r.data.kur)).catch(() => {});
+  }
 
   async function kaydet(e) {
     e.preventDefault();
@@ -373,9 +390,17 @@ function KasaHareketiDuzenleFormu({ hareket, onKaydedildi, onVazgec }) {
                 <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
               </Alan>
               {form.para_birimi !== 'TRY' && (
-                <Alan etiket="TL karşılığı">
-                  <input required type="number" step="0.01" value={form.tutar_try_karsiligi} onChange={(e) => setForm((f) => ({ ...f, tutar_try_karsiligi: e.target.value }))} style={girdiStili} />
-                </Alan>
+                <>
+                  <Alan etiket="Kur">
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <input type="number" step="0.0001" value={kur} onChange={(e) => kuruUygula(e.target.value)} style={girdiStili} />
+                      <button type="button" onClick={guncelKuruGetir} style={{ ...eylemChipStili('lacivert'), whiteSpace: 'nowrap' }}>Güncel kur</button>
+                    </div>
+                  </Alan>
+                  <Alan etiket="TL karşılığı (kur ile otomatik hesaplanır, elle de değiştirilebilir)">
+                    <input required type="number" step="0.01" value={form.tutar_try_karsiligi} onChange={(e) => setForm((f) => ({ ...f, tutar_try_karsiligi: e.target.value }))} style={girdiStili} />
+                  </Alan>
+                </>
               )}
               <Alan etiket="Cari (opsiyonel)">
                 <select value={form.cari_id} onChange={(e) => setForm((f) => ({ ...f, cari_id: e.target.value }))} style={girdiStili}>
