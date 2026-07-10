@@ -19,6 +19,7 @@ from app.schemas.finansal import (
     CekOlusturIstegi, CekYanit, CekDurumGuncelleIstegi, CekGecmisYanit,
     LeasingOlusturIstegi, LeasingYanit, LeasingOdemeYanit, OdemeTahsilIstegi,
     TaksitliSatisOlusturIstegi, TaksitliSatisYanit, TaksitDetayYanit, TaksitTahsilIstegi,
+    TaksitOdemeSonucu,
     KiralamaOlusturIstegi, KiralamaYanit, KiralamaOdemeOlusturIstegi, KiralamaOdemeYanit,
     BakimOlusturIstegi, BakimYanit,
 )
@@ -281,7 +282,7 @@ def taksitleri_listele(plan_id: int, sirket_id: int = Depends(aktif_sirket_id_ge
     return list(db.execute(sorgu).scalars())
 
 
-@router.put("/taksit-detay/{taksit_id}/tahsil-et", response_model=TaksitDetayYanit,
+@router.put("/taksit-detay/{taksit_id}/tahsil-et", response_model=TaksitOdemeSonucu,
             dependencies=[Depends(izin_gerektir("TAKSIT_DUZENLE"))])
 def taksit_tahsil_et(
     taksit_id: int, istek: TaksitTahsilIstegi,
@@ -289,17 +290,66 @@ def taksit_tahsil_et(
     kullanici: Kullanici = Depends(aktif_kullanici_getir),
     db: Session = Depends(get_db),
 ):
+    """
+    Bir taksidi tahsil eder. istek.tutar verilmezse taksidin KALAN tam
+    bakiyesi tahsil edilir (eski davranisla ayni). istek.tutar verilirse:
+      - Kalan bakiyeden AZ ise: taksit "kismen odendi" durumunda kalir
+        (odendi_mi=False, odenen_tutar artar) - kalan bakiye ekranda gorunur.
+      - Kalan bakiyeden FAZLA ise: bu taksit tamamen kapanir ve artan kisim
+        SIRADAKI odenmemis taksit(ler)e otomatik olarak uygulanir (musterinin
+        "kalan tum borcumu kapatiyorum" gibi tek seferlik buyuk odemeleri icin).
+    Tek bir Kasa/Banka hareketi, GERCEKTEN o an tahsil edilen toplam tutar
+    icin olusturulur (birden fazla taksidi kapatsa bile TEK hareket).
+    """
     taksit = db.get(TaksitDetay, taksit_id)
     if taksit is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Taksit bulunamadı.")
     plan = db.get(TaksitliSatisPlani, taksit.plan_id)
     if plan is None or plan.sirket_id != sirket_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Taksit bulunamadı.")
+    if taksit.odendi_mi:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bu taksit zaten tamamen tahsil edilmiş.")
 
-    taksit.odendi_mi = True
-    taksit.odeme_tarihi = istek.odeme_tarihi
-    taksit.tahsilat_kaynak_tablo = istek.tahsilat_kaynak_tablo
-    taksit.tahsilat_kaynak_id = istek.tahsilat_kaynak_id
+    kalan_bakiye = taksit.tutar - taksit.odenen_tutar
+    tahsil_edilecek_toplam = istek.tutar if istek.tutar is not None else kalan_bakiye
+    if tahsil_edilecek_toplam <= 0:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Tahsilat tutarı sıfırdan büyük olmalıdır.")
+
+    # Bu plana ait, tarih sirasina gore odenmemis TUM taksitleri getir - once
+    # secilen taksit, sonra planin sirali diger taksitleri (fazla odemenin
+    # otomatik yansitilacagi taksitler).
+    diger_odenmemis_taksitler = list(db.execute(
+        select(TaksitDetay)
+        .where(TaksitDetay.plan_id == plan.id, TaksitDetay.odendi_mi.is_(False), TaksitDetay.id != taksit.id)
+        .order_by(TaksitDetay.taksit_no)
+    ).scalars())
+    islenecek_taksitler = [taksit] + diger_odenmemis_taksitler
+
+    kalan_dagitilacak = tahsil_edilecek_toplam
+    guncellenen: list[TaksitDetay] = []
+    for t in islenecek_taksitler:
+        if kalan_dagitilacak <= 0:
+            break
+        t_kalan_bakiye = t.tutar - t.odenen_tutar
+        if t_kalan_bakiye <= 0:
+            continue
+        bu_taksite_uygulanan = min(kalan_dagitilacak, t_kalan_bakiye)
+        t.odenen_tutar += bu_taksite_uygulanan
+        kalan_dagitilacak -= bu_taksite_uygulanan
+        if t.odenen_tutar >= t.tutar:
+            t.odendi_mi = True
+            t.odeme_tarihi = istek.odeme_tarihi
+            t.tahsilat_kaynak_tablo = istek.tahsilat_kaynak_tablo
+            t.tahsilat_kaynak_id = istek.tahsilat_kaynak_id
+        if t.id != taksit.id:
+            t.ilk_taksit_id = taksit.id  # bu taksit, asil odemenin yapildigi taksidin ID'sini tasir
+        guncellenen.append(t)
+
+    # kalan_dagitilacak hala pozitifse: butun taksitler kapandi ama musteri
+    # daha da fazla odedi - bu gercek bir fazla odemedir, hicbir yere
+    # yazilmaz, sadece kullaniciya bilgi olarak donulur (Kasa/Banka'ya sadece
+    # gercekten taksitlere uygulanan kisim islenir).
+    gercekten_islenen_tutar = tahsil_edilecek_toplam - kalan_dagitilacak
 
     musteri = db.get(CariHesap, plan.musteri_cari_id)
     urun_parcasi = ""
@@ -309,10 +359,14 @@ def taksit_tahsil_et(
             kart = db.get(StokKarti, urun.stok_karti_id)
             urun_adi = f"{kart.marka} {kart.model}" if kart else urun.seri_no
             urun_parcasi = f" - {urun_adi} ({urun.seri_no})"
-    aciklama = f"Taksit {taksit.taksit_no} - {musteri.unvan if musteri else ''}{urun_parcasi}"
+    if len(guncellenen) > 1:
+        taksit_no_araligi = f"{guncellenen[0].taksit_no}-{guncellenen[-1].taksit_no}"
+        aciklama = f"Taksit {taksit_no_araligi} - {musteri.unvan if musteri else ''}{urun_parcasi}"
+    else:
+        aciklama = f"Taksit {taksit.taksit_no} - {musteri.unvan if musteri else ''}{urun_parcasi}"
 
     para_hareketi_olustur(
-        db, sirket_id, kullanici.id, "GIRIS", taksit.tutar,
+        db, sirket_id, kullanici.id, "GIRIS", gercekten_islenen_tutar,
         istek.odeme_yontemi, istek.banka_hesap_id,
         aciklama=aciklama,
         kaynak_tablo="TAKSIT_DETAY", kaynak_id=taksit.id,
@@ -321,8 +375,14 @@ def taksit_tahsil_et(
     )
 
     db.commit()
-    db.refresh(taksit)
-    return taksit
+    for t in guncellenen:
+        db.refresh(t)
+
+    return TaksitOdemeSonucu(
+        guncellenen_taksitler=guncellenen,
+        fazla_odeme_var_mi=kalan_dagitilacak > 0,
+        fazla_odeme_tutari=kalan_dagitilacak,
+    )
 
 
 @router.get("/taksitler/vadesi-gecenler", response_model=list[TaksitDetayYanit],
@@ -702,31 +762,51 @@ def taksit_tahsilatini_geri_al(
     sirket_id: int = Depends(aktif_sirket_id_getir),
     db: Session = Depends(get_db),
 ):
+    """
+    Bir taksidin tahsilatini geri alir. Eger bu taksit, BASKA bir taksidin
+    odemesinden tasan fazlalikla (kademeli/otomatik yansitma) odenmisse
+    (ilk_taksit_id doluysa), asil Kasa/Banka hareketi o "ilk" taksidin
+    kaynak_id'siyle kayitlidir - bu durumda AYNI odemeyle etkilenen TUM
+    taksitler (ilk taksit + ona bagli tum kademeli taksitler) birlikte
+    geri alinir, aksi halde sadece bu tek taksit geri alinir.
+    """
     taksit = db.get(TaksitDetay, taksit_id)
     if taksit is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Taksit bulunamadı.")
     plan = db.get(TaksitliSatisPlani, taksit.plan_id)
     if plan is None or plan.sirket_id != sirket_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Taksit bulunamadı.")
-    if not taksit.odendi_mi:
+    if not taksit.odendi_mi and taksit.odenen_tutar <= 0:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bu taksit zaten tahsil edilmemiş durumda.")
+
+    asil_taksit_id = taksit.ilk_taksit_id if taksit.ilk_taksit_id is not None else taksit.id
+
+    etkilenen_taksitler = list(db.execute(
+        select(TaksitDetay).where(
+            (TaksitDetay.id == asil_taksit_id) | (TaksitDetay.ilk_taksit_id == asil_taksit_id)
+        )
+    ).scalars())
 
     from app.models.banka import KasaHareketi, BankaHareketi
     for h in list(db.execute(
-        select(KasaHareketi).where(KasaHareketi.kaynak_tablo == "TAKSIT_DETAY", KasaHareketi.kaynak_id == taksit_id)
+        select(KasaHareketi).where(KasaHareketi.kaynak_tablo == "TAKSIT_DETAY", KasaHareketi.kaynak_id == asil_taksit_id)
     ).scalars()):
         db.delete(h)
     for h in list(db.execute(
-        select(BankaHareketi).where(BankaHareketi.kaynak_tablo == "TAKSIT_DETAY", BankaHareketi.kaynak_id == taksit_id)
+        select(BankaHareketi).where(BankaHareketi.kaynak_tablo == "TAKSIT_DETAY", BankaHareketi.kaynak_id == asil_taksit_id)
     ).scalars()):
         db.delete(h)
 
-    taksit.odendi_mi = False
-    taksit.odeme_tarihi = None
-    taksit.tahsilat_kaynak_tablo = None
-    taksit.tahsilat_kaynak_id = None
+    for t in etkilenen_taksitler:
+        t.odendi_mi = False
+        t.odenen_tutar = 0
+        t.odeme_tarihi = None
+        t.tahsilat_kaynak_tablo = None
+        t.tahsilat_kaynak_id = None
+        t.ilk_taksit_id = None
+
     db.commit()
-    return {"geri_alindi": True}
+    return {"geri_alindi": True, "etkilenen_taksit_sayisi": len(etkilenen_taksitler)}
 
 
 # ===================================================================== KİRALAMA - TAHSİLAT GERİ AL
