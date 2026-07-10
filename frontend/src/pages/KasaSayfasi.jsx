@@ -318,8 +318,10 @@ function KasaHareketiDuzenleFormu({ hareket, onKaydedildi, onVazgec }) {
   const [form, setForm] = useState({
     tarih: hareket.tarih, yon: hareket.yon, tutar: hareket.tutar, para_birimi: hareket.para_birimi,
     tutar_try_karsiligi: hareket.tutar_try_karsiligi ?? '', aciklama: hareket.aciklama || '',
+    cari_id: hareket.cari_id ? String(hareket.cari_id) : '',
   });
   const harcamaTurleri = useHarcamaTurleri();
+  const cariler = useCariler();
   const [hata, setHata] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
 
@@ -332,6 +334,7 @@ function KasaHareketiDuzenleFormu({ hareket, onKaydedildi, onVazgec }) {
         ...form,
         tutar: Number(form.tutar),
         tutar_try_karsiligi: form.para_birimi === 'TRY' ? null : Number(form.tutar_try_karsiligi),
+        cari_id: form.cari_id ? Number(form.cari_id) : null,
       });
       onKaydedildi();
     } catch (err) {
@@ -374,6 +377,12 @@ function KasaHareketiDuzenleFormu({ hareket, onKaydedildi, onVazgec }) {
                   <input required type="number" step="0.01" value={form.tutar_try_karsiligi} onChange={(e) => setForm((f) => ({ ...f, tutar_try_karsiligi: e.target.value }))} style={girdiStili} />
                 </Alan>
               )}
+              <Alan etiket="Cari (opsiyonel)">
+                <select value={form.cari_id} onChange={(e) => setForm((f) => ({ ...f, cari_id: e.target.value }))} style={girdiStili}>
+                  <option value="">Seçin...</option>
+                  {cariler.map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
+                </select>
+              </Alan>
               <Alan etiket="Açıklama">
                 <OtomatikTamamlamaGirdisi
                   value={form.aciklama}
