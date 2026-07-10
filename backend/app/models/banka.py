@@ -30,6 +30,7 @@ class HareketYon(str, enum.Enum):
 
 class BankaHesabi(Base):
     __tablename__ = "banka_hesaplari"
+
     id = Column(BigInteger, primary_key=True)
     sirket_id = Column(BigInteger, ForeignKey("sirketler.id"), nullable=False)
     banka_adi = Column(String(150), nullable=False)
@@ -42,6 +43,7 @@ class BankaHesabi(Base):
 
 class BankaHareketi(Base):
     __tablename__ = "banka_hareketleri"
+
     id = Column(BigInteger, primary_key=True)
     sirket_id = Column(BigInteger, ForeignKey("sirketler.id"), nullable=False)
     banka_hesap_id = Column(BigInteger, ForeignKey("banka_hesaplari.id"), nullable=False)
@@ -67,6 +69,7 @@ class KasaHareketi(Base):
     net bakiye gibi) TEK bir TL toplami gostermek icin kullanilir.
     """
     __tablename__ = "kasa_hareketleri"
+
     id = Column(BigInteger, primary_key=True)
     sirket_id = Column(BigInteger, ForeignKey("sirketler.id"), nullable=False)
     tarih = Column(Date, nullable=False)
@@ -77,5 +80,6 @@ class KasaHareketi(Base):
     aciklama = Column(String(500))
     kaynak_tablo = Column(String(50))
     kaynak_id = Column(BigInteger)
+    cari_id = Column(BigInteger, ForeignKey("cari_hesaplar.id"))
     olusturan_kullanici_id = Column(BigInteger, ForeignKey("kullanicilar.id"))
     olusturma_tarihi = Column(DateTime, server_default=func.now())
