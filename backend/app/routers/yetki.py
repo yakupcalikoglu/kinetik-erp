@@ -372,3 +372,68 @@ def test_verilerini_temizle(istek: TemizlikOnayIstegi, db: Session = Depends(get
 
     db.commit()
     return {"toplam_silinen": toplam, "detaylar": sonuclar}
+  # ================================================== ESKİ AÇIKLAMALARI YENİDEN ÜRET
+@router.post("/admin/aciklamalari-yeniden-uret",
+             dependencies=[Depends(izin_gerektir("KULLANICI_YONET"))])
+def aciklamalari_yeniden_uret(
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Kiralama ve Taksitli Satis kaynakli, urun adi eklenmeden ONCE olusmus
+    eski Kasa/Banka hareketlerinin aciklamasini, YENI formatla (urun +
+    kiraci/musteri adi dahil) yeniden yazar. Zarasiz - GERI ALINABILIR
+    (sadece metin degisir, tutar/tarih/kaynak dokunulmaz).
+    """
+    from app.models.banka import KasaHareketi, BankaHareketi
+    from app.models.finansal import TaksitDetay, TaksitliSatisPlani, KiralamaOdeme, KiralamaSozlesme
+    from app.models.stok import StokSeriNo, StokKarti
+    from app.models.cari import CariHesap
+
+    guncellenen = 0
+
+    for model in (KasaHareketi, BankaHareketi):
+        hareketler = list(db.execute(
+            select(model).where(
+                model.sirket_id == sirket_id,
+                model.kaynak_tablo.in_(["KIRALAMA_ODEME", "TAKSIT_DETAY"]),
+            )
+        ).scalars())
+
+        for h in hareketler:
+            if h.kaynak_tablo == "TAKSIT_DETAY":
+                taksit = db.get(TaksitDetay, h.kaynak_id)
+                if taksit is None:
+                    continue
+                plan = db.get(TaksitliSatisPlani, taksit.plan_id)
+                if plan is None:
+                    continue
+                musteri = db.get(CariHesap, plan.musteri_cari_id)
+                urun_parcasi = ""
+                if plan.stok_seri_no_id:
+                    urun = db.get(StokSeriNo, plan.stok_seri_no_id)
+                    if urun is not None:
+                        kart = db.get(StokKarti, urun.stok_karti_id)
+                        urun_adi = f"{kart.marka} {kart.model}" if kart else urun.seri_no
+                        urun_parcasi = f" - {urun_adi} ({urun.seri_no})"
+                h.aciklama = f"Taksit {taksit.taksit_no} - {musteri.unvan if musteri else ''}{urun_parcasi}"
+                guncellenen += 1
+
+            elif h.kaynak_tablo == "KIRALAMA_ODEME":
+                odeme = db.get(KiralamaOdeme, h.kaynak_id)
+                if odeme is None:
+                    continue
+                sozlesme = db.get(KiralamaSozlesme, odeme.sozlesme_id)
+                if sozlesme is None:
+                    continue
+                urun_parcasi = ""
+                urun = db.get(StokSeriNo, sozlesme.stok_seri_no_id)
+                if urun is not None:
+                    kart = db.get(StokKarti, urun.stok_karti_id)
+                    urun_adi = f"{kart.marka} {kart.model}" if kart else urun.seri_no
+                    urun_parcasi = f"{urun_adi} ({urun.seri_no}) - "
+                h.aciklama = f"Kiralama - {urun_parcasi}{odeme.donem_basi} - {odeme.donem_sonu}"
+                guncellenen += 1
+
+    db.commit()
+    return {"guncellenen_kayit": guncellenen}
