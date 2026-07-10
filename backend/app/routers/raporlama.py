@@ -155,6 +155,119 @@ def _bakim_satirlari(db, sirket_id, baslangic, bitis, tip):
     ]
 
 
+def _akreditif_satirlari(db, sirket_id, baslangic, bitis):
+    from app.models.akreditif import Akreditif, AkreditifKalemi
+    from app.models.akreditif_taksit import AkreditifKalemTaksiti
+
+    satirlar = []
+    kalem_sorgu = (
+        select(AkreditifKalemi, Akreditif.akreditif_no)
+        .join(Akreditif, Akreditif.id == AkreditifKalemi.akreditif_id)
+        .where(Akreditif.sirket_id == sirket_id, AkreditifKalemi.odendi_mi.is_(True))
+    )
+    for kalem, akreditif_no in db.execute(kalem_sorgu).all():
+        satirlar.append(HareketTuruSatiri(
+            tarih=kalem.vade_tarihi, tur="AKREDITIF",
+            aciklama=f"Akreditif {akreditif_no or ''} - {kalem.tip.value} - {kalem.aciklama or ''}",
+            tutar=kalem.tutar,
+        ))
+
+    taksit_sorgu = (
+        select(AkreditifKalemTaksiti, Akreditif.akreditif_no)
+        .join(AkreditifKalemi, AkreditifKalemi.id == AkreditifKalemTaksiti.kalem_id)
+        .join(Akreditif, Akreditif.id == AkreditifKalemi.akreditif_id)
+        .where(Akreditif.sirket_id == sirket_id, AkreditifKalemTaksiti.odendi_mi.is_(True))
+    )
+    for taksit, akreditif_no in db.execute(taksit_sorgu).all():
+        satirlar.append(HareketTuruSatiri(
+            tarih=taksit.vade_tarihi, tur="AKREDITIF",
+            aciklama=f"Akreditif {akreditif_no or ''} - Taksit {taksit.taksit_no}",
+            tutar=taksit.tutar,
+        ))
+
+    if baslangic:
+        satirlar = [s for s in satirlar if s.tarih >= baslangic]
+    if bitis:
+        satirlar = [s for s in satirlar if s.tarih <= bitis]
+    return satirlar
+
+
+def _leasing_satirlari(db, sirket_id, baslangic, bitis):
+    from app.models.finansal import LeasingOdeme, LeasingSozlesme
+
+    sorgu = (
+        select(LeasingOdeme, LeasingSozlesme.sozlesme_no)
+        .join(LeasingSozlesme, LeasingSozlesme.id == LeasingOdeme.leasing_id)
+        .where(LeasingSozlesme.sirket_id == sirket_id, LeasingOdeme.odendi_mi.is_(True))
+    )
+    if baslangic:
+        sorgu = sorgu.where(LeasingOdeme.odeme_tarihi >= baslangic)
+    if bitis:
+        sorgu = sorgu.where(LeasingOdeme.odeme_tarihi <= bitis)
+    return [
+        HareketTuruSatiri(tarih=o.odeme_tarihi, tur="LEASING",
+                           aciklama=f"Leasing {no or ''} - Taksit {o.taksit_no}", tutar=o.tutar)
+        for o, no in db.execute(sorgu).all()
+    ]
+
+
+def _taksit_satirlari(db, sirket_id, baslangic, bitis):
+    sorgu = (
+        select(TaksitDetay, TaksitliSatisPlani.musteri_cari_id)
+        .join(TaksitliSatisPlani, TaksitliSatisPlani.id == TaksitDetay.plan_id)
+        .where(TaksitliSatisPlani.sirket_id == sirket_id, TaksitDetay.odendi_mi.is_(True))
+    )
+    if baslangic:
+        sorgu = sorgu.where(TaksitDetay.odeme_tarihi >= baslangic)
+    if bitis:
+        sorgu = sorgu.where(TaksitDetay.odeme_tarihi <= bitis)
+    return [
+        HareketTuruSatiri(tarih=t.odeme_tarihi, tur="TAKSIT",
+                           aciklama=f"Taksit {t.taksit_no} tahsilatı", tutar=t.odenen_tutar or t.tutar, cari_id=cari_id)
+        for t, cari_id in db.execute(sorgu).all()
+    ]
+
+
+def _cek_satirlari(db, sirket_id, baslangic, bitis):
+    from app.models.finansal import CekGecmis, CekDurum as _CekDurum
+
+    sorgu = (
+        select(CekGecmis, Cek)
+        .join(Cek, Cek.id == CekGecmis.cek_id)
+        .where(
+            Cek.sirket_id == sirket_id,
+            CekGecmis.yeni_durum.in_([_CekDurum.TAHSIL_EDILDI, _CekDurum.ODENDI]),
+        )
+    )
+    if baslangic:
+        sorgu = sorgu.where(CekGecmis.tarih >= baslangic)
+    if bitis:
+        sorgu = sorgu.where(CekGecmis.tarih <= bitis)
+    satirlar = []
+    for gecmis, cek in db.execute(sorgu).all():
+        isaret = 1 if gecmis.yeni_durum == _CekDurum.TAHSIL_EDILDI else -1
+        satirlar.append(HareketTuruSatiri(
+            tarih=gecmis.tarih, tur="CEK",
+            aciklama=f"Çek {cek.cek_no or '#' + str(cek.id)} - {'Tahsilat' if isaret > 0 else 'Ödeme'}",
+            tutar=isaret * cek.tutar, cari_id=cek.cari_id,
+        ))
+    return satirlar
+
+
+def _stok_satis_satirlari(db, sirket_id, baslangic, bitis):
+    sorgu = select(StokSeriNo).where(StokSeriNo.sirket_id == sirket_id, StokSeriNo.durum == StokDurum.SATILDI)
+    if baslangic:
+        sorgu = sorgu.where(StokSeriNo.satis_tarihi >= baslangic)
+    if bitis:
+        sorgu = sorgu.where(StokSeriNo.satis_tarihi <= bitis)
+    return [
+        HareketTuruSatiri(tarih=s.satis_tarihi, tur="STOK_SATIS",
+                           aciklama=f"Satış - Seri No {s.seri_no}", tutar=s.satis_fiyati_try or Decimal("0"),
+                           cari_id=s.musteri_cari_id)
+        for s in db.execute(sorgu).scalars() if s.satis_tarihi is not None
+    ]
+
+
 _HAREKET_TURU_FONKSIYONLARI = {
     "MAAS": _maas_satirlari,
     "KIRA_GELIRI": _kira_geliri_satirlari,
@@ -162,13 +275,18 @@ _HAREKET_TURU_FONKSIYONLARI = {
     "BORC_ODEME": _borc_odeme_satirlari,
     "BAKIM_GELIRI": lambda db, s, b1, b2: _bakim_satirlari(db, s, b1, b2, BakimTip.GELIR),
     "BAKIM_GIDERI": lambda db, s, b1, b2: _bakim_satirlari(db, s, b1, b2, BakimTip.GIDER),
+    "AKREDITIF": _akreditif_satirlari,
+    "LEASING": _leasing_satirlari,
+    "TAKSIT": _taksit_satirlari,
+    "CEK": _cek_satirlari,
+    "STOK_SATIS": _stok_satis_satirlari,
 }
 
 
 @router.get("/hareket-turu", response_model=HareketTuruRaporYaniti,
             dependencies=[Depends(izin_gerektir("RAPOR_GORUNTULE"))])
 def hareket_turu_raporu(
-    tur: str = Query(..., description="MAAS, KIRA_GELIRI, SABIT_GIDER, BORC_ODEME, BAKIM_GELIRI, BAKIM_GIDERI"),
+    tur: str = Query(..., description="MAAS, KIRA_GELIRI, SABIT_GIDER, BORC_ODEME, BAKIM_GELIRI, BAKIM_GIDERI, AKREDITIF, LEASING, TAKSIT, CEK, STOK_SATIS"),
     baslangic: date | None = None,
     bitis: date | None = None,
     sirket_id: int = Depends(aktif_sirket_id_getir),
@@ -176,8 +294,9 @@ def hareket_turu_raporu(
 ):
     """
     Sistemdeki farkli tablolara dagilmis hareketleri tek bir 'tur' uzerinden
-    raporlar. Bu, Personel/Kiralama/SabitGider/Borc/Bakim modullerinin
-    hepsinin ortak bir raporlama arayuzu altinda birlesmesini saglar.
+    raporlar. Bu, Personel/Kiralama/SabitGider/Borc/Bakim/Akreditif/Leasing/
+    Taksit/Cek/Stok modullerinin hepsinin ortak bir raporlama arayuzu
+    altinda birlesmesini saglar.
     """
     fonksiyon = _HAREKET_TURU_FONKSIYONLARI.get(tur)
     if fonksiyon is None:
