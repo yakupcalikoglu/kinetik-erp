@@ -177,3 +177,22 @@ class SiparisDetay(Base):
     para_birimi = Column(SAEnum(ParaBirimi, name="para_birimi_t"), nullable=False)
     birim_agirlik_kg = Column(Numeric(10, 2))
     aciklama = Column(String(300))
+
+
+class SiparisOdeme(Base):
+    """
+    Bir siparise (tedarikciye) yapilan avans/ara/kapama odemelerini takip
+    eder. Bu, stok maliyeti hesabindan (satinalma_maliyeti_try) TAMAMEN
+    BAGIMSIZDIR: bu tablo "ne kadar nakit ciktigini/borcumuz kaldigini",
+    stok maliyeti ise "urunun gercek maliyetini" gosterir - ikisi ayni
+    tutari temsil etmeyebilir (orn. henuz tam odenmemis bir siparis, teslim
+    alindiginda maliyeti zaten sozlesme fiyati uzerinden hesaba yazilir).
+    """
+    __tablename__ = "siparis_odemeleri"
+
+    id = Column(BigInteger, primary_key=True)
+    siparis_id = Column(BigInteger, ForeignKey("siparisler.id"), nullable=False)
+    tarih = Column(Date, nullable=False)
+    tutar = Column(Numeric(18, 2), nullable=False)  # siparisin kendi para biriminde (orn. USD)
+    notlar = Column(String(300))
+    olusturma_tarihi = Column(DateTime, server_default=func.now())
