@@ -1,6 +1,6 @@
 from datetime import date
 from decimal import Decimal
-from pydantic import BaseModel
+from pydantic import BaseModel, computed_field
 from app.models.finansal import (ParaBirimi, CekTip, CekDurum, BakimTip)
 
 
@@ -141,11 +141,16 @@ class TaksitDetayYanit(BaseModel):
     taksit_no: int
     vade_tarihi: date
     tutar: Decimal
+    odenen_tutar: Decimal = Decimal("0")
     odendi_mi: bool
     odeme_tarihi: date | None
 
     class Config:
         from_attributes = True
+
+    @computed_field
+    def kalan_bakiye(self) -> Decimal:
+        return self.tutar - self.odenen_tutar
 
 
 class TaksitTahsilIstegi(BaseModel):
@@ -155,6 +160,16 @@ class TaksitTahsilIstegi(BaseModel):
     kur: Decimal | None = None  # NAKIT + TRY disi para birimi icin zorunlu
     tahsilat_kaynak_tablo: str | None = None
     tahsilat_kaynak_id: int | None = None
+    tutar: Decimal | None = None  # Belirtilmezse taksidin kalan tam bakiyesi tahsil edilir
+
+
+class TaksitOdemeSonucu(BaseModel):
+    """Bir tahsilat sonrasi hangi taksitlerin ne kadar etkilendigini gosterir -
+    fazla odeme sonraki taksitlere otomatik yansitildiginda birden fazla
+    taksit bu tek istekle guncellenebilir."""
+    guncellenen_taksitler: list[TaksitDetayYanit]
+    fazla_odeme_var_mi: bool
+    fazla_odeme_tutari: Decimal
 
 
 # --------------------------------------------------------------- Kiralama
