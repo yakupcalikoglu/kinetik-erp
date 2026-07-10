@@ -6,8 +6,9 @@ from sqlalchemy.exc import IntegrityError
 from app.db.session import get_db
 from app.core.deps import aktif_sirket_id_getir, izin_gerektir, aktif_kullanici_getir
 from app.models.auth import Kullanici
+from datetime import date
 from app.models.stok import (StokKarti, StokSeriNo, StokMaliyetKalemi,
-                              MALIYET_TIP_SUTUN_ESLEME, StokDurum)
+                              MALIYET_TIP_SUTUN_ESLEME, StokDurum, MaliyetTip, ParaBirimi)
 from app.schemas.stok import (StokKartiOlusturIstegi, StokKartiYanit,
                                StokSeriNoYanit, StokDurumGuncelleIstegi,
                                MaliyetKalemiEkleIstegi, KarRaporuYanit, StokSatisIstegi,
@@ -431,6 +432,51 @@ def satinalma_maliyetini_duzelt(
     """
     kayit = _seri_no_getir_veya_404(db, seri_id, sirket_id)
     kayit.satinalma_maliyeti_try = yeni_tutar_try
+    db.commit()
+    db.refresh(kayit)
+    return kayit
+
+
+@router.post("/stok-seri-no/{seri_id}/satinalma-kalemini-geriye-donuk-olustur", response_model=StokSeriNoYanit,
+             dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
+def satinalma_kalemini_geriye_donuk_olustur(
+    seri_id: int,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Satinalma maliyetinin bir kalem satiri olarak otomatik kaydedilmeye
+    baslamasindan ONCE teslim alinmis urunler icin, mevcut
+    satinalma_maliyeti_try degerini GERIYE DONUK olarak bir maliyet kalemi
+    satirina donusturur. Ozet sutuna DOKUNMAZ (deger zaten orada) - sadece
+    "Maliyet Detayi" listesinde gorunur hale getirir. Zaten bir Satinalma
+    kalemi varsa (yeni teslim alinan urunlerde oldugu gibi) cift kayit
+    olusturmamak icin reddedilir.
+    """
+    kayit = _seri_no_getir_veya_404(db, seri_id, sirket_id)
+
+    mevcut = db.execute(
+        select(StokMaliyetKalemi).where(
+            StokMaliyetKalemi.stok_seri_no_id == seri_id,
+            StokMaliyetKalemi.tip == MaliyetTip.SATINALMA,
+        )
+    ).first()
+    if mevcut is not None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bu ürünün zaten bir satınalma kalemi var.")
+
+    if not kayit.satinalma_maliyeti_try or kayit.satinalma_maliyeti_try == 0:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bu ürünün kayıtlı bir satınalma maliyeti yok.")
+
+    db.add(StokMaliyetKalemi(
+        stok_seri_no_id=seri_id,
+        tip=MaliyetTip.SATINALMA,
+        aciklama="Satınalma (geriye dönük eklendi)",
+        para_birimi=ParaBirimi.TRY,
+        tutar=kayit.satinalma_maliyeti_try,
+        kur=1,
+        tutar_try=kayit.satinalma_maliyeti_try,
+        tarih=kayit.giris_tarihi or date.today(),
+    ))
     db.commit()
     db.refresh(kayit)
     return kayit
