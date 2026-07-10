@@ -195,7 +195,7 @@ const CEK_DURUM_METIN = { PORTFOYDE: 'Portföyde', CIRO_EDILDI: 'Ciro Edildi', T
 function CekSekmesi() {
   const [cekler, setCekler] = useState([]);
   const [formAcik, setFormAcik] = useState(false);
-  const [form, setForm] = useState({ tip: 'ALINAN', cek_no: '', banka_adi: '', cari_id: '', tutar: '', vade_tarihi: '', alinma_verilme_tarihi: '' });
+  const [form, setForm] = useState({ tip: 'ALINAN', cek_no: '', banka_adi: '', cari_id: '', tutar: '', para_birimi: 'TRY', vade_tarihi: '', alinma_verilme_tarihi: '' });
   const [hata, setHata] = useState(null);
   const [odemeAcikCekId, setOdemeAcikCekId] = useState(null);
   const cariHaritasi = useCariHaritasi();
@@ -278,8 +278,15 @@ function CekSekmesi() {
                 {cariler.map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
               </select>
             </Alan>
-            <Alan etiket="Tutar (TL)">
+            <Alan etiket="Tutar">
               <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
+            </Alan>
+            <Alan etiket="Para birimi">
+              <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={girdiStili}>
+                <option value="TRY">TRY</option>
+                <option value="USD">USD</option>
+                <option value="EUR">EUR</option>
+              </select>
             </Alan>
             <Alan etiket="Vade tarihi">
               <input required type="date" value={form.vade_tarihi} onChange={(e) => setForm((f) => ({ ...f, vade_tarihi: e.target.value }))} style={girdiStili} />
@@ -1499,7 +1506,7 @@ function BakimSekmesi() {
   const [formAcik, setFormAcik] = useState(false);
   const [form, setForm] = useState({
     stok_seri_no_id: '', tarih: new Date().toISOString().slice(0, 10), tip: 'GIDER', aciklama: '', ilgili_cari_id: '', tutar: '',
-    odeme_yontemi: 'NAKIT', banka_hesap_id: '',
+    para_birimi: 'TRY', kur: '1', odeme_yontemi: 'NAKIT', banka_hesap_id: '',
   });
   const [hata, setHata] = useState(null);
 
@@ -1521,6 +1528,7 @@ function BakimSekmesi() {
         ilgili_cari_id: form.ilgili_cari_id ? Number(form.ilgili_cari_id) : null,
         tutar: Number(form.tutar),
         banka_hesap_id: form.odeme_yontemi === 'BANKA' ? Number(form.banka_hesap_id) : null,
+        kur: form.odeme_yontemi === 'NAKIT' && form.para_birimi !== 'TRY' ? Number(form.kur) : null,
       });
       setFormAcik(false);
       yukle();
@@ -1575,8 +1583,15 @@ function BakimSekmesi() {
                 placeholder="Yazmaya başlayın veya listeden seçin"
               />
             </Alan>
-            <Alan etiket="Tutar (TL)">
+            <Alan etiket="Tutar">
               <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
+            </Alan>
+            <Alan etiket="Para birimi">
+              <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={girdiStili}>
+                <option value="TRY">TRY</option>
+                <option value="USD">USD</option>
+                <option value="EUR">EUR</option>
+              </select>
             </Alan>
             <Alan etiket="Ödeme yöntemi">
               <select value={form.odeme_yontemi} onChange={(e) => setForm((f) => ({ ...f, odeme_yontemi: e.target.value }))} style={girdiStili}>
@@ -1584,7 +1599,7 @@ function BakimSekmesi() {
                 <option value="BANKA">Banka</option>
               </select>
             </Alan>
-            {form.odeme_yontemi === 'BANKA' && (
+            {form.odeme_yontemi === 'BANKA' ? (
               <Alan etiket="Banka hesabı">
                 <select required value={form.banka_hesap_id} onChange={(e) => setForm((f) => ({ ...f, banka_hesap_id: e.target.value }))} style={girdiStili}>
                   <option value="">Seçin...</option>
@@ -1592,6 +1607,10 @@ function BakimSekmesi() {
                     <option key={h.banka_hesap_id} value={h.banka_hesap_id}>{h.banka_adi} — {h.hesap_adi || h.para_birimi}</option>
                   ))}
                 </select>
+              </Alan>
+            ) : form.para_birimi !== 'TRY' && (
+              <Alan etiket={`${form.para_birimi} için TL kuru (otomatik, elle değiştirilebilir)`}>
+                <input required type="number" step="0.0001" value={form.kur} onChange={(e) => setForm((f) => ({ ...f, kur: e.target.value }))} style={girdiStili} />
               </Alan>
             )}
             <div style={{ alignSelf: 'end' }}><Buton type="submit">Kaydet</Buton></div>
