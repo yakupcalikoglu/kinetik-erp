@@ -51,6 +51,12 @@ class PersonelOdeme(Base):
 
 # ------------------------------------------------------------ Sabit Giderler
 class SabitGiderKategori(Base):
+    """
+    ARTIK KULLANILMIYOR (gecmis uyumlulugu icin tablo/model duruyor).
+    Sabit giderler artik serbest metin 'kategori' alanini kullaniyor -
+    Harcama Turleri ile ayni otomatik tamamlama listesini paylasiyor,
+    boylece iki ayri kategori sistemi yonetmek gerekmiyor.
+    """
     __tablename__ = "sabit_gider_kategorileri"
 
     id = Column(BigInteger, primary_key=True)
@@ -62,7 +68,8 @@ class SabitGider(Base):
 
     id = Column(BigInteger, primary_key=True)
     sirket_id = Column(BigInteger, ForeignKey("sirketler.id"), nullable=False)
-    kategori_id = Column(BigInteger, ForeignKey("sabit_gider_kategorileri.id"), nullable=False)
+    kategori_id = Column(BigInteger, ForeignKey("sabit_gider_kategorileri.id"))  # artik kullanilmiyor, gecmis kayitlar icin duruyor
+    kategori = Column(String(150))  # serbest metin - Harcama Turleri ile ayni otomatik tamamlama listesi
     donem = Column(Date, nullable=False)
     tutar = Column(Numeric(18, 2), nullable=False)
     odendi_mi = Column(Boolean, default=False)
