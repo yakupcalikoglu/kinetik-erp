@@ -575,8 +575,10 @@ function BankaHareketiDuzenleFormu({ hareket, hesaplar, onKaydedildi, onVazgec }
     tutar: hareket.tutar, aciklama: hareket.aciklama || '',
     karsi_hesap_id: hareket.karsi_hesap_id ? String(hareket.karsi_hesap_id) : '',
     kullanilan_kur: hareket.kullanilan_kur ?? '',
+    cari_id: hareket.cari_id ? String(hareket.cari_id) : '',
   });
   const harcamaTurleri = useHarcamaTurleri();
+  const cariler = useCariler();
   const [hata, setHata] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
 
@@ -595,6 +597,7 @@ function BankaHareketiDuzenleFormu({ hareket, hesaplar, onKaydedildi, onVazgec }
         aciklama: form.aciklama || null,
         karsi_hesap_id: form.karsi_hesap_id ? Number(form.karsi_hesap_id) : null,
         kullanilan_kur: form.kullanilan_kur ? Number(form.kullanilan_kur) : null,
+        cari_id: form.cari_id ? Number(form.cari_id) : null,
       });
       onKaydedildi();
     } catch (err) {
@@ -649,6 +652,12 @@ function BankaHareketiDuzenleFormu({ hareket, hesaplar, onKaydedildi, onVazgec }
                   </Alan>
                 </>
               )}
+              <Alan etiket="Cari (opsiyonel)">
+                <select value={form.cari_id} onChange={(e) => setForm((f) => ({ ...f, cari_id: e.target.value }))} style={girdiStili}>
+                  <option value="">Seçin...</option>
+                  {cariler.map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
+                </select>
+              </Alan>
               <Alan etiket="Açıklama">
                 <OtomatikTamamlamaGirdisi
                   value={form.aciklama}
