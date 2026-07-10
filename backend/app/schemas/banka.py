@@ -57,6 +57,7 @@ class BankaHareketiYanit(BaseModel):
     kullanilan_kur: Decimal | None
     kaynak_tablo: str | None
     kaynak_id: int | None
+    cari_id: int | None = None
 
     class Config:
         from_attributes = True
@@ -70,6 +71,7 @@ class KasaHareketiOlusturIstegi(BaseModel):
     para_birimi: ParaBirimi = ParaBirimi.TRY
     tutar_try_karsiligi: Decimal | None = None
     aciklama: str | None = None
+    cari_id: int | None = None
 
 
 class KasaHareketiYanit(BaseModel):
@@ -82,6 +84,7 @@ class KasaHareketiYanit(BaseModel):
     aciklama: str | None
     kaynak_tablo: str | None
     kaynak_id: int | None
+    cari_id: int | None = None
 
     class Config:
         from_attributes = True
