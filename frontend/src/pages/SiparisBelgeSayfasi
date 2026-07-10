@@ -1,0 +1,84 @@
+import { useEffect, useState } from 'react';
+import { useParams, useSearchParams } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { api, hataMesajiCikar } from '../api/client';
+import { HataMesaji } from '../components/Ortak';
+import BelgeSablonu from '../components/BelgeSablonu';
+
+export default function SiparisBelgeSayfasi() {
+  const { siparisId } = useParams();
+  const [searchParams] = useSearchParams();
+  const nusha = searchParams.get('nusha') || 'ic'; // "ic" | "tedarikci"
+  const { oturum } = useAuth();
+
+  const [siparis, setSiparis] = useState(null);
+  const [tedarikci, setTedarikci] = useState(null);
+  const [stokKartlari, setStokKartlari] = useState([]);
+  const [notlar, setNotlar] = useState('');
+  const [hata, setHata] = useState(null);
+
+  useEffect(() => {
+    api.get(`/siparisler/${siparisId}`)
+      .then((r) => {
+        setSiparis(r.data);
+        setNotlar(r.data.notlar || '');
+        return api.get('/cariler').then((cr) => {
+          const c = cr.data.find((x) => x.id === r.data.tedarikci_cari_id);
+          setTedarikci(c || null);
+        });
+      })
+      .catch((err) => setHata(hataMesajiCikar(err)));
+    api.get('/stok-kartlari').then((r) => setStokKartlari(r.data)).catch(() => {});
+  }, [siparisId]);
+
+  if (hata) return <div style={{ maxWidth: 800, margin: '20px auto' }}><HataMesaji>{hata}</HataMesaji></div>;
+  if (!siparis) return <div style={{ padding: 20, color: '#888' }}>Yükleniyor...</div>;
+
+  const sirketAdi = oturum?.sirketler?.find((s) => s.id === oturum.aktifSirketId)?.unvan || '';
+
+  function urunAdi(stokKartiId) {
+    const k = stokKartlari.find((x) => x.id === stokKartiId);
+    return k ? `${k.marka} ${k.model}` : `#${stokKartiId}`;
+  }
+
+  const gosterMaliyet = nusha === 'ic';
+  const kalemler = (siparis.urunler || []).map((u) => ({
+    aciklama: urunAdi(u.stok_karti_id),
+    miktar: u.miktar,
+    birimFiyat: gosterMaliyet ? `${Number(u.birim_fiyat).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ${u.para_birimi}` : '—',
+    tutar: gosterMaliyet ? `${(u.miktar * Number(u.birim_fiyat)).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ${u.para_birimi}` : '—',
+  }));
+
+  const genelToplam = (siparis.urunler || []).reduce((acc, u) => acc + u.miktar * Number(u.birim_fiyat), 0);
+
+  const ekBilgiler = [
+    ['Kaynak', siparis.kaynak === 'ITHALAT' ? 'İthalat' : 'Yurtiçi Alım'],
+    ['Sipariş tarihi', siparis.siparis_tarihi],
+    ['Tahmini teslim', siparis.tahmini_teslim_tarihi || '—'],
+  ];
+  if (siparis.kaynak === 'ITHALAT') {
+    ekBilgiler.push(['Çıkış limanı', siparis.cikis_limani || '—']);
+    ekBilgiler.push(['Varış limanı', siparis.varis_limani || '—']);
+  }
+
+  return (
+    <BelgeSablonu
+      geriYolu="/siparisler"
+      belgeBasligi={`Sipariş Formu${nusha === 'tedarikci' ? ' (Tedarikçi Nüshası)' : ' (Şirket İçi)'}`}
+      belgeNo={siparis.siparis_no}
+      tarih={siparis.siparis_tarihi}
+      sirketAdi={sirketAdi}
+      karsiTarafBaslik="Tedarikçi"
+      karsiTarafAdi={tedarikci ? tedarikci.unvan : `#${siparis.tedarikci_cari_id}`}
+      ekBilgiler={ekBilgiler}
+      kalemler={kalemler}
+      paraBirimi={gosterMaliyet ? siparis.para_birimi : ''}
+      araToplam={gosterMaliyet ? genelToplam.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) : '—'}
+      kdvTutari={gosterMaliyet ? '0,00' : '—'}
+      genelToplam={gosterMaliyet ? genelToplam.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) : '—'}
+      notlar={notlar}
+      notlarDegistir={setNotlar}
+      altYazi="Bu belge üzerindeki not değişiklikleri sadece bu görünüm/yazdırma içindir, sipariş kaydını güncellemez."
+    />
+  );
+}
