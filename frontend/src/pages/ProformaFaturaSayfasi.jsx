@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api, hataMesajiCikar } from '../api/client';
 import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, BosDurum, Etiket, paraFormat, eylemChipStili, Sekmeler } from '../components/Ortak';
 
@@ -253,6 +254,7 @@ function GecmisProformalar({ cariler, yenidenYukleTetik, onGoruntule }) {
                 <td style={{ padding: '10px 16px' }}>
                   <div style={{ display: 'flex', gap: 6 }}>
                     <button onClick={() => onGoruntule(p)} style={eylemChipStili('lacivert')}>Görüntüle</button>
+                    <Link to={`/proforma-fatura/proforma/${p.id}/belge`} style={eylemChipStili('lacivert')}>Belge / Yazdır</Link>
                     {p.durum !== 'FATURALASTI' && (
                       <button onClick={() => sil(p)} style={eylemChipStili('kirmizi')}>Sil</button>
                     )}
@@ -323,7 +325,10 @@ function GecmisFaturalar({ cariler, yenidenYukleTetik }) {
                 <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{f.tarih}</td>
                 <td style={{ padding: '10px 16px', fontWeight: 500 }}>{paraFormat(f.genel_toplam, f.para_birimi)}</td>
                 <td style={{ padding: '10px 16px' }}>
-                  <button onClick={() => iptalEt(f)} style={eylemChipStili('kirmizi')}>İptal Et</button>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <Link to={`/proforma-fatura/fatura/${f.id}/belge`} style={eylemChipStili('lacivert')}>Belge / Yazdır</Link>
+                    <button onClick={() => iptalEt(f)} style={eylemChipStili('kirmizi')}>İptal Et</button>
+                  </div>
                 </td>
               </tr>
             ))}
