@@ -75,15 +75,51 @@ const SEKMELER = [
   { deger: 'hesaplar', etiket: 'Hesaplar' },
 ];
 
-function KaynakDetayi({ kaynakTablo, kaynakId }) {
+// Her kaynak_tablo icin "geri al" uc noktasi. Burada olmayan turler (orn.
+// BAKIM_KAYDI, VIRMAN_CARI_CARI) icin panelde geri al butonu gosterilmez -
+// o modullerin kendi sayfasindan yonetilmesi gerekir.
+const GERI_AL_HARITASI = {
+  AKREDITIF_KALEMI: { yontem: 'PUT', url: (id) => `/akreditif-kalemleri/${id}/odemeyi-geri-al` },
+  AKREDITIF_KALEM_TAKSIT: { yontem: 'PUT', url: (id) => `/akreditif-kalem-taksitleri/${id}/odemeyi-geri-al` },
+  LEASING_ODEME: { yontem: 'PUT', url: (id) => `/leasing-odemeleri/${id}/odemeyi-geri-al` },
+  KIRALAMA_ODEME: { yontem: 'PUT', url: (id) => `/kiralama-odemeleri/${id}/tahsilati-geri-al` },
+  TAKSIT_DETAY: { yontem: 'PUT', url: (id) => `/taksit-detay/${id}/tahsilati-geri-al` },
+  PERSONEL_ODEME: { yontem: 'PUT', url: (id) => `/personel-odemeleri/${id}/odemeyi-geri-al` },
+  SABIT_GIDER: { yontem: 'PUT', url: (id) => `/sabit-giderler/${id}/odemeyi-geri-al` },
+  BORC_ODEME: { yontem: 'DELETE', url: (id) => `/borc-odemeleri/${id}` },
+  STOK_SATIS: { yontem: 'PUT', url: (id) => `/stok-seri-no/${id}/satisi-geri-al` },
+  CEKLER: { yontem: 'PUT', url: (id) => `/cekler/${id}/durumu-geri-al` },
+};
+
+function KaynakDetayi({ kaynakTablo, kaynakId, onIslemTamamlandi }) {
   const [detay, setDetay] = useState(null);
   const [hata, setHata] = useState(null);
+  const [islemYapiliyor, setIslemYapiliyor] = useState(false);
 
   useEffect(() => {
     api.get(`/kaynak-detay/${kaynakTablo}/${kaynakId}`)
       .then((r) => setDetay(r.data))
       .catch((e) => setHata(hataMesajiCikar(e)));
   }, [kaynakTablo, kaynakId]);
+
+  const geriAlBilgisi = GERI_AL_HARITASI[kaynakTablo];
+
+  async function geriAl() {
+    if (!window.confirm('Bu işlemi geri almak istediğinize emin misiniz? Oluşan Kasa/Banka hareketi silinecek.')) return;
+    setIslemYapiliyor(true);
+    setHata(null);
+    try {
+      if (geriAlBilgisi.yontem === 'DELETE') {
+        await api.delete(geriAlBilgisi.url(kaynakId));
+      } else {
+        await api.put(geriAlBilgisi.url(kaynakId));
+      }
+      onIslemTamamlandi();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+      setIslemYapiliyor(false);
+    }
+  }
 
   if (hata) return <div style={{ padding: '10px 16px', fontSize: 12.5, color: 'var(--kirmizi)' }}>{hata}</div>;
   if (!detay) return <div style={{ padding: '10px 16px', fontSize: 12.5, color: 'var(--metin-soluk)' }}>Yükleniyor...</div>;
@@ -97,6 +133,13 @@ function KaynakDetayi({ kaynakTablo, kaynakId }) {
           <span style={{ color: 'var(--metin-birincil)' }}>{deger}</span>
         </div>
       ))}
+      {geriAlBilgisi && (
+        <div style={{ marginTop: 10 }}>
+          <button onClick={geriAl} disabled={islemYapiliyor} style={eylemChipStili('kirmizi')}>
+            {islemYapiliyor ? 'İşleniyor...' : 'Bu İşlemi Geri Al'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -746,7 +789,7 @@ function HareketlerSekmesi() {
                     {acikDetayId === h.id && (
                       <tr>
                         <td colSpan={6} style={{ padding: 0 }}>
-                          <KaynakDetayi kaynakTablo={h.kaynak_tablo} kaynakId={h.kaynak_id} />
+                          <KaynakDetayi kaynakTablo={h.kaynak_tablo} kaynakId={h.kaynak_id} onIslemTamamlandi={() => { setAcikDetayId(null); yukle(); }} />
                         </td>
                       </tr>
                     )}
