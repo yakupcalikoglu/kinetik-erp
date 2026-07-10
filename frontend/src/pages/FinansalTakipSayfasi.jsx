@@ -1837,10 +1837,15 @@ function LeasingSekmesi() {
 }
 
 // ============================================================== KİRALAMA
+function bosKiralamaFormu() {
+  return { stok_seri_no_id: '', kiraci_cari_id: '', baslangic_tarihi: new Date().toISOString().slice(0, 10), aylik_kira_tutari: '', para_birimi: 'TRY' };
+}
+
 function KiralamaSekmesi() {
   const [liste, setListe] = useState([]);
   const [formAcik, setFormAcik] = useState(false);
-  const [form, setForm] = useState({ stok_seri_no_id: '', kiraci_cari_id: '', baslangic_tarihi: new Date().toISOString().slice(0, 10), aylik_kira_tutari: '', para_birimi: 'TRY' });
+  const [duzenlenenSozlesme, setDuzenlenenSozlesme] = useState(null);
+  const [form, setForm] = useState(bosKiralamaFormu());
   const [hata, setHata] = useState(null);
   const cariHaritasi = useCariHaritasi();
   const cariler = useCariler();
@@ -1855,17 +1860,44 @@ function KiralamaSekmesi() {
   }
   useEffect(yukle, []);
 
+  function duzenlemeyeBasla(sozlesme) {
+    setDuzenlenenSozlesme(sozlesme);
+    setForm({
+      stok_seri_no_id: String(sozlesme.stok_seri_no_id),
+      kiraci_cari_id: String(sozlesme.kiraci_cari_id),
+      baslangic_tarihi: sozlesme.baslangic_tarihi,
+      bitis_tarihi: sozlesme.bitis_tarihi || '',
+      aylik_kira_tutari: sozlesme.aylik_kira_tutari,
+      para_birimi: sozlesme.para_birimi,
+      depozito: sozlesme.depozito || 0,
+    });
+    setFormAcik(true);
+  }
+
+  function formuKapat() {
+    setFormAcik(false);
+    setDuzenlenenSozlesme(null);
+    setForm(bosKiralamaFormu());
+  }
+
   async function kaydet(e) {
     e.preventDefault();
     setHata(null);
     try {
-      await api.post('/kiralama-sozlesmeleri', {
+      const govde = {
         ...form,
         stok_seri_no_id: Number(form.stok_seri_no_id),
         kiraci_cari_id: Number(form.kiraci_cari_id),
         aylik_kira_tutari: Number(form.aylik_kira_tutari),
-      });
-      setFormAcik(false);
+        bitis_tarihi: form.bitis_tarihi || null,
+        depozito: form.depozito ? Number(form.depozito) : 0,
+      };
+      if (duzenlenenSozlesme) {
+        await api.put(`/kiralama-sozlesmeleri/${duzenlenenSozlesme.id}`, govde);
+      } else {
+        await api.post('/kiralama-sozlesmeleri', govde);
+      }
+      formuKapat();
       yukle();
     } catch (err) { setHata(hataMesajiCikar(err)); }
   }
@@ -1906,12 +1938,20 @@ function KiralamaSekmesi() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-        <Buton onClick={() => setFormAcik((a) => !a)}>{formAcik ? 'Kapat' : '+ Yeni kiralama'}</Buton>
+        <Buton onClick={() => (formAcik ? formuKapat() : setFormAcik(true))}>{formAcik ? 'Kapat' : '+ Yeni kiralama'}</Buton>
       </div>
       <HataMesaji>{hata}</HataMesaji>
 
       {formAcik && (
         <Kart style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 10 }}>
+            {duzenlenenSozlesme ? `Sözleşmeyi düzenle — ${duzenlenenSozlesme.urun_adi || duzenlenenSozlesme.urun_seri_no || ''}` : 'Yeni kiralama'}
+          </div>
+          {duzenlenenSozlesme && (
+            <div style={{ fontSize: 12.5, color: 'var(--metin-ikincil)', marginBottom: 12 }}>
+              Not: Bu değişiklikler geçmişte oluşturulmuş dönem ödemelerini etkilemez, sadece sözleşme bilgisini ve ileride eklenecek dönemlerin referans değerini günceller.
+            </div>
+          )}
           <form onSubmit={kaydet} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
             <Alan etiket="Ürün">
               <select required value={form.stok_seri_no_id} onChange={(e) => setForm((f) => ({ ...f, stok_seri_no_id: e.target.value }))} style={girdiStili}>
@@ -1938,7 +1978,7 @@ function KiralamaSekmesi() {
             <Alan etiket="Aylık kira tutarı">
               <input required type="number" step="0.01" value={form.aylik_kira_tutari} onChange={(e) => setForm((f) => ({ ...f, aylik_kira_tutari: e.target.value }))} style={girdiStili} />
             </Alan>
-            <div style={{ alignSelf: 'end' }}><Buton type="submit">Kaydet</Buton></div>
+            <div style={{ alignSelf: 'end' }}><Buton type="submit">{duzenlenenSozlesme ? 'Değişiklikleri kaydet' : 'Kaydet'}</Buton></div>
           </form>
         </Kart>
       )}
@@ -1954,6 +1994,7 @@ function KiralamaSekmesi() {
               <td style={{ padding: '10px 16px' }}>{paraFormat(k.aylik_kira_tutari, k.para_birimi)}</td>
               <td style={{ padding: '10px 16px' }}><Etiket ton={k.durum === 'AKTIF' ? 'yesil' : 'notr'}>{k.durum}</Etiket></td>
               <td style={{ padding: '10px 16px' }}>
+                <button onClick={() => duzenlemeyeBasla(k)} style={eylemChipStili('lacivert')}>Düzenle</button>
                 <button onClick={() => odemeleriGoster(k.id)} style={eylemChipStili('lacivert')}>
                   Ödemeler
                 </button>
