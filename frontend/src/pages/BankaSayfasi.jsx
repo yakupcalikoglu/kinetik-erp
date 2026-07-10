@@ -10,6 +10,26 @@ function useHarcamaTurleri() {
   return turler;
 }
 
+function useCariHaritasi() {
+  const [harita, setHarita] = useState({});
+  useEffect(() => {
+    api.get('/cariler').then((r) => {
+      const h = {};
+      r.data.forEach((c) => { h[c.id] = c.unvan; });
+      setHarita(h);
+    }).catch(() => {});
+  }, []);
+  return harita;
+}
+
+function useCariler() {
+  const [cariler, setCariler] = useState([]);
+  useEffect(() => {
+    api.get('/cariler').then((r) => setCariler(r.data)).catch(() => {});
+  }, []);
+  return cariler;
+}
+
 function useBekleyenOdemeler() {
   const [liste, setListe] = useState([]);
   useEffect(() => {
@@ -326,6 +346,7 @@ const BANKA_HAREKET_TIP_METIN = {
 function YeniBankaHareketiFormu({ hesaplar, onKaydedildi, onVazgec }) {
   const bekleyenler = useBekleyenOdemeler();
   const harcamaTurleri = useHarcamaTurleri();
+  const cariler = useCariler();
 
   const [odemeTuru, setOdemeTuru] = useState('SERBEST');
   const [ustBaslik, setUstBaslik] = useState('');
@@ -336,7 +357,7 @@ function YeniBankaHareketiFormu({ hesaplar, onKaydedildi, onVazgec }) {
 
   const [form, setForm] = useState({
     banka_hesap_id: '', tarih: new Date().toISOString().slice(0, 10), tip: 'GIRIS',
-    tutar: '', aciklama: '', karsi_hesap_id: '', kullanilan_kur: '',
+    tutar: '', aciklama: '', karsi_hesap_id: '', kullanilan_kur: '', cari_id: '',
   });
   const [hata, setHata] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
@@ -393,6 +414,7 @@ function YeniBankaHareketiFormu({ hesaplar, onKaydedildi, onVazgec }) {
           aciklama: form.aciklama || null,
           karsi_hesap_id: form.karsi_hesap_id ? Number(form.karsi_hesap_id) : null,
           kullanilan_kur: form.kullanilan_kur ? Number(form.kullanilan_kur) : null,
+          cari_id: form.cari_id ? Number(form.cari_id) : null,
         });
       }
       onKaydedildi();
@@ -466,6 +488,12 @@ function YeniBankaHareketiFormu({ hesaplar, onKaydedildi, onVazgec }) {
                 </Alan>
               </>
             )}
+            <Alan etiket="Cari (opsiyonel)">
+              <select value={form.cari_id} onChange={(e) => setForm((f) => ({ ...f, cari_id: e.target.value }))} style={girdiStili}>
+                <option value="">Seçin...</option>
+                {cariler.map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
+              </select>
+            </Alan>
             <Alan etiket="Açıklama">
               <OtomatikTamamlamaGirdisi
                 value={form.aciklama}
@@ -578,7 +606,7 @@ function BankaHareketiDuzenleFormu({ hareket, hesaplar, onKaydedildi, onVazgec }
 
   return (
     <tr>
-      <td colSpan={6} style={{ padding: 0 }}>
+      <td colSpan={7} style={{ padding: 0 }}>
         <div style={{ padding: 16, background: 'var(--zemin)' }}>
           <form onSubmit={kaydet}>
             <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 12 }}>Hareketi düzenle</div>
@@ -643,6 +671,7 @@ function BankaHareketiDuzenleFormu({ hareket, hesaplar, onKaydedildi, onVazgec }
 }
 
 function HareketlerSekmesi() {
+  const cariHaritasi = useCariHaritasi();
   const [hesaplar, setHesaplar] = useState([]);
   const [bankaHareketleri, setBankaHareketleri] = useState([]);
   const [hesapFiltre, setHesapFiltre] = useState('');
@@ -671,6 +700,11 @@ function HareketlerSekmesi() {
   function hesapAdiGoster(hesapId) {
     const h = hesaplar.find((x) => x.banka_hesap_id === hesapId);
     return h ? `${h.banka_adi} — ${h.hesap_adi || h.para_birimi}` : `#${hesapId}`;
+  }
+
+  function hesapParaBirimi(hesapId) {
+    const h = hesaplar.find((x) => x.banka_hesap_id === hesapId);
+    return h ? h.para_birimi : 'TRY';
   }
 
   function satiraTikla(h) {
@@ -726,7 +760,7 @@ function HareketlerSekmesi() {
           <table>
             <thead>
               <tr style={{ background: 'var(--zemin)' }}>
-                {['Tarih', 'Hesap', 'Tür', 'Tutar', 'Açıklama', 'İşlem'].map((b) => (
+                {['Tarih', 'Hesap', 'Tür', 'Tutar', 'Cari', 'Açıklama', 'İşlem'].map((b) => (
                   <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
                 ))}
               </tr>
@@ -758,7 +792,10 @@ function HareketlerSekmesi() {
                       <td onClick={() => satiraTikla(h)} style={{ padding: '10px 16px', cursor: tiklanabilir ? 'pointer' : 'default' }}>{hesapAdiGoster(h.banka_hesap_id)}</td>
                       <td onClick={() => satiraTikla(h)} style={{ padding: '10px 16px', cursor: tiklanabilir ? 'pointer' : 'default' }}>{BANKA_HAREKET_TIP_METIN[h.tip] || h.tip}</td>
                       <td onClick={() => satiraTikla(h)} style={{ padding: '10px 16px', fontWeight: 500, color: Number(h.tutar) >= 0 ? 'var(--yesil)' : 'var(--kirmizi)', cursor: tiklanabilir ? 'pointer' : 'default' }}>
-                        {paraFormat(h.tutar)}
+                        {paraFormat(h.tutar, hesapParaBirimi(h.banka_hesap_id))}
+                      </td>
+                      <td onClick={() => satiraTikla(h)} style={{ padding: '10px 16px', color: 'var(--metin-ikincil)', cursor: tiklanabilir ? 'pointer' : 'default' }}>
+                        {h.cari_id ? (cariHaritasi[h.cari_id] || `#${h.cari_id}`) : '—'}
                       </td>
                       <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>
                         <span onClick={() => satiraTikla(h)} style={{ cursor: tiklanabilir ? 'pointer' : 'default' }}>
@@ -788,7 +825,7 @@ function HareketlerSekmesi() {
                     </tr>
                     {acikDetayId === h.id && (
                       <tr>
-                        <td colSpan={6} style={{ padding: 0 }}>
+                        <td colSpan={7} style={{ padding: 0 }}>
                           <KaynakDetayi kaynakTablo={h.kaynak_tablo} kaynakId={h.kaynak_id} onIslemTamamlandi={() => { setAcikDetayId(null); yukle(); }} />
                         </td>
                       </tr>
