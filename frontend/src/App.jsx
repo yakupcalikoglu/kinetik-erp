@@ -20,6 +20,9 @@ import VirmanSayfasi from './pages/VirmanSayfasi';
 import UrunTanimlariSayfasi from './pages/UrunTanimlariSayfasi';
 import SatisYapSayfasi from './pages/SatisYapSayfasi';
 import HarcamaTurleriSayfasi from './pages/HarcamaTurleriSayfasi';
+import SiparisBelgeSayfasi from './pages/SiparisBelgeSayfasi';
+import ProformaBelgeSayfasi from './pages/ProformaBelgeSayfasi';
+import FaturaBelgeSayfasi from './pages/FaturaBelgeSayfasi';
 
 function KorumaliRota({ children }) {
   const { oturum } = useAuth();
@@ -66,6 +69,9 @@ function App() {
             <Route path="yonetici-paneli" element={<YetkiliSayfa gerekliIzin="KULLANICI_YONET"><YoneticiPaneliSayfasi /></YetkiliSayfa>} />
             <Route path="harcama-turleri" element={<HarcamaTurleriSayfasi />} />
             <Route path="satis-yap" element={<YetkiliSayfa gerekliIzin="STOK_DUZENLE"><SatisYapSayfasi /></YetkiliSayfa>} />
+            <Route path="siparisler/:siparisId/belge" element={<SiparisBelgeSayfasi />} />
+            <Route path="proforma-fatura/proforma/:proformaId/belge" element={<ProformaBelgeSayfasi />} />
+            <Route path="proforma-fatura/fatura/:faturaId/belge" element={<FaturaBelgeSayfasi />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
