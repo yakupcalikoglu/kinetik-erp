@@ -5,17 +5,83 @@ import {
   OtomatikTamamlamaGirdisi,
 } from '../components/Ortak';
 
-const SEKMELER = [
-  { deger: 'cek', etiket: 'Çek' },
-  { deger: 'akreditif', etiket: 'Akreditif' },
-  { deger: 'leasing', etiket: 'Leasing' },
-  { deger: 'taksit', etiket: 'Taksitli Satış' },
-  { deger: 'kiralama', etiket: 'Kiralama' },
-  { deger: 'bakim', etiket: 'Bakım' },
-  { deger: 'personel', etiket: 'Personel' },
-  { deger: 'gider', etiket: 'Sabit Giderler' },
-  { deger: 'borc', etiket: 'Ortak / Dış Borç' },
+// Sekmeler mantiksal 4 gruba ayrildi - hangi sekmenin nerede oldugunu
+// bulmayi kolaylastirmak icin (once tek bir duz liste halindeydi).
+const SEKME_GRUPLARI = [
+  {
+    baslik: 'Satış & Tahsilat',
+    aciklama: 'Müşteriden gelir toplama',
+    sekmeler: [
+      { deger: 'taksit', etiket: 'Taksitli Satış' },
+      { deger: 'kiralama', etiket: 'Kiralama' },
+    ],
+  },
+  {
+    baslik: 'Tedarik & Ödeme',
+    aciklama: 'Yurt dışı alım ödemeleri',
+    sekmeler: [
+      { deger: 'akreditif', etiket: 'Akreditif' },
+      { deger: 'leasing', etiket: 'Leasing' },
+    ],
+  },
+  {
+    baslik: 'İşletme Giderleri',
+    aciklama: 'Personel ve sabit giderler',
+    sekmeler: [
+      { deger: 'personel', etiket: 'Personel' },
+      { deger: 'gider', etiket: 'Sabit Giderler' },
+      { deger: 'bakim', etiket: 'Bakım' },
+    ],
+  },
+  {
+    baslik: 'Nakit Araçları',
+    aciklama: 'Çek ve ortak/dış borç',
+    sekmeler: [
+      { deger: 'cek', etiket: 'Çek' },
+      { deger: 'borc', etiket: 'Ortak / Dış Borç' },
+    ],
+  },
 ];
+
+function GruplananSekmeler({ aktif, onDegistir }) {
+  return (
+    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 20 }}>
+      {SEKME_GRUPLARI.map((grup) => (
+        <div
+          key={grup.baslik}
+          style={{
+            flex: '1 1 200px', minWidth: 200, padding: '10px 12px', borderRadius: 10,
+            border: '1px solid var(--kenarlik)', background: 'var(--zemin)',
+          }}
+        >
+          <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--metin-ikincil)', marginBottom: 2 }}>
+            {grup.baslik}
+          </div>
+          <div style={{ fontSize: 10.5, color: 'var(--metin-soluk)', marginBottom: 8 }}>
+            {grup.aciklama}
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {grup.sekmeler.map((s) => (
+              <button
+                key={s.deger}
+                onClick={() => onDegistir(s.deger)}
+                style={{
+                  padding: '6px 10px', borderRadius: 7, fontSize: 12.5, cursor: 'pointer',
+                  border: aktif === s.deger ? '1.5px solid var(--lacivert)' : '1px solid var(--kenarlik)',
+                  background: aktif === s.deger ? 'var(--lacivert)' : 'white',
+                  color: aktif === s.deger ? 'white' : 'var(--metin-birincil)',
+                  fontWeight: aktif === s.deger ? 600 : 400,
+                }}
+              >
+                {s.etiket}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function BasitTablo({ basliklar, satirlar, render }) {
   if (satirlar.length === 0) return <BosDurum baslik="Kayıt bulunamadı" />;
@@ -2577,12 +2643,12 @@ function BorcSekmesi() {
 }
 
 export default function FinansalTakipSayfasi() {
-  const [sekme, setSekme] = useState('cek');
+  const [sekme, setSekme] = useState('taksit');
 
   return (
     <div>
       <SayfaBasligi baslik="Finansal takip" aciklama="Çek, leasing, taksitli satış, kiralama, bakım, personel, sabit giderler ve borçlar" />
-      <Sekmeler sekmeler={SEKMELER} aktif={sekme} onDegistir={setSekme} />
+      <GruplananSekmeler aktif={sekme} onDegistir={setSekme} />
 
       {sekme === 'cek' && <CekSekmesi />}
       {sekme === 'akreditif' && <AkreditifSekmesi />}
