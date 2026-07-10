@@ -209,3 +209,32 @@ class StokMaliyetKalemiYanit(BaseModel):
 class TopluDurumGuncelleIstegi(BaseModel):
     stok_seri_no_idleri: list[int]
     durum: StokDurum
+
+
+# --------------------------------------------------------- Sipariş Ödemeleri
+class SiparisOdemeOlusturIstegi(BaseModel):
+    tarih: date
+    tutar: Decimal  # siparisin kendi para biriminde (orn. USD)
+    odeme_yontemi: str  # "NAKIT" | "BANKA"
+    banka_hesap_id: int | None = None
+    kur: Decimal | None = None  # NAKIT + TRY disi para birimi icin zorunlu
+    notlar: str | None = None
+
+
+class SiparisOdemeYanit(BaseModel):
+    id: int
+    siparis_id: int
+    tarih: date
+    tutar: Decimal
+    notlar: str | None
+
+    class Config:
+        from_attributes = True
+
+
+class SiparisBakiyeYanit(BaseModel):
+    siparis_id: int
+    para_birimi: ParaBirimi
+    toplam_siparis_tutari: Decimal
+    toplam_odenen: Decimal
+    kalan_bakiye: Decimal
