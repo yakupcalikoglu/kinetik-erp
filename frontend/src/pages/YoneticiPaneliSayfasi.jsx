@@ -445,6 +445,46 @@ const YONETICI_SEKMELERI = [
   { deger: 'tehlikeli', etiket: 'Tehlikeli İşlemler' },
 ];
 
+function AciklamalariYenidenUretKarti() {
+  const [calisiyor, setCalisiyor] = useState(false);
+  const [sonuc, setSonuc] = useState(null);
+  const [hata, setHata] = useState(null);
+
+  async function calistir() {
+    if (!window.confirm('Kiralama ve Taksitli Satış kaynaklı eski Kasa/Banka hareketlerinin açıklamaları, ürün/müşteri adı eklenerek yeniden yazılacak. Devam edilsin mi?')) return;
+    setHata(null);
+    setSonuc(null);
+    setCalisiyor(true);
+    try {
+      const { data } = await api.post('/admin/aciklamalari-yeniden-uret');
+      setSonuc(data);
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setCalisiyor(false);
+    }
+  }
+
+  return (
+    <Kart style={{ marginBottom: 16 }}>
+      <div style={{ fontWeight: 600, fontSize: 14.5, marginBottom: 8 }}>
+        Eski Açıklamaları Yeniden Üret
+      </div>
+      <div style={{ fontSize: 13, color: 'var(--metin-ikincil)', marginBottom: 14 }}>
+        Kiralama ve Taksitli Satış tahsilatlarında, ürün adı eklenmeden önce oluşmuş Kasa/Banka
+        hareketlerinin açıklamasını günceller (sadece metin değişir, tutar/tarih etkilenmez — güvenlidir).
+      </div>
+      <HataMesaji>{hata}</HataMesaji>
+      {sonuc && (
+        <div style={{ background: 'var(--yesil-acik)', color: 'var(--yesil)', padding: '10px 14px', borderRadius: 8, fontSize: 13, marginBottom: 14 }}>
+          {sonuc.guncellenen_kayit} kaydın açıklaması güncellendi.
+        </div>
+      )}
+      <Buton onClick={calistir} disabled={calisiyor}>{calisiyor ? 'Çalışıyor...' : 'Şimdi Çalıştır'}</Buton>
+    </Kart>
+  );
+}
+
 function TehlikeliIslemlerSekmesi() {
   const [onayMetni, setOnayMetni] = useState('');
   const [calisiyor, setCalisiyor] = useState(false);
@@ -472,7 +512,9 @@ function TehlikeliIslemlerSekmesi() {
   }
 
   return (
-    <Kart style={{ borderLeft: '4px solid var(--kirmizi)' }}>
+    <div>
+      <AciklamalariYenidenUretKarti />
+      <Kart style={{ borderLeft: '4px solid var(--kirmizi)' }}>
       <div style={{ fontWeight: 600, fontSize: 14.5, marginBottom: 8, color: 'var(--kirmizi)' }}>
         Test Verilerini Temizle
       </div>
@@ -506,6 +548,7 @@ function TehlikeliIslemlerSekmesi() {
         </button>
       </div>
     </Kart>
+    </div>
   );
 }
 
