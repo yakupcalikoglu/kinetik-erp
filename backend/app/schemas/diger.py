@@ -52,7 +52,7 @@ class OdeIstegi(BaseModel):
 
 # ------------------------------------------------------------ Sabit Giderler
 class SabitGiderOlusturIstegi(BaseModel):
-    kategori_id: int
+    kategori: str  # Serbest metin - Harcama Turleri ile ayni oneri listesini kullanir
     donem: date
     tutar: Decimal
     aciklama: str | None = None
@@ -60,20 +60,12 @@ class SabitGiderOlusturIstegi(BaseModel):
 
 class SabitGiderYanit(BaseModel):
     id: int
-    kategori_id: int
+    kategori: str | None
     donem: date
     tutar: Decimal
     odendi_mi: bool
     odeme_tarihi: date | None
     aciklama: str | None
-
-    class Config:
-        from_attributes = True
-
-
-class SabitGiderKategoriYanit(BaseModel):
-    id: int
-    ad: str
 
     class Config:
         from_attributes = True
