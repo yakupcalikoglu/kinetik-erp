@@ -1,20 +1,295 @@
 import { useEffect, useState } from 'react';
 import { api, hataMesajiCikar } from '../api/client';
 import {
-  Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, BosDurum, paraFormat,
+  Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, BosDurum, paraFormat, Etiket,
 } from '../components/Ortak';
 
 const HAREKET_TURLERI = [
-  { deger: 'MAAS', etiket: 'Maaş' },
+  { deger: 'STOK_SATIS', etiket: 'Stok Satışı (peşin)' },
+  { deger: 'TAKSIT', etiket: 'Taksitli Satış Tahsilatı' },
   { deger: 'KIRA_GELIRI', etiket: 'Kira Geliri' },
-  { deger: 'SABIT_GIDER', etiket: 'Sabit Gider' },
+  { deger: 'AKREDITIF', etiket: 'Akreditif Ödemesi' },
+  { deger: 'LEASING', etiket: 'Leasing Ödemesi' },
+  { deger: 'CEK', etiket: 'Çek (Tahsilat/Ödeme)' },
+  { deger: 'MAAS', etiket: 'Maaş' },
+  { deger: 'SABIT_GIDER', etiket: 'Diğer Gider' },
   { deger: 'BORC_ODEME', etiket: 'Borç Ödeme' },
   { deger: 'BAKIM_GELIRI', etiket: 'Bakım Geliri' },
   { deger: 'BAKIM_GIDERI', etiket: 'Bakım Gideri' },
 ];
 
+// ============================================================== GENEL BAKIŞ
+function GenelBakisKarti() {
+  const [ozet, setOzet] = useState(null);
+  const [hata, setHata] = useState(null);
+
+  useEffect(() => {
+    api.get('/raporlar/genel-bakis').then((r) => setOzet(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
+  }, []);
+
+  if (hata) return <HataMesaji>{hata}</HataMesaji>;
+  if (!ozet) return null;
+
+  const kutular = [
+    { baslik: 'Ana Kasa Bakiyesi (TL)', deger: paraFormat(ozet.ana_kasa_bakiye_try), renk: ozet.ana_kasa_bakiye_try >= 0 ? 'var(--yesil)' : 'var(--kirmizi)' },
+    { baslik: '7 Gün İçinde Vadesi Gelen Çekler', deger: `${ozet.vadesi_yaklasan_cek_sayisi} adet · ${paraFormat(ozet.vadesi_yaklasan_cek_toplami)}`, renk: ozet.vadesi_yaklasan_cek_sayisi > 0 ? 'var(--amber)' : 'var(--metin-ikincil)' },
+    { baslik: 'Vadesi Geçmiş Taksitler', deger: `${ozet.geciken_taksit_sayisi} adet · ${paraFormat(ozet.geciken_taksit_toplami)}`, renk: ozet.geciken_taksit_sayisi > 0 ? 'var(--kirmizi)' : 'var(--metin-ikincil)' },
+    { baslik: 'Depodaki Ürün Sayısı', deger: `${ozet.depodaki_urun_sayisi} adet`, renk: 'var(--metin-birincil)' },
+    { baslik: 'Aktif Kiralama Sayısı', deger: `${ozet.aktif_kiralama_sayisi} adet`, renk: 'var(--metin-birincil)' },
+  ];
+
+  return (
+    <Kart style={{ marginBottom: 16 }}>
+      <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 14 }}>Genel bakış</div>
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+        {kutular.map((k) => (
+          <div key={k.baslik} style={{ flex: '1 1 180px', padding: '12px 14px', background: 'var(--zemin)', borderRadius: 10 }}>
+            <div style={{ fontSize: 11.5, color: 'var(--metin-ikincil)', marginBottom: 6 }}>{k.baslik}</div>
+            <div style={{ fontSize: 17, fontWeight: 600, color: k.renk }}>{k.deger}</div>
+          </div>
+        ))}
+      </div>
+    </Kart>
+  );
+}
+
+// ============================================================== YAKLAŞAN VADELER
+function YaklasanVadelerKarti() {
+  const [gun, setGun] = useState(30);
+  const [veri, setVeri] = useState(null);
+  const [hata, setHata] = useState(null);
+  const [yukleniyor, setYukleniyor] = useState(true);
+
+  function yukle() {
+    setYukleniyor(true);
+    api.get('/raporlar/yaklasan-vadeler', { params: { gun } })
+      .then((r) => setVeri(r.data))
+      .catch((e) => setHata(hataMesajiCikar(e)))
+      .finally(() => setYukleniyor(false));
+  }
+  useEffect(yukle, [gun]); // eslint-disable-line
+
+  return (
+    <Kart style={{ marginBottom: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        <div style={{ fontSize: 14.5, fontWeight: 600 }}>Yaklaşan vadeler</div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {[30, 60, 90].map((g) => (
+            <button
+              key={g}
+              onClick={() => setGun(g)}
+              style={{
+                padding: '5px 12px', borderRadius: 7, fontSize: 12.5, cursor: 'pointer',
+                border: gun === g ? '1.5px solid var(--lacivert)' : '1px solid var(--kenarlik)',
+                background: gun === g ? 'var(--lacivert)' : 'white',
+                color: gun === g ? 'white' : 'var(--metin-birincil)',
+              }}
+            >
+              {g} gün
+            </button>
+          ))}
+        </div>
+      </div>
+      <HataMesaji>{hata}</HataMesaji>
+
+      {yukleniyor ? (
+        <div style={{ color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--kirmizi)' }}>
+              Yapılacak ödemeler — Toplam: {veri ? paraFormat(veri.odemeler_toplam) : '—'}
+            </div>
+            {!veri || veri.odemeler.length === 0 ? (
+              <BosDurum baslik="Yaklaşan ödeme yok" />
+            ) : (
+              <table>
+                <tbody>
+                  {veri.odemeler.map((o, i) => (
+                    <tr key={i} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                      <td style={{ padding: '6px 8px', color: 'var(--metin-ikincil)', fontSize: 12.5 }}>{o.tarih}</td>
+                      <td style={{ padding: '6px 8px', fontSize: 12.5 }}>{o.aciklama}</td>
+                      <td style={{ padding: '6px 8px', fontSize: 12.5, fontWeight: 500, textAlign: 'right' }}>{paraFormat(o.tutar, o.para_birimi)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--yesil)' }}>
+              Yapılacak tahsilatlar — Toplam: {veri ? paraFormat(veri.tahsilatlar_toplam) : '—'}
+            </div>
+            {!veri || veri.tahsilatlar.length === 0 ? (
+              <BosDurum baslik="Yaklaşan tahsilat yok" />
+            ) : (
+              <table>
+                <tbody>
+                  {veri.tahsilatlar.map((t, i) => (
+                    <tr key={i} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                      <td style={{ padding: '6px 8px', color: 'var(--metin-ikincil)', fontSize: 12.5 }}>{t.tarih}</td>
+                      <td style={{ padding: '6px 8px', fontSize: 12.5 }}>{t.aciklama}</td>
+                      <td style={{ padding: '6px 8px', fontSize: 12.5, fontWeight: 500, textAlign: 'right' }}>{paraFormat(t.tutar, t.para_birimi)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+    </Kart>
+  );
+}
+
+// ============================================================== DEPO ENVANTERİ
+function DepoEnvanteriKarti() {
+  const [liste, setListe] = useState(null);
+  const [hata, setHata] = useState(null);
+
+  useEffect(() => {
+    api.get('/raporlar/depo-envanteri').then((r) => setListe(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
+  }, []);
+
+  const genelToplam = liste ? liste.reduce((acc, g) => acc + Number(g.toplam_deger_try), 0) : 0;
+
+  return (
+    <Kart style={{ marginBottom: 16 }}>
+      <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 14 }}>Depo envanteri (ürün türüne göre)</div>
+      <HataMesaji>{hata}</HataMesaji>
+      {!liste ? (
+        <div style={{ color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
+      ) : liste.length === 0 ? (
+        <BosDurum baslik="Depoda ürün yok" />
+      ) : (
+        <>
+          <table>
+            <thead>
+              <tr style={{ background: 'var(--zemin)' }}>
+                {['Ürün', 'Adet', 'Toplam Değer (TL)'].map((b) => (
+                  <th key={b} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 12, color: 'var(--metin-ikincil)' }}>{b}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {liste.map((g) => (
+                <tr key={g.stok_karti_id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                  <td style={{ padding: '8px 12px' }}>{g.marka} {g.model}</td>
+                  <td style={{ padding: '8px 12px' }}>{g.adet} {g.birim || 'adet'}</td>
+                  <td style={{ padding: '8px 12px', fontWeight: 500 }}>{paraFormat(g.toplam_deger_try)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div style={{ marginTop: 10, fontSize: 13, fontWeight: 600, textAlign: 'right' }}>
+            Genel toplam: {paraFormat(genelToplam)}
+          </div>
+        </>
+      )}
+    </Kart>
+  );
+}
+
+// ============================================================== AKTİF KİRALAMALAR
+function AktifKiralamalarKarti() {
+  const [liste, setListe] = useState(null);
+  const [hata, setHata] = useState(null);
+
+  useEffect(() => {
+    api.get('/raporlar/aktif-kiralamalar').then((r) => setListe(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
+  }, []);
+
+  return (
+    <Kart style={{ marginBottom: 16 }}>
+      <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 14 }}>Aktif kiralamalar</div>
+      <HataMesaji>{hata}</HataMesaji>
+      {!liste ? (
+        <div style={{ color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
+      ) : liste.length === 0 ? (
+        <BosDurum baslik="Aktif kiralama yok" />
+      ) : (
+        <table>
+          <thead>
+            <tr style={{ background: 'var(--zemin)' }}>
+              {['Ürün', 'Seri No', 'Kiracı', 'Aylık Kira'].map((b) => (
+                <th key={b} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 12, color: 'var(--metin-ikincil)' }}>{b}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {liste.map((k) => (
+              <tr key={k.stok_seri_no_id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                <td style={{ padding: '8px 12px' }}>{k.marka} {k.model}</td>
+                <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)', fontFamily: 'var(--font-mono)' }}>{k.seri_no}</td>
+                <td style={{ padding: '8px 12px' }}>{k.kiraci_unvan}</td>
+                <td style={{ padding: '8px 12px', fontWeight: 500 }}>{paraFormat(k.aylik_kira_tutari, k.para_birimi)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </Kart>
+  );
+}
+
+// ============================================================== ANA KASA ÖZETİ (tarih aralıklı)
+function AnaKasaOzetKarti() {
+  const [baslangic, setBaslangic] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10));
+  const [bitis, setBitis] = useState(new Date().toISOString().slice(0, 10));
+  const [ozet, setOzet] = useState(null);
+  const [hata, setHata] = useState(null);
+  const [yukleniyor, setYukleniyor] = useState(false);
+
+  async function sorgula() {
+    setYukleniyor(true);
+    setHata(null);
+    try {
+      const { data } = await api.get('/raporlar/ana-kasa-ozet', { params: { baslangic, bitis } });
+      setOzet(data);
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setYukleniyor(false);
+    }
+  }
+  useEffect(() => { sorgula(); }, []); // eslint-disable-line
+
+  return (
+    <Kart style={{ marginBottom: 16 }}>
+      <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 14 }}>Ana kasa özeti (tarih aralığı — örn. "bu ay ne kadar giriş/çıkış oldu")</div>
+      <HataMesaji>{hata}</HataMesaji>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginBottom: 14, flexWrap: 'wrap' }}>
+        <Alan etiket="Başlangıç">
+          <input type="date" value={baslangic} onChange={(e) => setBaslangic(e.target.value)} style={girdiStili} />
+        </Alan>
+        <Alan etiket="Bitiş">
+          <input type="date" value={bitis} onChange={(e) => setBitis(e.target.value)} style={girdiStili} />
+        </Alan>
+        <Buton onClick={sorgula} disabled={yukleniyor} style={{ marginBottom: 14 }}>{yukleniyor ? 'Sorgulanıyor...' : 'Sorgula'}</Buton>
+      </div>
+      {ozet && (
+        <div style={{ display: 'flex', gap: 20 }}>
+          <div>
+            <div style={{ fontSize: 11.5, color: 'var(--metin-ikincil)' }}>Toplam Giriş</div>
+            <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--yesil)' }}>{paraFormat(ozet.toplam_giris)}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11.5, color: 'var(--metin-ikincil)' }}>Toplam Çıkış</div>
+            <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--kirmizi)' }}>{paraFormat(ozet.toplam_cikis)}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11.5, color: 'var(--metin-ikincil)' }}>Net</div>
+            <div style={{ fontSize: 16, fontWeight: 600, color: ozet.net_bakiye >= 0 ? 'var(--yesil)' : 'var(--kirmizi)' }}>{paraFormat(ozet.net_bakiye)}</div>
+          </div>
+        </div>
+      )}
+    </Kart>
+  );
+}
+
+// ============================================================== HAREKET TÜRÜ RAPORU
 function HareketTuruRaporu() {
-  const [tur, setTur] = useState('MAAS');
+  const [tur, setTur] = useState('STOK_SATIS');
   const [baslangic, setBaslangic] = useState('');
   const [bitis, setBitis] = useState('');
   const [sonuc, setSonuc] = useState(null);
@@ -38,12 +313,15 @@ function HareketTuruRaporu() {
   }
 
   return (
-    <Kart>
+    <Kart style={{ marginBottom: 16 }}>
       <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 16 }}>Hareket türüne göre rapor</div>
+      <div style={{ fontSize: 12.5, color: 'var(--metin-ikincil)', marginTop: -10, marginBottom: 14 }}>
+        Örn: "Bu ay ne satış yaptım?" için "Stok Satışı" veya "Taksitli Satış Tahsilatı" seçip bu ayın tarihlerini gir.
+      </div>
       <HataMesaji>{hata}</HataMesaji>
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginBottom: 16, flexWrap: 'wrap' }}>
-        <div style={{ minWidth: 180 }}>
+        <div style={{ minWidth: 220 }}>
           <Alan etiket="Hareket türü">
             <select value={tur} onChange={(e) => setTur(e.target.value)} style={girdiStili}>
               {HAREKET_TURLERI.map((t) => <option key={t.deger} value={t.deger}>{t.etiket}</option>)}
@@ -98,6 +376,7 @@ function HareketTuruRaporu() {
   );
 }
 
+// ============================================================== SERİ NO RAPORU
 function SeriNoRaporu() {
   const [seriNo, setSeriNo] = useState('');
   const [sonuc, setSonuc] = useState(null);
@@ -120,7 +399,7 @@ function SeriNoRaporu() {
   }
 
   return (
-    <Kart style={{ marginTop: 16 }}>
+    <Kart style={{ marginBottom: 16 }}>
       <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 16 }}>Ürüne göre rapor (seri numarası)</div>
       <HataMesaji>{hata}</HataMesaji>
 
@@ -154,6 +433,7 @@ function SeriNoRaporu() {
   );
 }
 
+// ============================================================== CARİ RAPORU
 function CariRaporu() {
   const [cariler, setCariler] = useState([]);
   const [cariId, setCariId] = useState('');
@@ -188,7 +468,7 @@ function CariRaporu() {
   const toplam = sonuc ? sonuc.reduce((t, s) => t + Number(s.tutar), 0) : 0;
 
   return (
-    <Kart style={{ marginTop: 16 }}>
+    <Kart>
       <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 16 }}>Müşteriye / cariye göre rapor</div>
       <HataMesaji>{hata}</HataMesaji>
 
@@ -255,7 +535,12 @@ function CariRaporu() {
 export default function RaporlarSayfasi() {
   return (
     <div>
-      <SayfaBasligi baslik="Raporlar" aciklama="Hareket türüne, ürüne (seri no) ve müşteriye göre filtrelenebilir raporlar" />
+      <SayfaBasligi baslik="Raporlar" aciklama="Genel bakış, yaklaşan vadeler, envanter, hareket türü, ürün ve cari bazlı raporlar" />
+      <GenelBakisKarti />
+      <YaklasanVadelerKarti />
+      <AnaKasaOzetKarti />
+      <DepoEnvanteriKarti />
+      <AktifKiralamalarKarti />
       <HareketTuruRaporu />
       <SeriNoRaporu />
       <CariRaporu />
