@@ -434,6 +434,36 @@ def kiralama_olustur(
     return yeni
 
 
+@router.put("/kiralama-sozlesmeleri/{sozlesme_id}", response_model=KiralamaYanit,
+            dependencies=[Depends(izin_gerektir("KIRALAMA_DUZENLE"))])
+def kiralama_sozlesmesi_duzenle(
+    sozlesme_id: int, istek: KiralamaOlusturIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
+):
+    """
+    Sozlesme sartlarini (kiraci, aylik kira tutari, para birimi vb.)
+    duzenler. Bu, GECMISTE olusturulmus donem odemelerini ETKILEMEZ - her
+    donem kendi tutarini tasir (donem eklerken elle girilir). Yani fiyat
+    degisikligi icin yeni sozlesme acmaya veya mevcut sozlesmeyi silmeye
+    GEREK YOKTUR; sadece ileride eklenecek donemlerde yeni degerler
+    varsayilan/referans olarak gorunur.
+    """
+    sozlesme = db.get(KiralamaSozlesme, sozlesme_id)
+    if sozlesme is None or sozlesme.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Kiralama sözleşmesi bulunamadı.")
+
+    for alan, deger in istek.model_dump().items():
+        setattr(sozlesme, alan, deger)
+
+    db.commit()
+    db.refresh(sozlesme)
+    cari_h = _cari_haritasi(db, sirket_id)
+    urun_h = _urun_haritasi(db, sirket_id)
+    sozlesme.kiraci_unvan = cari_h.get(sozlesme.kiraci_cari_id)
+    _urun_bilgisi_ekle(sozlesme, sozlesme.stok_seri_no_id, urun_h)
+    return sozlesme
+
+
 @router.get("/kiralama-sozlesmeleri", response_model=list[KiralamaYanit],
             dependencies=[Depends(izin_gerektir("KIRALAMA_GORUNTULE"))])
 def kiralamalari_listele(
