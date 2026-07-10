@@ -5,7 +5,6 @@ import YetkiliSayfa from './components/YetkiliSayfa';
 import GirisSayfasi from './pages/GirisSayfasi';
 import SifremiUnuttumSayfasi from './pages/SifremiUnuttumSayfasi';
 import SifreSifirlaSayfasi from './pages/SifreSifirlaSayfasi';
-import GenelBakisSayfasi from './pages/GenelBakisSayfasi';
 import CarilerSayfasi from './pages/CarilerSayfasi';
 import StokSayfasi from './pages/StokSayfasi';
 import SiparislerSayfasi from './pages/SiparislerSayfasi';
@@ -44,7 +43,13 @@ function App() {
               </KorumaliRota>
             }
           >
-            <Route index element={<GenelBakisSayfasi />} />
+            {/* "/" (Genel Bakis) ve "/kasa" (Ana Kasa) ARTIK AYNI SAYFA -
+                onceden iki farkli dosyaydi (GenelBakisSayfasi.jsx ile
+                KasaSayfasi.jsx), bu da kafa karistirici, birbirinden
+                bagimsiz iki kopya haline gelmisti. Tek bir bilesen
+                kullanilarak birlestirildi; /kasa yolu da eski linkler
+                kirilmasin diye ayni bilesene yonlendirilmeye devam ediyor. */}
+            <Route index element={<YetkiliSayfa gerekliIzin="KASA_GORUNTULE"><KasaSayfasi /></YetkiliSayfa>} />
             <Route path="cariler" element={<YetkiliSayfa gerekliIzin="CARI_GORUNTULE"><CarilerSayfasi /></YetkiliSayfa>} />
             <Route path="stok" element={<YetkiliSayfa gerekliIzin="STOK_GORUNTULE"><StokSayfasi /></YetkiliSayfa>} />
             <Route path="siparisler" element={<SiparislerSayfasi />} />
