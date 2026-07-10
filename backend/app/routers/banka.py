@@ -194,6 +194,7 @@ def banka_hareketi_olustur(
         karsi_hesap_id=istek.karsi_hesap_id,
         kullanilan_kur=istek.kullanilan_kur,
         cari_id=istek.cari_id,
+        tutar_try_karsiligi=istek.tutar_try_karsiligi,
         olusturan_kullanici_id=kullanici.id,
     )
     db.add(ana_hareket)
@@ -262,6 +263,7 @@ def banka_hareketi_guncelle(
     kayit.karsi_hesap_id = istek.karsi_hesap_id
     kayit.kullanilan_kur = istek.kullanilan_kur
     kayit.cari_id = istek.cari_id
+    kayit.tutar_try_karsiligi = istek.tutar_try_karsiligi
 
     db.commit()
     db.refresh(kayit)
