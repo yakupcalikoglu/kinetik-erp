@@ -139,7 +139,12 @@ function useUrunSecenekleri() {
 function useHarcamaTurleri() {
   const [turler, setTurler] = useState([]);
   useEffect(() => {
-    api.get('/harcama-turleri').then((r) => setTurler(r.data.map((t) => t.ad))).catch(() => {});
+    api.get('/harcama-turleri').then((r) => {
+      const adlar = r.data.map((t) => t.ad);
+      // "Diğer" her zaman listede olsun - kullanıcı özel bir tür tanımlamamış
+      // olsa bile bir kaçış seçeneği olarak garanti edilir.
+      setTurler(adlar.includes('Diğer') ? adlar : [...adlar, 'Diğer']);
+    }).catch(() => setTurler(['Diğer']));
   }, []);
   return turler;
 }
@@ -2348,27 +2353,24 @@ function TaksitSekmesi() {
 // ============================================================== SABİT GİDERLER
 function SabitGiderSekmesi() {
   const [liste, setListe] = useState([]);
-  const [kategoriler, setKategoriler] = useState([]);
   const harcamaTurleri = useHarcamaTurleri();
   const [formAcik, setFormAcik] = useState(false);
-  const [form, setForm] = useState({ kategori_id: '', donem: new Date().toISOString().slice(0, 10), tutar: '', aciklama: '' });
+  const [form, setForm] = useState({ kategori: '', donem: new Date().toISOString().slice(0, 10), tutar: '', aciklama: '' });
   const [hata, setHata] = useState(null);
   const [odemeAcikId, setOdemeAcikId] = useState(null);
 
   function yukle() {
     api.get('/sabit-giderler').then((r) => setListe(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
   }
-  useEffect(() => {
-    yukle();
-    api.get('/sabit-gider-kategorileri').then((r) => setKategoriler(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
-  }, []);
+  useEffect(yukle, []);
 
   async function kaydet(e) {
     e.preventDefault();
     setHata(null);
     try {
-      await api.post('/sabit-giderler', { ...form, kategori_id: Number(form.kategori_id), tutar: Number(form.tutar) });
+      await api.post('/sabit-giderler', { ...form, tutar: Number(form.tutar) });
       setFormAcik(false);
+      setForm({ kategori: '', donem: new Date().toISOString().slice(0, 10), tutar: '', aciklama: '' });
       yukle();
     } catch (err) { setHata(hataMesajiCikar(err)); }
   }
@@ -2395,8 +2397,6 @@ function SabitGiderSekmesi() {
     } catch (err) { setHata(hataMesajiCikar(err)); }
   }
 
-  const kategoriAdi = (id) => kategoriler.find((k) => k.id === id)?.ad || '—';
-
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
@@ -2408,10 +2408,13 @@ function SabitGiderSekmesi() {
         <Kart style={{ marginBottom: 16 }}>
           <form onSubmit={kaydet} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12 }}>
             <Alan etiket="Kategori">
-              <select required value={form.kategori_id} onChange={(e) => setForm((f) => ({ ...f, kategori_id: e.target.value }))} style={girdiStili}>
-                <option value="">Seçin...</option>
-                {kategoriler.map((k) => <option key={k.id} value={k.id}>{k.ad}</option>)}
-              </select>
+              <OtomatikTamamlamaGirdisi
+                value={form.kategori}
+                onChange={(v) => setForm((f) => ({ ...f, kategori: v }))}
+                secenekler={harcamaTurleri}
+                listeId="harcama-turleri-sabit-gider-kategori"
+                placeholder="Yazmaya başlayın veya listeden seçin"
+              />
             </Alan>
             <Alan etiket="Dönem">
               <input required type="date" value={form.donem} onChange={(e) => setForm((f) => ({ ...f, donem: e.target.value }))} style={girdiStili} />
@@ -2447,7 +2450,7 @@ function SabitGiderSekmesi() {
               {liste.map((g) => (
                 <Fragment key={g.id}>
                   <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
-                    <td style={{ padding: '10px 16px', fontWeight: 500 }}>{kategoriAdi(g.kategori_id)}</td>
+                    <td style={{ padding: '10px 16px', fontWeight: 500 }}>{g.kategori || '—'}</td>
                     <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{g.donem}</td>
                     <td style={{ padding: '10px 16px' }}>{paraFormat(g.tutar)}</td>
                     <td style={{ padding: '10px 16px' }}>{g.aciklama || '—'}</td>
