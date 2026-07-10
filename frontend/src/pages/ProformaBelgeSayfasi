@@ -1,0 +1,77 @@
+import { useEffect, useState } from 'react';
+import { useParams } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { api, hataMesajiCikar } from '../api/client';
+import { HataMesaji } from '../components/Ortak';
+import BelgeSablonu from '../components/BelgeSablonu';
+
+export default function ProformaBelgeSayfasi() {
+  const { proformaId } = useParams();
+  const { oturum } = useAuth();
+
+  const [proforma, setProforma] = useState(null);
+  const [cari, setCari] = useState(null);
+  const [notlar, setNotlar] = useState('');
+  const [hata, setHata] = useState(null);
+  const [kaydediliyor, setKaydediliyor] = useState(false);
+
+  function yukle() {
+    api.get(`/proforma-faturalar/${proformaId}`)
+      .then((r) => {
+        setProforma(r.data);
+        setNotlar(r.data.notlar || '');
+        return api.get('/cariler').then((cr) => {
+          const c = cr.data.find((x) => x.id === r.data.cari_id);
+          setCari(c || null);
+        });
+      })
+      .catch((err) => setHata(hataMesajiCikar(err)));
+  }
+  useEffect(yukle, [proformaId]); // eslint-disable-line
+
+  async function notuKaydet() {
+    setKaydediliyor(true);
+    try {
+      await api.put(`/proforma-faturalar/${proformaId}/notlar`, { notlar });
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setKaydediliyor(false);
+    }
+  }
+
+  if (hata) return <div style={{ maxWidth: 800, margin: '20px auto' }}><HataMesaji>{hata}</HataMesaji></div>;
+  if (!proforma) return <div style={{ padding: 20, color: '#888' }}>Yükleniyor...</div>;
+
+  const sirketAdi = oturum?.sirketler?.find((s) => s.id === oturum.aktifSirketId)?.unvan || '';
+
+  const kalemler = (proforma.kalemler || []).map((k) => ({
+    aciklama: k.aciklama || '—',
+    miktar: k.miktar,
+    birimFiyat: Number(k.birim_fiyat).toLocaleString('tr-TR', { minimumFractionDigits: 2 }),
+    tutar: (k.miktar * Number(k.birim_fiyat)).toLocaleString('tr-TR', { minimumFractionDigits: 2 }),
+  }));
+
+  return (
+    <BelgeSablonu
+      geriYolu="/proforma-fatura"
+      belgeBasligi="Proforma Fatura"
+      belgeNo={proforma.proforma_no}
+      tarih={proforma.tarih}
+      sirketAdi={sirketAdi}
+      karsiTarafBaslik="Müşteri"
+      karsiTarafAdi={cari ? cari.unvan : `#${proforma.cari_id}`}
+      ekBilgiler={[['Durum', proforma.durum === 'FATURALASTI' ? 'Faturalaştı' : proforma.durum === 'ONAYLANDI' ? 'Onaylandı' : 'Taslak']]}
+      kalemler={kalemler}
+      paraBirimi={proforma.para_birimi}
+      araToplam={Number(proforma.ara_toplam).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
+      kdvTutari={Number(proforma.kdv_tutari).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
+      genelToplam={Number(proforma.genel_toplam).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
+      notlar={notlar}
+      notlarDegistir={setNotlar}
+      notKaydediliyor={kaydediliyor}
+      notuKaydet={notuKaydet}
+      altYazi="Bu proforma teklif niteliğindedir, resmi fatura değildir."
+    />
+  );
+}
