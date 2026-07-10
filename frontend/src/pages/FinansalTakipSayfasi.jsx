@@ -26,10 +26,10 @@ const SEKME_GRUPLARI = [
   },
   {
     baslik: 'İşletme Giderleri',
-    aciklama: 'Personel ve sabit giderler',
+    aciklama: 'Personel ve diğer giderler',
     sekmeler: [
       { deger: 'personel', etiket: 'Personel' },
-      { deger: 'gider', etiket: 'Sabit Giderler' },
+      { deger: 'gider', etiket: 'Diğer Giderler' },
       { deger: 'bakim', etiket: 'Bakım' },
     ],
   },
@@ -2650,7 +2650,7 @@ export default function FinansalTakipSayfasi() {
 
   return (
     <div>
-      <SayfaBasligi baslik="Finansal takip" aciklama="Çek, leasing, taksitli satış, kiralama, bakım, personel, sabit giderler ve borçlar" />
+      <SayfaBasligi baslik="Finansal takip" aciklama="Çek, leasing, taksitli satış, kiralama, bakım, personel, diğer giderler ve borçlar" />
       <GruplananSekmeler aktif={sekme} onDegistir={setSekme} />
 
       {sekme === 'cek' && <CekSekmesi />}
