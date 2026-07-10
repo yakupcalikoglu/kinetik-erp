@@ -115,10 +115,18 @@ class TaksitDetay(Base):
     taksit_no = Column(Integer, nullable=False)
     vade_tarihi = Column(Date, nullable=False)
     tutar = Column(Numeric(18, 2), nullable=False)
+    odenen_tutar = Column(Numeric(18, 2), nullable=False, default=0)
     odendi_mi = Column(Boolean, default=False)
     odeme_tarihi = Column(Date)
     tahsilat_kaynak_tablo = Column(String(50))
     tahsilat_kaynak_id = Column(BigInteger)
+    # Bir odeme, secilen taksidin kalan bakiyesinden FAZLA ise, fazlalik
+    # sonraki odenmemis taksit(ler)e otomatik uygulanir. Bu durumda o
+    # taksitlerde ilk_taksit_id, ODEMENIN ASIL YAPILDIGI (Kasa/Banka
+    # hareketinin kaynak_id'sinin isaret ettigi) taksidin ID'sini tutar -
+    # boylece "geri al" istendiginde ayni odemeyle etkilenen TUM taksitler
+    # dogru sekilde birlikte geri alinabilir.
+    ilk_taksit_id = Column(BigInteger, ForeignKey("taksit_detay.id"))
 
 
 # --------------------------------------------------------------- Kiralama
