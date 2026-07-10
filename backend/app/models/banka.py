@@ -50,6 +50,10 @@ class BankaHareketi(Base):
     tarih = Column(Date, nullable=False)
     tip = Column(SAEnum(BankaHareketTip, name="banka_hareket_tip_t"), nullable=False)
     tutar = Column(Numeric(18, 2), nullable=False)  # pozitif: giris, negatif: cikis
+    # Hesabin kendi para birimi TRY disi ise, o gunku kur ile hesaplanmis TL
+    # karsiligi (raporlarda tek bir TL toplami gostermek icin). TRY hesaplarda
+    # bos kalir (tutar zaten TL'dir).
+    tutar_try_karsiligi = Column(Numeric(18, 2))
     aciklama = Column(String(500))
     karsi_hesap_id = Column(BigInteger, ForeignKey("banka_hesaplari.id"))
     kullanilan_kur = Column(Numeric(18, 4))
