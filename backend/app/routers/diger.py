@@ -360,7 +360,12 @@ def proformayi_faturaya_cevir(
             dependencies=[Depends(izin_gerektir("FATURA_GORUNTULE"))])
 def faturalari_listele(sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
     sorgu = select(Fatura).where(Fatura.sirket_id == sirket_id).order_by(Fatura.id.desc())
-    return list(db.execute(sorgu).scalars())
+    sonuclar = list(db.execute(sorgu).scalars())
+    for f in sonuclar:
+        f.kalemler = list(db.execute(
+            select(FaturaDetay).where(FaturaDetay.fatura_id == f.id)
+        ).scalars())
+    return sonuclar
 
 
 @router.get("/faturalar/sonraki-no",
