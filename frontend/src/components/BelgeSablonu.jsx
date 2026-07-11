@@ -1,4 +1,3 @@
-import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 
 function bosKalem() {
@@ -6,20 +5,20 @@ function bosKalem() {
 }
 
 // Siparis, Proforma ve Fatura icin ortak, TAMAMEN DUZENLENEBILIR ve
-// yazdirmaya hazir belge sablonu. Kullanici sirket logosunu, kalemleri
-// (aciklama - orn. sasi no eklemek icin -, miktar, fiyat), notlari
-// serbestce degistirebilir; toplamlar degisikliklere gore anlik
-// yeniden hesaplanir. En sonda "Yazdir / PDF olarak kaydet" ile
-// tarayicinin yazdirma penceresi acilir (orada "PDF olarak kaydet"
-// secilebilir). Yazdirirken sadece kagit gorunumu kalir (.no-print).
+// yazdirmaya hazir belge PANELI. Liste satirinin altinda ACILIR (ayri bir
+// sayfaya gidilmez) - boylece veri zaten elde oldugu icin ekstra bir API
+// cagrisina/ID cozumlemesine gerek kalmaz. Kullanici sirket logosunu,
+// kalemleri (aciklama - orn. sasi no eklemek icin -, miktar, fiyat),
+// notlari serbestce degistirebilir; toplamlar degisikliklere gore anlik
+// yeniden hesaplanir. "Yazdir / PDF olarak kaydet" ile tarayicinin
+// yazdirma penceresi acilir (orada "PDF olarak kaydet" secilebilir).
 export default function BelgeSablonu({
-  geriYolu, belgeBasligi, belgeNo, tarih, sirketAdi, logoUrl,
+  onKapat, belgeBasligi, belgeNo, tarih, sirketAdi, logoUrl,
   karsiTarafBaslik, karsiTarafAdi, ekBilgiler,
   kalemlerBaslangic, paraBirimi, fiyatGoster = true,
   notlar, notlarDegistir, notKaydediliyor, notuKaydet,
   altYazi,
 }) {
-  const navigate = useNavigate();
   const [kalemler, setKalemler] = useState(kalemlerBaslangic);
   const [logoHata, setLogoHata] = useState(false);
 
@@ -44,11 +43,13 @@ export default function BelgeSablonu({
   const sayiFormat = (n) => n.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   return (
-    <div>
+    <div id="belge-yazdirma-alani">
       <style>{`
         @media print {
           .no-print { display: none !important; }
-          body { margin: 0; background: white; }
+          body * { visibility: hidden; }
+          #belge-yazdirma-alani, #belge-yazdirma-alani * { visibility: visible; }
+          #belge-yazdirma-alani { position: absolute; left: 0; top: 0; width: 100%; }
           input, textarea { border: none !important; background: transparent !important; }
         }
         .belge-tablo { width: 100%; border-collapse: collapse; margin-top: 20px; }
@@ -59,33 +60,32 @@ export default function BelgeSablonu({
         .belge-notlar { width: 100%; min-height: 90px; border: 1px solid #ccc; border-radius: 6px; padding: 10px; font-size: 13px; font-family: inherit; box-sizing: border-box; }
       `}</style>
 
-      <div className="no-print" style={{ maxWidth: 800, margin: '0 auto 16px', display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-        <button
-          onClick={() => navigate(geriYolu)}
-          style={{ padding: '10px 18px', borderRadius: 8, border: '1px solid #ccc', background: 'white', cursor: 'pointer' }}
-        >
-          ← Geri
-        </button>
+      <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
+        <div style={{ fontSize: 12, color: '#888' }}>
+          Kalemlerin/açıklamaların üzerine tıklayıp doğrudan düzenleyebilirsiniz (örn. şasi no eklemek için).
+        </div>
         <div style={{ display: 'flex', gap: 8 }}>
           {notuKaydet && (
             <button
               onClick={notuKaydet}
               disabled={notKaydediliyor}
-              style={{ padding: '10px 18px', borderRadius: 8, border: '1px solid #1c3d6e', background: 'white', color: '#1c3d6e', fontWeight: 600, cursor: 'pointer' }}
+              style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #1c3d6e', background: 'white', color: '#1c3d6e', fontWeight: 600, cursor: 'pointer', fontSize: 12.5 }}
             >
               {notKaydediliyor ? 'Kaydediliyor...' : 'Notu Kaydet'}
             </button>
           )}
           <button
             onClick={() => window.print()}
-            style={{ padding: '10px 18px', borderRadius: 8, border: 'none', background: '#1c3d6e', color: 'white', fontWeight: 600, cursor: 'pointer' }}
+            style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#1c3d6e', color: 'white', fontWeight: 600, cursor: 'pointer', fontSize: 12.5 }}
           >
             Yazdır / PDF olarak kaydet
           </button>
+          {onKapat && (
+            <button onClick={onKapat} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #ccc', background: 'white', cursor: 'pointer', fontSize: 12.5 }}>
+              Kapat
+            </button>
+          )}
         </div>
-      </div>
-      <div className="no-print" style={{ maxWidth: 800, margin: '0 auto 12px', fontSize: 12, color: '#888' }}>
-        Aşağıdaki kalemlerin, açıklamaların ve notların üzerine tıklayıp doğrudan düzenleyebilirsiniz (örn. şasi no eklemek için). Bu değişiklikler sadece bu belge görünümü/çıktısı içindir.
       </div>
 
       <div style={{ maxWidth: 800, margin: '0 auto', background: 'white', padding: 40, fontFamily: 'Arial, sans-serif', color: '#1a1a1a', border: '1px solid #eee' }}>
