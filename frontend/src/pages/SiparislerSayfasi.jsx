@@ -1,7 +1,11 @@
 import { useEffect, useState, Fragment } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { api, hataMesajiCikar } from '../api/client';
 import { Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat, eylemChipStili } from '../components/Ortak';
+import BelgeSablonu from '../components/BelgeSablonu';
+
+const API_TABAN_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 const DURUM_ETIKET = {
   TASLAK: 'notr', ONAYLANDI: 'amber', YOLDA: 'amber', GUMRUKTE: 'amber',
@@ -183,10 +187,15 @@ function SiparisOdemeleriPaneli({ siparis, onKapat }) {
 
 export default function SiparislerSayfasi() {
   const location = useLocation();
+  const { oturum } = useAuth();
   const [siparisler, setSiparisler] = useState([]);
+  const [stokKartlari, setStokKartlari] = useState([]);
+  const [cariler, setCariler] = useState([]);
   const [yukleniyor, setYukleniyor] = useState(true);
   const [hata, setHata] = useState(null);
   const [odemelerAcikSiparisId, setOdemelerAcikSiparisId] = useState(null);
+  const [belgeAcik, setBelgeAcik] = useState(null); // { siparisId, nusha } | null
+  const [belgeNotlari, setBelgeNotlari] = useState({}); // siparisId -> gecici not metni (sadece bu oturum icin)
   const [bilgiMesaji, setBilgiMesaji] = useState(
     location.state?.yeniSiparisNo
       ? location.state.guncellendiMi
@@ -203,7 +212,21 @@ export default function SiparislerSayfasi() {
       .finally(() => setYukleniyor(false));
   }
 
-  useEffect(() => { listeyiYukle(); }, []);
+  useEffect(() => {
+    listeyiYukle();
+    api.get('/stok-kartlari').then((r) => setStokKartlari(r.data)).catch(() => {});
+    api.get('/cariler').then((r) => setCariler(r.data)).catch(() => {});
+  }, []);
+
+  function urunAdi(stokKartiId) {
+    const k = stokKartlari.find((x) => x.id === stokKartiId);
+    return k ? `${k.marka} ${k.model}` : `#${stokKartiId}`;
+  }
+
+  function cariAdi(cariId) {
+    const c = cariler.find((x) => x.id === cariId);
+    return c ? c.unvan : `#${cariId}`;
+  }
 
   async function durumDegistir(siparisId, yeniDurum) {
     try {
@@ -340,12 +363,18 @@ export default function SiparislerSayfasi() {
                           >
                             {odemelerAcikSiparisId === s.id ? 'Ödemeleri Kapat' : 'Ödemeler'}
                           </button>
-                          <Link to={`/siparisler/${s.id}/belge?nusha=ic`} style={eylemChipStili('notr')}>
+                          <button
+                            onClick={() => setBelgeAcik((mevcut) => (mevcut?.siparisId === s.id && mevcut?.nusha === 'ic' ? null : { siparisId: s.id, nusha: 'ic' }))}
+                            style={eylemChipStili('notr')}
+                          >
                             Belge (şirket içi)
-                          </Link>
-                          <Link to={`/siparisler/${s.id}/belge?nusha=tedarikci`} style={eylemChipStili('notr')}>
+                          </button>
+                          <button
+                            onClick={() => setBelgeAcik((mevcut) => (mevcut?.siparisId === s.id && mevcut?.nusha === 'tedarikci' ? null : { siparisId: s.id, nusha: 'tedarikci' }))}
+                            style={eylemChipStili('notr')}
+                          >
                             Belge (tedarikçi)
-                          </Link>
+                          </button>
                           <button onClick={() => pdfIndir(s.id, s.siparis_no, 'ic')} style={eylemChipStili('notr')}>
                             PDF (şirket içi)
                           </button>
@@ -362,6 +391,36 @@ export default function SiparislerSayfasi() {
                       <tr>
                         <td colSpan={6} style={{ padding: 0 }}>
                           <SiparisOdemeleriPaneli siparis={s} onKapat={() => setOdemelerAcikSiparisId(null)} />
+                        </td>
+                      </tr>
+                    )}
+                    {belgeAcik?.siparisId === s.id && (
+                      <tr>
+                        <td colSpan={6} style={{ padding: '12px 16px', background: 'var(--zemin)' }}>
+                          <BelgeSablonu
+                            onKapat={() => setBelgeAcik(null)}
+                            belgeBasligi={`Sipariş Formu${belgeAcik.nusha === 'tedarikci' ? ' (Tedarikçi Nüshası)' : ' (Şirket İçi)'}`}
+                            belgeNo={s.siparis_no}
+                            tarih={s.siparis_tarihi}
+                            sirketAdi={oturum?.sirketler?.find((sr) => sr.id === oturum.aktifSirketId)?.unvan || ''}
+                            logoUrl={oturum?.aktifSirketId ? `${API_TABAN_URL}/sirketler/${oturum.aktifSirketId}/logo` : null}
+                            karsiTarafBaslik="Tedarikçi"
+                            karsiTarafAdi={cariAdi(s.tedarikci_cari_id)}
+                            ekBilgiler={[
+                              ['Kaynak', s.kaynak === 'ITHALAT' ? 'İthalat' : 'Yurtiçi Alım'],
+                              ['Sipariş tarihi', s.siparis_tarihi],
+                              ['Tahmini teslim', s.tahmini_teslim_tarihi || '—'],
+                              ...(s.kaynak === 'ITHALAT' ? [['Çıkış limanı', s.cikis_limani || '—'], ['Varış limanı', s.varis_limani || '—']] : []),
+                            ]}
+                            kalemlerBaslangic={(s.urunler || []).map((u) => ({
+                              aciklama: urunAdi(u.stok_karti_id), miktar: u.miktar, birimFiyat: u.birim_fiyat, kdvOrani: 0,
+                            }))}
+                            paraBirimi={s.para_birimi}
+                            fiyatGoster={belgeAcik.nusha === 'ic'}
+                            notlar={belgeNotlari[s.id] ?? (s.notlar || '')}
+                            notlarDegistir={(v) => setBelgeNotlari((f) => ({ ...f, [s.id]: v }))}
+                            altYazi="Bu belge üzerindeki not/kalem değişiklikleri sadece bu görünüm/yazdırma içindir, sipariş kaydını güncellemez."
+                          />
                         </td>
                       </tr>
                     )}
