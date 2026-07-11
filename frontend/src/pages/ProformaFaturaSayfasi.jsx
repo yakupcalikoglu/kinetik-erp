@@ -1,7 +1,10 @@
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useState, Fragment } from 'react';
+import { useAuth } from '../context/AuthContext';
 import { api, hataMesajiCikar } from '../api/client';
 import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, BosDurum, Etiket, paraFormat, eylemChipStili, Sekmeler } from '../components/Ortak';
+import BelgeSablonu from '../components/BelgeSablonu';
+
+const API_TABAN_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 const ODEME_TIPLERI = [
   { deger: 'PESIN_NAKIT', etiket: 'Nakit' },
@@ -196,9 +199,12 @@ const DURUM_TON = { TASLAK: 'notr', ONAYLANDI: 'amber', FATURALASTI: 'yesil' };
 const DURUM_METIN = { TASLAK: 'Taslak', ONAYLANDI: 'Onaylandı', FATURALASTI: 'Faturalaştı' };
 
 function GecmisProformalar({ cariler, yenidenYukleTetik, onGoruntule }) {
+  const { oturum } = useAuth();
   const [liste, setListe] = useState([]);
   const [hata, setHata] = useState(null);
   const [yukleniyor, setYukleniyor] = useState(true);
+  const [belgeAcikId, setBelgeAcikId] = useState(null);
+  const [belgeNotlari, setBelgeNotlari] = useState({});
 
   function yukle() {
     setYukleniyor(true);
@@ -245,22 +251,56 @@ function GecmisProformalar({ cariler, yenidenYukleTetik, onGoruntule }) {
           </thead>
           <tbody>
             {liste.map((p) => (
-              <tr key={p.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
-                <td style={{ padding: '10px 16px', fontWeight: 500 }}>{p.proforma_no}</td>
-                <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{cariUnvani(p.cari_id)}</td>
-                <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{p.tarih}</td>
-                <td style={{ padding: '10px 16px', fontWeight: 500 }}>{paraFormat(p.genel_toplam, p.para_birimi)}</td>
-                <td style={{ padding: '10px 16px' }}><Etiket ton={DURUM_TON[p.durum]}>{DURUM_METIN[p.durum] || p.durum}</Etiket></td>
-                <td style={{ padding: '10px 16px' }}>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <button onClick={() => onGoruntule(p)} style={eylemChipStili('lacivert')}>Görüntüle</button>
-                    <Link to={`/proforma-fatura/proforma/${p.id}/belge`} style={eylemChipStili('lacivert')}>Belge / Yazdır</Link>
-                    {p.durum !== 'FATURALASTI' && (
-                      <button onClick={() => sil(p)} style={eylemChipStili('kirmizi')}>Sil</button>
-                    )}
-                  </div>
-                </td>
-              </tr>
+              <Fragment key={p.id}>
+                <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                  <td style={{ padding: '10px 16px', fontWeight: 500 }}>{p.proforma_no}</td>
+                  <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{cariUnvani(p.cari_id)}</td>
+                  <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{p.tarih}</td>
+                  <td style={{ padding: '10px 16px', fontWeight: 500 }}>{paraFormat(p.genel_toplam, p.para_birimi)}</td>
+                  <td style={{ padding: '10px 16px' }}><Etiket ton={DURUM_TON[p.durum]}>{DURUM_METIN[p.durum] || p.durum}</Etiket></td>
+                  <td style={{ padding: '10px 16px' }}>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button onClick={() => onGoruntule(p)} style={eylemChipStili('lacivert')}>Görüntüle</button>
+                      <button onClick={() => setBelgeAcikId((mevcut) => (mevcut === p.id ? null : p.id))} style={eylemChipStili('lacivert')}>
+                        {belgeAcikId === p.id ? 'Belgeyi Kapat' : 'Belge / Yazdır'}
+                      </button>
+                      {p.durum !== 'FATURALASTI' && (
+                        <button onClick={() => sil(p)} style={eylemChipStili('kirmizi')}>Sil</button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+                {belgeAcikId === p.id && (
+                  <tr>
+                    <td colSpan={6} style={{ padding: '12px 16px', background: 'var(--zemin)' }}>
+                      <BelgeSablonu
+                        onKapat={() => setBelgeAcikId(null)}
+                        belgeBasligi="Proforma Fatura"
+                        belgeNo={p.proforma_no}
+                        tarih={p.tarih}
+                        sirketAdi={oturum?.sirketler?.find((sr) => sr.id === oturum.aktifSirketId)?.unvan || ''}
+                        logoUrl={oturum?.aktifSirketId ? `${API_TABAN_URL}/sirketler/${oturum.aktifSirketId}/logo` : null}
+                        karsiTarafBaslik="Müşteri"
+                        karsiTarafAdi={cariUnvani(p.cari_id)}
+                        ekBilgiler={[['Durum', DURUM_METIN[p.durum] || p.durum]]}
+                        kalemlerBaslangic={(p.kalemler || []).map((k) => ({
+                          aciklama: k.aciklama || '', miktar: k.miktar, birimFiyat: k.birim_fiyat, kdvOrani: k.kdv_orani,
+                        }))}
+                        paraBirimi={p.para_birimi}
+                        notlar={belgeNotlari[p.id] ?? (p.notlar || '')}
+                        notlarDegistir={(v) => setBelgeNotlari((f) => ({ ...f, [p.id]: v }))}
+                        notKaydediliyor={false}
+                        notuKaydet={async () => {
+                          try {
+                            await api.put(`/proforma-faturalar/${p.id}/notlar`, { notlar: belgeNotlari[p.id] ?? (p.notlar || '') });
+                          } catch (err) { setHata(hataMesajiCikar(err)); }
+                        }}
+                        altYazi="Bu proforma teklif niteliğindedir, resmi fatura değildir. Kalem değişiklikleri sadece bu görünüm/yazdırma içindir."
+                      />
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
             ))}
           </tbody>
         </table>
@@ -270,9 +310,12 @@ function GecmisProformalar({ cariler, yenidenYukleTetik, onGoruntule }) {
 }
 
 function GecmisFaturalar({ cariler, yenidenYukleTetik }) {
+  const { oturum } = useAuth();
   const [liste, setListe] = useState([]);
   const [hata, setHata] = useState(null);
   const [yukleniyor, setYukleniyor] = useState(true);
+  const [belgeAcikId, setBelgeAcikId] = useState(null);
+  const [belgeNotlari, setBelgeNotlari] = useState({});
 
   function yukle() {
     setYukleniyor(true);
@@ -319,18 +362,52 @@ function GecmisFaturalar({ cariler, yenidenYukleTetik }) {
           </thead>
           <tbody>
             {liste.map((f) => (
-              <tr key={f.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
-                <td style={{ padding: '10px 16px', fontWeight: 500 }}>{f.fatura_no}</td>
-                <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{cariUnvani(f.cari_id)}</td>
-                <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{f.tarih}</td>
-                <td style={{ padding: '10px 16px', fontWeight: 500 }}>{paraFormat(f.genel_toplam, f.para_birimi)}</td>
-                <td style={{ padding: '10px 16px' }}>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <Link to={`/proforma-fatura/fatura/${f.id}/belge`} style={eylemChipStili('lacivert')}>Belge / Yazdır</Link>
-                    <button onClick={() => iptalEt(f)} style={eylemChipStili('kirmizi')}>İptal Et</button>
-                  </div>
-                </td>
-              </tr>
+              <Fragment key={f.id}>
+                <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                  <td style={{ padding: '10px 16px', fontWeight: 500 }}>{f.fatura_no}</td>
+                  <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{cariUnvani(f.cari_id)}</td>
+                  <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{f.tarih}</td>
+                  <td style={{ padding: '10px 16px', fontWeight: 500 }}>{paraFormat(f.genel_toplam, f.para_birimi)}</td>
+                  <td style={{ padding: '10px 16px' }}>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button onClick={() => setBelgeAcikId((mevcut) => (mevcut === f.id ? null : f.id))} style={eylemChipStili('lacivert')}>
+                        {belgeAcikId === f.id ? 'Belgeyi Kapat' : 'Belge / Yazdır'}
+                      </button>
+                      <button onClick={() => iptalEt(f)} style={eylemChipStili('kirmizi')}>İptal Et</button>
+                    </div>
+                  </td>
+                </tr>
+                {belgeAcikId === f.id && (
+                  <tr>
+                    <td colSpan={5} style={{ padding: '12px 16px', background: 'var(--zemin)' }}>
+                      <BelgeSablonu
+                        onKapat={() => setBelgeAcikId(null)}
+                        belgeBasligi="Fatura"
+                        belgeNo={f.fatura_no}
+                        tarih={f.tarih}
+                        sirketAdi={oturum?.sirketler?.find((sr) => sr.id === oturum.aktifSirketId)?.unvan || ''}
+                        logoUrl={oturum?.aktifSirketId ? `${API_TABAN_URL}/sirketler/${oturum.aktifSirketId}/logo` : null}
+                        karsiTarafBaslik="Müşteri"
+                        karsiTarafAdi={cariUnvani(f.cari_id)}
+                        ekBilgiler={[['Ödeme durumu', f.odeme_durumu === 'ODENDI' ? 'Ödendi' : 'Ödenmedi']]}
+                        kalemlerBaslangic={(f.kalemler || []).map((k) => ({
+                          aciklama: k.aciklama || '', miktar: k.miktar, birimFiyat: k.birim_fiyat, kdvOrani: k.kdv_orani,
+                        }))}
+                        paraBirimi={f.para_birimi}
+                        notlar={belgeNotlari[f.id] ?? (f.notlar || '')}
+                        notlarDegistir={(v) => setBelgeNotlari((s) => ({ ...s, [f.id]: v }))}
+                        notKaydediliyor={false}
+                        notuKaydet={async () => {
+                          try {
+                            await api.put(`/faturalar/${f.id}/notlar`, { notlar: belgeNotlari[f.id] ?? (f.notlar || '') });
+                          } catch (err) { setHata(hataMesajiCikar(err)); }
+                        }}
+                        altYazi="Kalem değişiklikleri sadece bu görünüm/yazdırma içindir."
+                      />
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
             ))}
           </tbody>
         </table>
