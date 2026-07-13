@@ -1,8 +1,12 @@
 import { useEffect, useState, Fragment } from 'react';
+import { useAuth } from '../context/AuthContext';
 import { api, hataMesajiCikar } from '../api/client';
+import { excelIndir } from '../utils/disaAktarma';
 import {
   Kart, SayfaBasligi, Buton, Etiket, Alan, girdiStili, BosDurum, HataMesaji, paraFormat, eylemChipStili,
 } from '../components/Ortak';
+
+const API_TABAN_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 const TIP_ETIKET = {
   MUSTERI: { metin: 'Müşteri', ton: 'yesil' },
@@ -292,6 +296,7 @@ function CariHareketleri({ cari, onKapat }) {
 }
 
 export default function CarilerSayfasi() {
+  const { oturum } = useAuth();
   const [cariler, setCariler] = useState([]);
   const [yukleniyor, setYukleniyor] = useState(true);
   const [hata, setHata] = useState(null);
@@ -309,6 +314,18 @@ export default function CarilerSayfasi() {
   }
 
   useEffect(() => { listeyiYukle(); }, []); // eslint-disable-line
+
+  function cariExcelIndir() {
+    const veri = cariler.map((c) => ({
+      'Unvan': c.unvan,
+      'Tip': TIP_ETIKET[c.tip]?.metin || c.tip,
+      'Vergi No': c.vergi_no || '',
+      'Telefon': c.telefon || '',
+      'Bakiye (TL)': Number(c.bakiye_try || 0),
+      'Bakiye (USD)': Number(c.bakiye_usd || 0),
+    }));
+    excelIndir(veri, 'cari_listesi', 'Cariler');
+  }
 
   function yeniCariAc() {
     setDuzenlenenCari(null);
@@ -337,10 +354,47 @@ export default function CarilerSayfasi() {
 
   return (
     <div>
+      <style>{`
+        .yazdirma-basligi { display: none; }
+        @media print {
+          .no-print { display: none !important; }
+          button { display: none !important; }
+        }
+      `}</style>
+
+      <div className="yazdirma-basligi" style={{ alignItems: 'center', gap: 12, marginBottom: 16 }}>
+        {oturum?.aktifSirketId && (
+          <img
+            src={`${API_TABAN_URL}/sirketler/${oturum.aktifSirketId}/logo`}
+            alt="Logo"
+            onError={(e) => { e.target.style.display = 'none'; }}
+            style={{ maxHeight: 50, maxWidth: 130, objectFit: 'contain' }}
+          />
+        )}
+        <div>
+          <div style={{ fontSize: 17, fontWeight: 700 }}>
+            {oturum?.sirketler?.find((s) => s.id === oturum.aktifSirketId)?.unvan || ''}
+          </div>
+          <div style={{ fontSize: 13, color: '#555' }}>
+            Cari Listesi — {new Date().toLocaleDateString('tr-TR')}
+          </div>
+        </div>
+      </div>
+
       <SayfaBasligi
         baslik="Cari hesaplar"
         aciklama="Müşteri, tedarikçi, personel ve ortak kayıtları"
-        eylem={!formAcik && <Buton onClick={yeniCariAc}>+ Yeni cari</Buton>}
+        eylem={
+          <div className="no-print" style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => window.print()} style={{ padding: '10px 16px', borderRadius: 8, border: '1px solid var(--kenarlik-koyu)', background: 'white', cursor: 'pointer' }}>
+              Yazdır
+            </button>
+            <button onClick={cariExcelIndir} style={{ padding: '10px 16px', borderRadius: 8, border: '1px solid var(--kenarlik-koyu)', background: 'white', cursor: 'pointer' }}>
+              Excel İndir
+            </button>
+            {!formAcik && <Buton onClick={yeniCariAc}>+ Yeni cari</Buton>}
+          </div>
+        }
       />
 
       <HataMesaji>{hata}</HataMesaji>
