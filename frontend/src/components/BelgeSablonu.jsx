@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { api } from '../api/client';
 
 function bosKalem() {
   return { aciklama: '', miktar: 1, birimFiyat: '', kdvOrani: 0 };
@@ -6,21 +7,24 @@ function bosKalem() {
 
 // Siparis, Proforma ve Fatura icin ortak, TAMAMEN DUZENLENEBILIR ve
 // yazdirmaya hazir belge PANELI. Liste satirinin altinda ACILIR (ayri bir
-// sayfaya gidilmez) - boylece veri zaten elde oldugu icin ekstra bir API
-// cagrisina/ID cozumlemesine gerek kalmaz. Kullanici sirket logosunu,
-// kalemleri (aciklama - orn. sasi no eklemek icin -, miktar, fiyat),
-// notlari serbestce degistirebilir; toplamlar degisikliklere gore anlik
-// yeniden hesaplanir. "Yazdir / PDF olarak kaydet" ile tarayicinin
-// yazdirma penceresi acilir (orada "PDF olarak kaydet" secilebilir).
+// sayfaya gidilmez). Karsi taraf adi, tarih, logo, kalemler ve notlar
+// serbestce degistirilebilir; toplamlar degisikliklere gore anlik yeniden
+// hesaplanir. "Yazdir / PDF olarak kaydet" ile tarayicinin yazdirma
+// penceresi acilir (orada "PDF olarak kaydet" secilebilir).
 export default function BelgeSablonu({
-  onKapat, belgeBasligi, belgeNo, tarih, sirketAdi, logoUrl,
-  karsiTarafBaslik, karsiTarafAdi, ekBilgiler,
+  onKapat, belgeBasligi, belgeNo,
+  tarihBaslangic, sirketAdi, sirketId, logoUrl: logoUrlBaslangic,
+  karsiTarafBaslik, karsiTarafAdiBaslangic, ekBilgiler,
   kalemlerBaslangic, paraBirimi, fiyatGoster = true,
   notlar, notlarDegistir, notKaydediliyor, notuKaydet,
   altYazi,
 }) {
   const [kalemler, setKalemler] = useState(kalemlerBaslangic);
   const [logoHata, setLogoHata] = useState(false);
+  const [logoUrl, setLogoUrl] = useState(logoUrlBaslangic);
+  const [logoYukleniyor, setLogoYukleniyor] = useState(false);
+  const [karsiTarafAdi, setKarsiTarafAdi] = useState(karsiTarafAdiBaslangic);
+  const [tarih, setTarih] = useState(tarihBaslangic);
 
   function kalemGuncelle(i, alan, deger) {
     setKalemler((liste) => liste.map((k, idx) => (idx === i ? { ...k, [alan]: deger } : k)));
@@ -30,6 +34,23 @@ export default function BelgeSablonu({
   }
   function kalemSil(i) {
     setKalemler((liste) => liste.filter((_, idx) => idx !== i));
+  }
+
+  async function logoDegistir(e) {
+    const dosya = e.target.files?.[0];
+    if (!dosya || !sirketId) return;
+    setLogoYukleniyor(true);
+    try {
+      const form = new FormData();
+      form.append('dosya', dosya);
+      await api.post(`/sirketler/${sirketId}/logo`, form);
+      setLogoHata(false);
+      setLogoUrl(`${logoUrlBaslangic}?t=${Date.now()}`); // onbellek kirma
+    } catch {
+      setLogoHata(true);
+    } finally {
+      setLogoYukleniyor(false);
+    }
   }
 
   const satirlar = kalemler.map((k) => {
@@ -58,11 +79,13 @@ export default function BelgeSablonu({
         .belge-girdi { width: 100%; border: 1px solid transparent; background: transparent; font-size: 13px; font-family: inherit; padding: 2px 4px; border-radius: 4px; }
         .belge-girdi:hover, .belge-girdi:focus { border-color: #ccc; background: #fafafa; outline: none; }
         .belge-notlar { width: 100%; min-height: 90px; border: 1px solid #ccc; border-radius: 6px; padding: 10px; font-size: 13px; font-family: inherit; box-sizing: border-box; }
+        .belge-baslik-girdi { border: 1px solid transparent; background: transparent; font-family: inherit; padding: 2px 4px; border-radius: 4px; }
+        .belge-baslik-girdi:hover, .belge-baslik-girdi:focus { border-color: #ccc; background: #fafafa; outline: none; }
       `}</style>
 
       <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
         <div style={{ fontSize: 12, color: '#888' }}>
-          Kalemlerin/açıklamaların üzerine tıklayıp doğrudan düzenleyebilirsiniz (örn. şasi no eklemek için).
+          Karşı taraf adı, tarih, logo, kalemler ve notlar üzerine tıklayıp doğrudan düzenleyebilirsiniz.
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           {notuKaydet && (
@@ -91,26 +114,52 @@ export default function BelgeSablonu({
       <div style={{ maxWidth: 800, margin: '0 auto', background: 'white', padding: 40, fontFamily: 'Arial, sans-serif', color: '#1a1a1a', border: '1px solid #eee' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div className="no-print" style={{ position: 'relative' }}>
+              {logoUrl && !logoHata ? (
+                <img
+                  src={logoUrl}
+                  alt="Logo"
+                  onError={() => setLogoHata(true)}
+                  style={{ maxHeight: 56, maxWidth: 140, objectFit: 'contain' }}
+                />
+              ) : (
+                <div style={{ fontSize: 11, color: '#aaa', border: '1px dashed #ccc', borderRadius: 6, padding: '10px 14px' }}>Logo yok</div>
+              )}
+              <label style={{ display: 'block', fontSize: 10.5, color: '#1c3d6e', cursor: 'pointer', marginTop: 4, textAlign: 'center' }}>
+                {logoYukleniyor ? 'Yükleniyor...' : (logoUrl && !logoHata ? 'Logoyu değiştir' : 'Logo yükle')}
+                <input type="file" accept="image/*" onChange={logoDegistir} disabled={logoYukleniyor} style={{ display: 'none' }} />
+              </label>
+            </div>
+            {/* Yazdirirken sadece logo gorunsun, yukleme etiketi gizlensin */}
             {logoUrl && !logoHata && (
-              <img
-                src={logoUrl}
-                alt="Logo"
-                onError={() => setLogoHata(true)}
-                style={{ maxHeight: 56, maxWidth: 140, objectFit: 'contain' }}
-              />
+              <img src={logoUrl} alt="Logo" className="print-only-logo" style={{ display: 'none', maxHeight: 56, maxWidth: 140, objectFit: 'contain' }} />
             )}
             <div style={{ fontSize: 20, fontWeight: 700 }}>{sirketAdi}</div>
           </div>
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontSize: 18, fontWeight: 700 }}>{belgeBasligi}</div>
             <div style={{ fontSize: 13, color: '#555' }}>No: {belgeNo}</div>
-            <div style={{ fontSize: 13, color: '#555' }}>Tarih: {tarih}</div>
+            <div style={{ fontSize: 13, color: '#555', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
+              Tarih:
+              <input
+                type="date"
+                className="belge-baslik-girdi"
+                value={tarih}
+                onChange={(e) => setTarih(e.target.value)}
+                style={{ fontSize: 13, color: '#555' }}
+              />
+            </div>
           </div>
         </div>
 
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 12, color: '#777', marginBottom: 2 }}>{karsiTarafBaslik}</div>
-          <div style={{ fontSize: 14, fontWeight: 600 }}>{karsiTarafAdi}</div>
+          <input
+            className="belge-baslik-girdi"
+            value={karsiTarafAdi}
+            onChange={(e) => setKarsiTarafAdi(e.target.value)}
+            style={{ fontSize: 14, fontWeight: 600, width: '100%', maxWidth: 400 }}
+          />
         </div>
 
         {ekBilgiler && ekBilgiler.length > 0 && (
