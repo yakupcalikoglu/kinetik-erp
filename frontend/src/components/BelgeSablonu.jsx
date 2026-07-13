@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api } from '../api/client';
+import { excelIndir } from '../utils/disaAktarma';
 
 function bosKalem() {
   return { aciklama: '', miktar: 1, birimFiyat: '', kdvOrani: 0 };
@@ -97,6 +98,19 @@ export default function BelgeSablonu({
               {notKaydediliyor ? 'Kaydediliyor...' : 'Notu Kaydet'}
             </button>
           )}
+          <button
+            onClick={() => excelIndir(
+              satirlar.map((s) => ({
+                'Açıklama': s.aciklama, 'Miktar': s.miktar,
+                ...(fiyatGoster ? { 'Birim Fiyat': Number(s.birimFiyat) || 0, 'Tutar': s.satirTutar } : {}),
+              })),
+              `${belgeBasligi}_${belgeNo}`.replace(/\s+/g, '_'), 'Kalemler'
+            )}
+            className="no-print"
+            style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #1c3d6e', background: 'white', color: '#1c3d6e', fontWeight: 600, cursor: 'pointer', fontSize: 12.5 }}
+          >
+            Excel İndir
+          </button>
           <button
             onClick={() => window.print()}
             style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#1c3d6e', color: 'white', fontWeight: 600, cursor: 'pointer', fontSize: 12.5 }}
