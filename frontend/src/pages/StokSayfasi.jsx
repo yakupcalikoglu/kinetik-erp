@@ -1,7 +1,10 @@
 import { useEffect, useState, Fragment } from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { api, hataMesajiCikar } from '../api/client';
 import { excelIndir } from '../utils/disaAktarma';
+
+const API_TABAN_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 import {
   Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat,
   eylemChipStili,
@@ -439,6 +442,7 @@ function UrunDuzenleFormu({ urun, stokKartlari, onKaydedildi, onVazgec }) {
 }
 
 export default function StokSayfasi() {
+  const { oturum } = useAuth();
   const [tumUrunler, setTumUrunler] = useState([]);
   const [urunler, setUrunler] = useState([]);
   const [stokKartlari, setStokKartlari] = useState([]);
@@ -588,12 +592,33 @@ export default function StokSayfasi() {
   return (
     <div>
       <style>{`
+        .yazdirma-basligi { display: none; }
         @media print {
           .no-print { display: none !important; }
           button { display: none !important; }
           input[type="checkbox"] { display: none !important; }
+          .yazdirma-basligi { display: flex !important; }
         }
       `}</style>
+
+      <div className="yazdirma-basligi" style={{ alignItems: 'center', gap: 12, marginBottom: 16 }}>
+        {oturum?.aktifSirketId && (
+          <img
+            src={`${API_TABAN_URL}/sirketler/${oturum.aktifSirketId}/logo`}
+            alt="Logo"
+            onError={(e) => { e.target.style.display = 'none'; }}
+            style={{ maxHeight: 50, maxWidth: 130, objectFit: 'contain' }}
+          />
+        )}
+        <div>
+          <div style={{ fontSize: 17, fontWeight: 700 }}>
+            {oturum?.sirketler?.find((s) => s.id === oturum.aktifSirketId)?.unvan || ''}
+          </div>
+          <div style={{ fontSize: 13, color: '#555' }}>
+            Stok Listesi{durumFiltre ? ` — ${DURUM_METIN[durumFiltre]}` : ''} — {new Date().toLocaleDateString('tr-TR')}
+          </div>
+        </div>
+      </div>
 
       <SayfaBasligi
         baslik="Stok"
