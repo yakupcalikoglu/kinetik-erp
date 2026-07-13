@@ -353,8 +353,8 @@ def ana_kasa_ozet(
         sorgu = sorgu.where(KasaHareketi.tarih <= bitis)
     hareketler = list(db.execute(sorgu).scalars())
 
-    toplam_giris = sum((h.tutar_try for h in hareketler if h.yon.value == "GIRIS"), Decimal("0"))
-    toplam_cikis = sum((h.tutar_try for h in hareketler if h.yon.value == "CIKIS"), Decimal("0"))
+    toplam_giris = sum((h.tutar_try_karsiligi or h.tutar for h in hareketler if h.yon.value == "GIRIS"), Decimal("0"))
+    toplam_cikis = sum((h.tutar_try_karsiligi or h.tutar for h in hareketler if h.yon.value == "CIKIS"), Decimal("0"))
 
     return AnaKasaOzetYaniti(
         baslangic=baslangic, bitis=bitis,
