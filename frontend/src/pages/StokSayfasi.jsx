@@ -115,7 +115,7 @@ function MaliyetKalemiEkleFormu({ urun, onKaydedildi }) {
   );
 }
 
-function MaliyetKalemiDuzenleFormu({ kalem, onKaydedildi, onVazgec }) {
+function MaliyetKalemiDuzenleFormu({ kalem, urunId, onKaydedildi, onVazgec }) {
   const [cariler, setCariler] = useState([]);
   const [form, setForm] = useState({
     tip: kalem.tip, tutar: kalem.tutar, para_birimi: kalem.para_birimi, kur: kalem.kur,
@@ -134,7 +134,7 @@ function MaliyetKalemiDuzenleFormu({ kalem, onKaydedildi, onVazgec }) {
     setHata(null);
     setKaydediliyor(true);
     try {
-      await api.put(`/stok-seri-no/${kalem.stok_seri_no_id}/maliyet-kalemi/${kalem.id}`, {
+      await api.put(`/stok-seri-no/${urunId}/maliyet-kalemi/${kalem.id}`, {
         tip: form.tip,
         tutar: Number(form.tutar),
         para_birimi: form.para_birimi,
@@ -321,6 +321,7 @@ function MaliyetDetayi({ urun, onKapat }) {
                   <MaliyetKalemiDuzenleFormu
                     key={k.id}
                     kalem={k}
+                    urunId={urun.id}
                     onKaydedildi={() => { setDuzenlenenId(null); yukle(); }}
                     onVazgec={() => setDuzenlenenId(null)}
                   />
