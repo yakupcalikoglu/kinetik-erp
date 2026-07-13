@@ -401,11 +401,12 @@ export default function SiparislerSayfasi() {
                             onKapat={() => setBelgeAcik(null)}
                             belgeBasligi={`Sipariş Formu${belgeAcik.nusha === 'tedarikci' ? ' (Tedarikçi Nüshası)' : ' (Şirket İçi)'}`}
                             belgeNo={s.siparis_no}
-                            tarih={s.siparis_tarihi}
+                            tarihBaslangic={s.siparis_tarihi}
                             sirketAdi={oturum?.sirketler?.find((sr) => sr.id === oturum.aktifSirketId)?.unvan || ''}
+                            sirketId={oturum?.aktifSirketId}
                             logoUrl={oturum?.aktifSirketId ? `${API_TABAN_URL}/sirketler/${oturum.aktifSirketId}/logo` : null}
                             karsiTarafBaslik="Tedarikçi"
-                            karsiTarafAdi={cariAdi(s.tedarikci_cari_id)}
+                            karsiTarafAdiBaslangic={cariAdi(s.tedarikci_cari_id)}
                             ekBilgiler={[
                               ['Kaynak', s.kaynak === 'ITHALAT' ? 'İthalat' : 'Yurtiçi Alım'],
                               ['Sipariş tarihi', s.siparis_tarihi],
