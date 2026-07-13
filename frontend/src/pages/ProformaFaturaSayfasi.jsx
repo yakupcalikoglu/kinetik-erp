@@ -277,11 +277,12 @@ function GecmisProformalar({ cariler, yenidenYukleTetik, onGoruntule }) {
                         onKapat={() => setBelgeAcikId(null)}
                         belgeBasligi="Proforma Fatura"
                         belgeNo={p.proforma_no}
-                        tarih={p.tarih}
+                        tarihBaslangic={p.tarih}
                         sirketAdi={oturum?.sirketler?.find((sr) => sr.id === oturum.aktifSirketId)?.unvan || ''}
+                        sirketId={oturum?.aktifSirketId}
                         logoUrl={oturum?.aktifSirketId ? `${API_TABAN_URL}/sirketler/${oturum.aktifSirketId}/logo` : null}
                         karsiTarafBaslik="Müşteri"
-                        karsiTarafAdi={cariUnvani(p.cari_id)}
+                        karsiTarafAdiBaslangic={cariUnvani(p.cari_id)}
                         ekBilgiler={[['Durum', DURUM_METIN[p.durum] || p.durum]]}
                         kalemlerBaslangic={(p.kalemler || []).map((k) => ({
                           aciklama: k.aciklama || '', miktar: k.miktar, birimFiyat: k.birim_fiyat, kdvOrani: k.kdv_orani,
@@ -384,11 +385,12 @@ function GecmisFaturalar({ cariler, yenidenYukleTetik }) {
                         onKapat={() => setBelgeAcikId(null)}
                         belgeBasligi="Fatura"
                         belgeNo={f.fatura_no}
-                        tarih={f.tarih}
+                        tarihBaslangic={f.tarih}
                         sirketAdi={oturum?.sirketler?.find((sr) => sr.id === oturum.aktifSirketId)?.unvan || ''}
+                        sirketId={oturum?.aktifSirketId}
                         logoUrl={oturum?.aktifSirketId ? `${API_TABAN_URL}/sirketler/${oturum.aktifSirketId}/logo` : null}
                         karsiTarafBaslik="Müşteri"
-                        karsiTarafAdi={cariUnvani(f.cari_id)}
+                        karsiTarafAdiBaslangic={cariUnvani(f.cari_id)}
                         ekBilgiler={[['Ödeme durumu', f.odeme_durumu === 'ODENDI' ? 'Ödendi' : 'Ödenmedi']]}
                         kalemlerBaslangic={(f.kalemler || []).map((k) => ({
                           aciklama: k.aciklama || '', miktar: k.miktar, birimFiyat: k.birim_fiyat, kdvOrani: k.kdv_orani,
