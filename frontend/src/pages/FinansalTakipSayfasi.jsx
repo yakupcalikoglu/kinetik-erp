@@ -149,6 +149,30 @@ function useHarcamaTurleri() {
   return turler;
 }
 
+// "Yeni ekle" formlarinda (henuz odeme yapilmamis asamada) dovizli tutarin
+// yaklasik TL karsiligini gostermek icin kullanilir. Sadece bilgi amaclidir,
+// hicbir yere kaydedilmez - gercek TL karsiligi asil odeme anindaki kurla
+// belirlenir (OdemeFormu).
+function DovizKarsiligiGosterge({ tutar, paraBirimi }) {
+  const [kur, setKur] = useState('1');
+  useEffect(() => {
+    if (!paraBirimi || paraBirimi === 'TRY') return;
+    api.get(`/kur/${paraBirimi}`).then((r) => setKur(r.data.kur)).catch(() => {});
+  }, [paraBirimi]);
+
+  if (!paraBirimi || paraBirimi === 'TRY') return null;
+  const tl = tutar ? Number(tutar) * (Number(kur) || 0) : null;
+
+  return (
+    <Alan etiket={`${paraBirimi} için TL kuru (yaklaşık, bilgi amaçlı)`}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <input type="number" step="0.0001" value={kur} onChange={(e) => setKur(e.target.value)} style={{ ...girdiStili, width: 100 }} />
+        {tl != null && <span style={{ fontSize: 12.5, color: 'var(--metin-ikincil)', whiteSpace: 'nowrap' }}>≈ {paraFormat(tl)}</span>}
+      </div>
+    </Alan>
+  );
+}
+
 function cariGoster(id, harita) {
   if (id === null || id === undefined || id === '') return '—';
   const unvan = harita[id];
@@ -359,6 +383,7 @@ function CekSekmesi() {
                 <option value="EUR">EUR</option>
               </select>
             </Alan>
+            <DovizKarsiligiGosterge tutar={form.tutar} paraBirimi={form.para_birimi} />
             <Alan etiket="Vade tarihi">
               <input required type="date" value={form.vade_tarihi} onChange={(e) => setForm((f) => ({ ...f, vade_tarihi: e.target.value }))} style={girdiStili} />
             </Alan>
@@ -1213,6 +1238,7 @@ function AkreditifSekmesi() {
             <Alan etiket="Tutar">
               <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
             </Alan>
+            <DovizKarsiligiGosterge tutar={form.tutar} paraBirimi={form.para_birimi} />
             <Alan etiket="Açılış tarihi">
               <input required type="date" value={form.acilis_tarihi} onChange={(e) => setForm((f) => ({ ...f, acilis_tarihi: e.target.value }))} style={girdiStili} />
             </Alan>
@@ -1815,6 +1841,7 @@ function LeasingSekmesi() {
             <Alan etiket="Toplam tutar">
               <input required type="number" step="0.01" value={form.toplam_tutar} onChange={(e) => setForm((f) => ({ ...f, toplam_tutar: e.target.value }))} style={girdiStili} />
             </Alan>
+            <DovizKarsiligiGosterge tutar={form.toplam_tutar} paraBirimi={form.para_birimi} />
             <Alan etiket="Taksit sayısı">
               <input required type="number" min="1" value={form.taksit_sayisi} onChange={(e) => setForm((f) => ({ ...f, taksit_sayisi: e.target.value }))} style={girdiStili} />
             </Alan>
@@ -2049,6 +2076,7 @@ function KiralamaSekmesi() {
             <Alan etiket="Aylık kira tutarı">
               <input required type="number" step="0.01" value={form.aylik_kira_tutari} onChange={(e) => setForm((f) => ({ ...f, aylik_kira_tutari: e.target.value }))} style={girdiStili} />
             </Alan>
+            <DovizKarsiligiGosterge tutar={form.aylik_kira_tutari} paraBirimi={form.para_birimi} />
             <div style={{ alignSelf: 'end' }}><Buton type="submit">{duzenlenenSozlesme ? 'Değişiklikleri kaydet' : 'Kaydet'}</Buton></div>
           </form>
         </Kart>
@@ -2575,6 +2603,7 @@ function BorcSekmesi() {
             <Alan etiket="Tutar">
               <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
             </Alan>
+            <DovizKarsiligiGosterge tutar={form.tutar} paraBirimi={form.para_birimi} />
             <Alan etiket="Alınma tarihi">
               <input required type="date" value={form.alinma_tarihi} onChange={(e) => setForm((f) => ({ ...f, alinma_tarihi: e.target.value }))} style={girdiStili} />
             </Alan>
