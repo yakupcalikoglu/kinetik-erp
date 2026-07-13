@@ -1,6 +1,7 @@
 import { useEffect, useState, Fragment } from 'react';
 import { Link } from 'react-router-dom';
 import { api, hataMesajiCikar } from '../api/client';
+import { excelIndir } from '../utils/disaAktarma';
 import {
   Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat,
   eylemChipStili,
@@ -552,6 +553,19 @@ export default function StokSayfasi() {
 
   // Ayni siparise ait urunler ekranda yan yana gorunsun diye siparis_id'ye
   // gore grupluyoruz (siparissiz/manuel urunler en sona duser).
+  function stokExcelIndir() {
+    const veri = gruplananUrunler.map((u) => ({
+      'Seri No': u.seri_no,
+      'Ürün': urunAdiGoster(u.stok_karti_id),
+      'Sipariş No': siparisNoGoster(u.siparis_id),
+      'Durum': DURUM_METIN[u.durum] || u.durum,
+      'Toplam Maliyet (TL)': Number(u.toplam_maliyet_try),
+      'Satış Fiyatı (TL)': u.satis_fiyati_try != null ? Number(u.satis_fiyati_try) : '',
+    }));
+    const dosyaAdi = durumFiltre ? `stok_${durumFiltre.toLowerCase()}` : 'stok_listesi';
+    excelIndir(veri, dosyaAdi, 'Stok');
+  }
+
   const gruplananUrunler = [...urunler].sort((a, b) => {
     if (a.siparis_id === b.siparis_id) return a.id - b.id;
     if (a.siparis_id == null) return 1;
@@ -573,14 +587,32 @@ export default function StokSayfasi() {
 
   return (
     <div>
+      <style>{`
+        @media print {
+          .no-print { display: none !important; }
+          button { display: none !important; }
+          input[type="checkbox"] { display: none !important; }
+        }
+      `}</style>
+
       <SayfaBasligi
         baslik="Stok"
         aciklama="Fiziksel envanter — konum/duruma göre gruplanmış ve filtrelenebilir"
-        eylem={<Link to="/satis-yap"><Buton>+ Satış Yap</Buton></Link>}
+        eylem={
+          <div className="no-print" style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => window.print()} style={{ padding: '10px 16px', borderRadius: 8, border: '1px solid var(--kenarlik-koyu)', background: 'white', cursor: 'pointer' }}>
+              Yazdır
+            </button>
+            <button onClick={stokExcelIndir} style={{ padding: '10px 16px', borderRadius: 8, border: '1px solid var(--kenarlik-koyu)', background: 'white', cursor: 'pointer' }}>
+              Excel İndir
+            </button>
+            <Link to="/satis-yap"><Buton>+ Satış Yap</Buton></Link>
+          </div>
+        }
       />
       <HataMesaji>{hata}</HataMesaji>
 
-      <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+      <div className="no-print" style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
         {Object.entries(DURUM_METIN).map(([kod, etiket]) => (
           <button
             key={kod}
