@@ -444,6 +444,7 @@ function UrunDuzenleFormu({ urun, stokKartlari, onKaydedildi, onVazgec }) {
 
 export default function StokSayfasi() {
   const { oturum } = useAuth();
+  const [usdKur, setUsdKur] = useState(null);
   const [tumUrunler, setTumUrunler] = useState([]);
   const [urunler, setUrunler] = useState([]);
   const [stokKartlari, setStokKartlari] = useState([]);
@@ -539,6 +540,7 @@ export default function StokSayfasi() {
     tumUrunleriYukle();
     stokKartlariniYukle();
     api.get('/siparisler').then((r) => setSiparisler(r.data)).catch(() => {});
+    api.get('/kur/USD').then((r) => setUsdKur(Number(r.data.kur))).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -565,6 +567,7 @@ export default function StokSayfasi() {
       'Sipariş No': siparisNoGoster(u.siparis_id),
       'Durum': DURUM_METIN[u.durum] || u.durum,
       'Toplam Maliyet (TL)': Number(u.toplam_maliyet_try),
+      'Toplam Maliyet (USD)': usdKur ? Number((u.toplam_maliyet_try / usdKur).toFixed(2)) : '',
       'Satış Fiyatı (TL)': u.satis_fiyati_try != null ? Number(u.satis_fiyati_try) : '',
     }));
     const dosyaAdi = durumFiltre ? `stok_${durumFiltre.toLowerCase()}` : 'stok_listesi';
@@ -709,7 +712,7 @@ export default function StokSayfasi() {
                     onChange={tumunuSecVeyaKaldir}
                   />
                 </th>
-                {['Seri No', 'Ürün', 'Sipariş', 'Durum', 'Toplam Maliyet', 'Satış Fiyatı', 'Kâr/Zarar', 'İşlem'].map((b) => (
+                {['Seri No', 'Ürün', 'Sipariş', 'Durum', 'Toplam Maliyet (TL)', 'Toplam Maliyet (USD)', 'Satış Fiyatı', 'Kâr/Zarar', 'İşlem'].map((b) => (
                   <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
                 ))}
               </tr>
@@ -762,13 +765,24 @@ export default function StokSayfasi() {
                         <Etiket ton={DURUM_ETIKET[u.durum]}>{DURUM_METIN[u.durum]}</Etiket>
                       </td>
                       <td style={{ padding: '12px 16px' }}>{paraFormat(u.toplam_maliyet_try)}</td>
+                      <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>
+                        {usdKur ? paraFormat(u.toplam_maliyet_try / usdKur, 'USD') : '—'}
+                      </td>
                       <td style={{ padding: '12px 16px' }}>{u.satis_fiyati_try != null ? paraFormat(u.satis_fiyati_try) : '—'}</td>
                       <td style={{ padding: '12px 16px', color: karZarar == null ? 'var(--metin-soluk)' : karZarar >= 0 ? 'var(--yesil)' : 'var(--kirmizi)', fontWeight: 500 }}>
                         {karZarar != null ? paraFormat(karZarar) : '—'}
                       </td>
                       <td style={{ padding: '12px 16px' }}>
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                          <button onClick={() => setMaliyetGosterilecekUrun(u)} style={eylemChipStili('lacivert')}>Maliyet Detayı</button>
+                          <button
+                            onClick={() => {
+                              setMaliyetGosterilecekUrun(u);
+                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }}
+                            style={eylemChipStili('lacivert')}
+                          >
+                            Maliyet Detayı
+                          </button>
                           {satilabilir && (
                             <Link to={`/satis-yap?urun=${u.id}`}><button style={eylemChipStili('yesil')} type="button">Satış yap</button></Link>
                           )}
