@@ -12,8 +12,8 @@ from app.models.stok import StokSeriNo, StokKarti, StokDurum
 from app.models.finansal import (
     Cek, CekGecmis, CekDurum, CekTip,
     LeasingSozlesme, LeasingOdeme, LeasingSozlesmeKalemi,
-    TaksitliSatisPlani, TaksitDetay,
-    KiralamaSozlesme, KiralamaOdeme,
+    TaksitliSatisPlani, TaksitDetay, TaksitliSatisKalemi,
+    KiralamaSozlesme, KiralamaOdeme, KiralamaSozlesmeKalemi,
     BakimKaydi, BakimTip,
 )
 from app.schemas.finansal import (
@@ -271,21 +271,35 @@ def leasing_odeme_yap(
 def taksitli_satis_olustur(
     istek: TaksitliSatisOlusturIstegi, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
 ):
-    yeni = TaksitliSatisPlani(sirket_id=sirket_id, **istek.model_dump())
+    """
+    NOT: Birden fazla urun turu (kalem) icerebilen planlarda, hangi
+    SPESIFIK seri numarali fiziksel birimin satildigi otomatik olarak
+    isaretlenmez (coklu urun turu oldugunda hangi birimin kime gittigi
+    belirsizdir). Satilan spesifik birimlerin durumunu Stok sayfasindan
+    "Durum Degistir" ile ayrica SATILDI yapmaniz gerekir.
+    """
+    if not istek.kalemler:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "En az bir ürün kalemi eklemelisiniz.")
+
+    toplam_tutar = sum((k.miktar * k.birim_fiyat for k in istek.kalemler), Decimal("0"))
+
+    yeni = TaksitliSatisPlani(
+        sirket_id=sirket_id,
+        musteri_cari_id=istek.musteri_cari_id,
+        toplam_tutar=toplam_tutar,
+        para_birimi=istek.para_birimi,
+        pesinat=istek.pesinat,
+        taksit_sayisi=istek.taksit_sayisi,
+        baslangic_tarihi=istek.baslangic_tarihi,
+        notlar=istek.notlar,
+    )
     db.add(yeni)
     db.flush()
 
-    if istek.stok_seri_no_id:
-        urun = db.get(StokSeriNo, istek.stok_seri_no_id)
-        if urun is not None and urun.sirket_id == sirket_id:
-            from app.models.stok import StokDurum
-            if urun.durum != StokDurum.SATILDI:
-                urun.durum = StokDurum.SATILDI
-                urun.musteri_cari_id = istek.musteri_cari_id
-                urun.satis_fiyati_try = istek.toplam_tutar
-                urun.satis_tarihi = istek.baslangic_tarihi
+    for k in istek.kalemler:
+        db.add(TaksitliSatisKalemi(plan_id=yeni.id, stok_karti_id=k.stok_karti_id, miktar=k.miktar, birim_fiyat=k.birim_fiyat))
 
-    kalan = istek.toplam_tutar - istek.pesinat
+    kalan = toplam_tutar - istek.pesinat
     taksit_tutari = round(kalan / istek.taksit_sayisi, 2)
     for i in range(1, istek.taksit_sayisi + 1):
         vade = istek.baslangic_tarihi + relativedelta(months=i)
@@ -297,9 +311,11 @@ def taksitli_satis_olustur(
     db.commit()
     db.refresh(yeni)
     cari_h = _cari_haritasi(db, sirket_id)
-    urun_h = _urun_haritasi(db, sirket_id)
+    urun_tanimi_h = _urun_tanimi_haritasi(db, sirket_id)
     yeni.musteri_unvan = cari_h.get(yeni.musteri_cari_id)
-    _urun_bilgisi_ekle(yeni, yeni.stok_seri_no_id, urun_h)
+    yeni.kalemler = list(db.execute(select(TaksitliSatisKalemi).where(TaksitliSatisKalemi.plan_id == yeni.id)).scalars())
+    for k in yeni.kalemler:
+        k.urun_adi = urun_tanimi_h.get(k.stok_karti_id)
     return yeni
 
 
@@ -383,13 +399,11 @@ def taksit_tahsil_et(
     gercekten_islenen_tutar = tahsil_edilecek_toplam - kalan_dagitilacak
 
     musteri = db.get(CariHesap, plan.musteri_cari_id)
+    plan_kalemleri = list(db.execute(select(TaksitliSatisKalemi).where(TaksitliSatisKalemi.plan_id == plan.id)).scalars())
+    urun_tanimi_h = _urun_tanimi_haritasi(db, sirket_id)
     urun_parcasi = ""
-    if plan.stok_seri_no_id:
-        urun = db.get(StokSeriNo, plan.stok_seri_no_id)
-        if urun is not None:
-            kart = db.get(StokKarti, urun.stok_karti_id)
-            urun_adi = f"{kart.marka} {kart.model}" if kart else urun.seri_no
-            urun_parcasi = f" - {urun_adi} ({urun.seri_no})"
+    if plan_kalemleri:
+        urun_parcasi = " - " + ", ".join(f"{k.miktar}x {urun_tanimi_h.get(k.stok_karti_id, '')}" for k in plan_kalemleri)
     if len(guncellenen) > 1:
         taksit_no_araligi = f"{guncellenen[0].taksit_no}-{guncellenen[-1].taksit_no}"
         aciklama = f"Taksit {taksit_no_araligi} - {musteri.unvan if musteri else ''}{urun_parcasi}"
@@ -454,14 +468,35 @@ def vadesi_gecen_taksitler(sirket_id: int = Depends(aktif_sirket_id_getir), db: 
 def kiralama_olustur(
     istek: KiralamaOlusturIstegi, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
 ):
-    yeni = KiralamaSozlesme(sirket_id=sirket_id, **istek.model_dump())
+    if not istek.kalemler:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "En az bir ürün kalemi eklemelisiniz.")
+
+    aylik_kira_tutari = sum((k.miktar * k.birim_fiyat for k in istek.kalemler), Decimal("0"))
+
+    yeni = KiralamaSozlesme(
+        sirket_id=sirket_id,
+        kiraci_cari_id=istek.kiraci_cari_id,
+        baslangic_tarihi=istek.baslangic_tarihi,
+        bitis_tarihi=istek.bitis_tarihi,
+        aylik_kira_tutari=aylik_kira_tutari,
+        para_birimi=istek.para_birimi,
+        depozito=istek.depozito,
+        notlar=istek.notlar,
+    )
     db.add(yeni)
+    db.flush()
+
+    for k in istek.kalemler:
+        db.add(KiralamaSozlesmeKalemi(sozlesme_id=yeni.id, stok_karti_id=k.stok_karti_id, miktar=k.miktar, birim_fiyat=k.birim_fiyat))
+
     db.commit()
     db.refresh(yeni)
     cari_h = _cari_haritasi(db, sirket_id)
-    urun_h = _urun_haritasi(db, sirket_id)
+    urun_tanimi_h = _urun_tanimi_haritasi(db, sirket_id)
     yeni.kiraci_unvan = cari_h.get(yeni.kiraci_cari_id)
-    _urun_bilgisi_ekle(yeni, yeni.stok_seri_no_id, urun_h)
+    yeni.kalemler = list(db.execute(select(KiralamaSozlesmeKalemi).where(KiralamaSozlesmeKalemi.sozlesme_id == yeni.id)).scalars())
+    for k in yeni.kalemler:
+        k.urun_adi = urun_tanimi_h.get(k.stok_karti_id)
     return yeni
 
 
@@ -482,16 +517,31 @@ def kiralama_sozlesmesi_duzenle(
     sozlesme = db.get(KiralamaSozlesme, sozlesme_id)
     if sozlesme is None or sozlesme.sirket_id != sirket_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Kiralama sözleşmesi bulunamadı.")
+    if not istek.kalemler:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "En az bir ürün kalemi eklemelisiniz.")
 
-    for alan, deger in istek.model_dump().items():
-        setattr(sozlesme, alan, deger)
+    sozlesme.kiraci_cari_id = istek.kiraci_cari_id
+    sozlesme.baslangic_tarihi = istek.baslangic_tarihi
+    sozlesme.bitis_tarihi = istek.bitis_tarihi
+    sozlesme.para_birimi = istek.para_birimi
+    sozlesme.depozito = istek.depozito
+    sozlesme.notlar = istek.notlar
+    sozlesme.aylik_kira_tutari = sum((k.miktar * k.birim_fiyat for k in istek.kalemler), Decimal("0"))
+
+    for eski in list(db.execute(select(KiralamaSozlesmeKalemi).where(KiralamaSozlesmeKalemi.sozlesme_id == sozlesme_id)).scalars()):
+        db.delete(eski)
+    db.flush()
+    for k in istek.kalemler:
+        db.add(KiralamaSozlesmeKalemi(sozlesme_id=sozlesme_id, stok_karti_id=k.stok_karti_id, miktar=k.miktar, birim_fiyat=k.birim_fiyat))
 
     db.commit()
     db.refresh(sozlesme)
     cari_h = _cari_haritasi(db, sirket_id)
-    urun_h = _urun_haritasi(db, sirket_id)
+    urun_tanimi_h = _urun_tanimi_haritasi(db, sirket_id)
     sozlesme.kiraci_unvan = cari_h.get(sozlesme.kiraci_cari_id)
-    _urun_bilgisi_ekle(sozlesme, sozlesme.stok_seri_no_id, urun_h)
+    sozlesme.kalemler = list(db.execute(select(KiralamaSozlesmeKalemi).where(KiralamaSozlesmeKalemi.sozlesme_id == sozlesme_id)).scalars())
+    for k in sozlesme.kalemler:
+        k.urun_adi = urun_tanimi_h.get(k.stok_karti_id)
     return sozlesme
 
 
@@ -505,10 +555,12 @@ def kiralamalari_listele(
         sorgu = sorgu.where(KiralamaSozlesme.durum == durum)
     sonuclar = list(db.execute(sorgu).scalars())
     cari_h = _cari_haritasi(db, sirket_id)
-    urun_h = _urun_haritasi(db, sirket_id)
+    urun_tanimi_h = _urun_tanimi_haritasi(db, sirket_id)
     for k in sonuclar:
         k.kiraci_unvan = cari_h.get(k.kiraci_cari_id)
-        _urun_bilgisi_ekle(k, k.stok_seri_no_id, urun_h)
+        k.kalemler = list(db.execute(select(KiralamaSozlesmeKalemi).where(KiralamaSozlesmeKalemi.sozlesme_id == k.id)).scalars())
+        for kk in k.kalemler:
+            kk.urun_adi = urun_tanimi_h.get(kk.stok_karti_id)
     return sonuclar
 
 
@@ -558,12 +610,11 @@ def kiralama_odemesi_tahsil_et(
     odeme.odendi_mi = True
     odeme.odeme_tarihi = istek.odeme_tarihi
 
+    sozlesme_kalemleri = list(db.execute(select(KiralamaSozlesmeKalemi).where(KiralamaSozlesmeKalemi.sozlesme_id == sozlesme.id)).scalars())
+    urun_tanimi_h = _urun_tanimi_haritasi(db, sirket_id)
     urun_parcasi = ""
-    urun = db.get(StokSeriNo, sozlesme.stok_seri_no_id)
-    if urun is not None:
-        kart = db.get(StokKarti, urun.stok_karti_id)
-        urun_adi = f"{kart.marka} {kart.model}" if kart else urun.seri_no
-        urun_parcasi = f"{urun_adi} ({urun.seri_no}) - "
+    if sozlesme_kalemleri:
+        urun_parcasi = ", ".join(f"{k.miktar}x {urun_tanimi_h.get(k.stok_karti_id, '')}" for k in sozlesme_kalemleri) + " - "
     aciklama = f"Kiralama - {urun_parcasi}{odeme.donem_basi} - {odeme.donem_sonu}"
 
     para_hareketi_olustur(
@@ -701,6 +752,8 @@ def taksitli_satis_plani_sil(plan_id: int, sirket_id: int = Depends(aktif_sirket
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Tahsil edilmiş taksiti olan bir plan silinemez.")
     for t in taksitler:
         db.delete(t)
+    for k in list(db.execute(select(TaksitliSatisKalemi).where(TaksitliSatisKalemi.plan_id == plan_id)).scalars()):
+        db.delete(k)
 
     if plan.stok_seri_no_id:
         urun = db.get(StokSeriNo, plan.stok_seri_no_id)
@@ -726,6 +779,8 @@ def kiralama_sil(sozlesme_id: int, sirket_id: int = Depends(aktif_sirket_id_geti
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Tahsil edilmiş dönemi olan bir sözleşme silinemez.")
     for o in odemeler:
         db.delete(o)
+    for k in list(db.execute(select(KiralamaSozlesmeKalemi).where(KiralamaSozlesmeKalemi.sozlesme_id == sozlesme_id)).scalars()):
+        db.delete(k)
     db.delete(sozlesme)
     db.commit()
     return {"silindi": True}
