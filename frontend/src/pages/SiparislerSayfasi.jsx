@@ -196,6 +196,7 @@ export default function SiparislerSayfasi() {
   const [odemelerAcikSiparisId, setOdemelerAcikSiparisId] = useState(null);
   const [belgeAcik, setBelgeAcik] = useState(null); // { siparisId, nusha } | null
   const [durumDegistirAcikId, setDurumDegistirAcikId] = useState(null);
+  const [icerikAcikId, setIcerikAcikId] = useState(null);
   const [belgeNotlari, setBelgeNotlari] = useState({}); // siparisId -> gecici not metni (sadece bu oturum icin)
   const [bilgiMesaji, setBilgiMesaji] = useState(
     location.state?.yeniSiparisNo
@@ -306,7 +307,15 @@ export default function SiparislerSayfasi() {
         ) : siparisler.length === 0 ? (
           <BosDurum baslik="Henüz sipariş yok" aciklama="Yukarıdan yeni bir sipariş oluşturun." />
         ) : (
-          <table>
+          <table style={{ tableLayout: 'fixed', width: '100%' }}>
+            <colgroup>
+              <col style={{ width: '16%' }} />
+              <col style={{ width: '14%' }} />
+              <col style={{ width: '13%' }} />
+              <col style={{ width: '14%' }} />
+              <col style={{ width: '13%' }} />
+              <col style={{ width: '30%' }} />
+            </colgroup>
             <thead>
               <tr style={{ background: 'var(--zemin)' }}>
                 {['Sipariş No', 'Kaynak', 'Tarih', 'Durum', 'Tutar', 'İşlem'].map((b) => (
@@ -330,6 +339,12 @@ export default function SiparislerSayfasi() {
                       <td style={{ padding: '12px 16px' }}>{paraFormat(toplam, s.para_birimi)}</td>
                       <td style={{ padding: '12px 16px' }}>
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          <button
+                            onClick={() => setIcerikAcikId((mevcut) => (mevcut === s.id ? null : s.id))}
+                            style={eylemChipStili('notr')}
+                          >
+                            {icerikAcikId === s.id ? 'İçeriği Gizle' : 'İçerik'}
+                          </button>
                           {s.durum === 'TASLAK' && (
                             <>
                               <button onClick={() => durumDegistir(s.id, 'ONAYLANDI')} style={eylemChipStili('lacivert')}>
@@ -400,6 +415,37 @@ export default function SiparislerSayfasi() {
                       <tr>
                         <td colSpan={6} style={{ padding: 0 }}>
                           <SiparisOdemeleriPaneli siparis={s} onKapat={() => setOdemelerAcikSiparisId(null)} />
+                        </td>
+                      </tr>
+                    )}
+                    {icerikAcikId === s.id && (
+                      <tr>
+                        <td colSpan={6} style={{ padding: '12px 16px', background: 'var(--zemin)' }}>
+                          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Sipariş içeriği</div>
+                          {(s.urunler || []).length === 0 ? (
+                            <div style={{ fontSize: 13, color: 'var(--metin-soluk)' }}>Bu siparişte ürün bulunamadı.</div>
+                          ) : (
+                            <table style={{ width: '100%' }}>
+                              <thead>
+                                <tr>
+                                  {['Ürün', 'Miktar', 'Birim Fiyat', 'Satır Toplamı', 'Açıklama'].map((b) => (
+                                    <th key={b} style={{ textAlign: 'left', padding: '6px 8px', fontSize: 12, color: 'var(--metin-ikincil)' }}>{b}</th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {s.urunler.map((u, i) => (
+                                  <tr key={i} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                                    <td style={{ padding: '6px 8px' }}>{urunAdiGoster(u.stok_karti_id)}</td>
+                                    <td style={{ padding: '6px 8px' }}>{u.miktar}</td>
+                                    <td style={{ padding: '6px 8px' }}>{paraFormat(u.birim_fiyat, u.para_birimi)}</td>
+                                    <td style={{ padding: '6px 8px', fontWeight: 500 }}>{paraFormat(u.miktar * Number(u.birim_fiyat), u.para_birimi)}</td>
+                                    <td style={{ padding: '6px 8px', color: 'var(--metin-ikincil)' }}>{u.aciklama || '—'}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          )}
                         </td>
                       </tr>
                     )}
