@@ -330,7 +330,16 @@ export default function SiparislerSayfasi() {
                 return (
                   <Fragment key={s.id}>
                     <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
-                      <td style={{ padding: '12px 16px', fontWeight: 500 }}>{s.siparis_no}</td>
+                      <td style={{ padding: '12px 16px', fontWeight: 500 }}>
+                        <button
+                          onClick={() => setIcerikAcikId((mevcut) => (mevcut === s.id ? null : s.id))}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500, fontSize: 'inherit', color: 'inherit' }}
+                          title="Sipariş içeriğini göster/gizle"
+                        >
+                          <span style={{ fontSize: 11, color: 'var(--metin-ikincil)' }}>{icerikAcikId === s.id ? '▲' : '▼'}</span>
+                          {s.siparis_no}
+                        </button>
+                      </td>
                       <td style={{ padding: '12px 16px' }}>{s.kaynak === 'ITHALAT' ? 'İthalat' : 'Yurtiçi Alım'}</td>
                       <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>{s.siparis_tarihi}</td>
                       <td style={{ padding: '12px 16px' }}>
@@ -339,12 +348,6 @@ export default function SiparislerSayfasi() {
                       <td style={{ padding: '12px 16px' }}>{paraFormat(toplam, s.para_birimi)}</td>
                       <td style={{ padding: '12px 16px' }}>
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                          <button
-                            onClick={() => setIcerikAcikId((mevcut) => (mevcut === s.id ? null : s.id))}
-                            style={eylemChipStili('notr')}
-                          >
-                            {icerikAcikId === s.id ? 'İçeriği Gizle' : 'İçerik'}
-                          </button>
                           {s.durum === 'TASLAK' && (
                             <>
                               <button onClick={() => durumDegistir(s.id, 'ONAYLANDI')} style={eylemChipStili('lacivert')}>
@@ -436,7 +439,7 @@ export default function SiparislerSayfasi() {
                               <tbody>
                                 {s.urunler.map((u, i) => (
                                   <tr key={i} style={{ borderTop: '1px solid var(--kenarlik)' }}>
-                                    <td style={{ padding: '6px 8px' }}>{urunAdiGoster(u.stok_karti_id)}</td>
+                                    <td style={{ padding: '6px 8px' }}>{urunAdi(u.stok_karti_id)}</td>
                                     <td style={{ padding: '6px 8px' }}>{u.miktar}</td>
                                     <td style={{ padding: '6px 8px' }}>{paraFormat(u.birim_fiyat, u.para_birimi)}</td>
                                     <td style={{ padding: '6px 8px', fontWeight: 500 }}>{paraFormat(u.miktar * Number(u.birim_fiyat), u.para_birimi)}</td>
