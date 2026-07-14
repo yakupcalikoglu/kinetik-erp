@@ -195,6 +195,7 @@ export default function SiparislerSayfasi() {
   const [hata, setHata] = useState(null);
   const [odemelerAcikSiparisId, setOdemelerAcikSiparisId] = useState(null);
   const [belgeAcik, setBelgeAcik] = useState(null); // { siparisId, nusha } | null
+  const [durumDegistirAcikId, setDurumDegistirAcikId] = useState(null);
   const [belgeNotlari, setBelgeNotlari] = useState({}); // siparisId -> gecici not metni (sadece bu oturum icin)
   const [bilgiMesaji, setBilgiMesaji] = useState(
     location.state?.yeniSiparisNo
@@ -343,9 +344,17 @@ export default function SiparislerSayfasi() {
                             </>
                           )}
                           {(s.durum === 'ONAYLANDI' || s.durum === 'YOLDA' || s.durum === 'GUMRUKTE') && (
-                            <Link to={`/siparisler/${s.id}/teslim-al`} style={eylemChipStili('yesil')}>
-                              Teslim al
-                            </Link>
+                            <>
+                              <Link to={`/siparisler/${s.id}/teslim-al`} style={eylemChipStili('yesil')}>
+                                Teslim al
+                              </Link>
+                              <button
+                                onClick={() => setDurumDegistirAcikId((mevcut) => (mevcut === s.id ? null : s.id))}
+                                style={eylemChipStili('amber')}
+                              >
+                                {durumDegistirAcikId === s.id ? 'Kapat' : 'Durum Değiştir'}
+                              </button>
+                            </>
                           )}
                           {!sonDurumda && s.durum !== 'TASLAK' && (
                             <button onClick={() => siparisiIptalEt(s.id, s.siparis_no)} style={eylemChipStili('kirmizi')}>
@@ -391,6 +400,33 @@ export default function SiparislerSayfasi() {
                       <tr>
                         <td colSpan={6} style={{ padding: 0 }}>
                           <SiparisOdemeleriPaneli siparis={s} onKapat={() => setOdemelerAcikSiparisId(null)} />
+                        </td>
+                      </tr>
+                    )}
+                    {durumDegistirAcikId === s.id && (
+                      <tr>
+                        <td colSpan={6} style={{ padding: '12px 16px', background: 'var(--zemin)' }}>
+                          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
+                            <div style={{ flex: 1, maxWidth: 220 }}>
+                              <Alan etiket="Yeni durum">
+                                <select id={`durum-select-${s.id}`} defaultValue={s.durum} style={girdiStili}>
+                                  {['ONAYLANDI', 'YOLDA', 'GUMRUKTE'].map((d) => (
+                                    <option key={d} value={d}>{DURUM_METIN[d]}</option>
+                                  ))}
+                                </select>
+                              </Alan>
+                            </div>
+                            <Buton
+                              onClick={() => {
+                                const secim = document.getElementById(`durum-select-${s.id}`).value;
+                                durumDegistir(s.id, secim);
+                                setDurumDegistirAcikId(null);
+                              }}
+                            >
+                              Durumu güncelle
+                            </Buton>
+                            <Buton variant="ikincil" onClick={() => setDurumDegistirAcikId(null)}>Vazgeç</Buton>
+                          </div>
                         </td>
                       </tr>
                     )}
