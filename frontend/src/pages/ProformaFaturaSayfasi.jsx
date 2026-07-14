@@ -15,6 +15,201 @@ const ODEME_TIPLERI = [
   { deger: 'CEK', etiket: 'Çek' },
 ];
 
+function ProformaTumunuSatisaCevirFormu({ proforma, onTamamlandi, onVazgec }) {
+  const kalemler = (proforma.kalemler || []).filter((k) => k.stok_karti_id);
+  const [urunSecenekleriMap, setUrunSecenekleriMap] = useState({});
+  const [urunSecimleri, setUrunSecimleri] = useState({});
+  const [bankaHesaplari, setBankaHesaplari] = useState([]);
+  const [odemeTipi, setOdemeTipi] = useState('PESIN_NAKIT');
+  const [leasingAltTip, setLeasingAltTip] = useState('PESIN');
+  const [tarih, setTarih] = useState(new Date().toISOString().slice(0, 10));
+  const [bankaHesapId, setBankaHesapId] = useState('');
+  const [taksitSayisi, setTaksitSayisi] = useState(3);
+  const [pesinat, setPesinat] = useState('0');
+  const [cekNo, setCekNo] = useState('');
+  const [cekBankaAdi, setCekBankaAdi] = useState('');
+  const [cekVadeTarihi, setCekVadeTarihi] = useState('');
+  const [hata, setHata] = useState(null);
+  const [kaydediliyor, setKaydediliyor] = useState(false);
+
+  useEffect(() => {
+    kalemler.forEach((k) => {
+      Promise.all([
+        api.get('/stok-seri-no', { params: { durum: 'DEPODA', stok_karti_id: k.stok_karti_id } }),
+        api.get('/stok-seri-no', { params: { durum: 'ANTREPODA', stok_karti_id: k.stok_karti_id } }),
+      ]).then(([a, b]) => {
+        const liste = [...a.data, ...b.data];
+        setUrunSecenekleriMap((f) => ({ ...f, [k.id]: liste }));
+        if (liste.length === 1) setUrunSecimleri((f) => ({ ...f, [k.id]: String(liste[0].id) }));
+      }).catch(() => {});
+    });
+    api.get('/banka-bakiyeleri').then((r) => setBankaHesaplari(r.data)).catch(() => {});
+  }, []); // eslint-disable-line
+
+  function kalemTutariHesapla(k) {
+    return Number(k.miktar) * Number(k.birim_fiyat) * (1 + Number(k.kdv_orani) / 100);
+  }
+  const genelToplam = kalemler.reduce((acc, k) => acc + kalemTutariHesapla(k), 0);
+  const leasingTaksitli = odemeTipi === 'LEASINGLI' && leasingAltTip === 'TAKSITLI';
+  const taksitliBenzeri = odemeTipi === 'TAKSITLI' || leasingTaksitli;
+  const bankaGerekli = odemeTipi === 'PESIN_HAVALE' || odemeTipi === 'PESIN_KART' || (odemeTipi === 'LEASINGLI' && leasingAltTip === 'PESIN');
+
+  async function tamamla(e) {
+    e.preventDefault();
+    setHata(null);
+    for (const k of kalemler) {
+      if (!urunSecimleri[k.id]) { setHata(`"${k.aciklama}" için satılacak ürün (seri no) seçilmeli.`); return; }
+    }
+    if (bankaGerekli && !bankaHesapId) { setHata('Lütfen banka hesabını seçin.'); return; }
+    if (odemeTipi === 'CEK' && !cekVadeTarihi) { setHata('Lütfen çekin vade tarihini girin.'); return; }
+
+    setKaydediliyor(true);
+    try {
+      if (odemeTipi === 'PESIN_NAKIT' || bankaGerekli) {
+        for (const k of kalemler) {
+          await api.post(`/stok-seri-no/${urunSecimleri[k.id]}/satis`, {
+            musteri_cari_id: proforma.cari_id, satis_fiyati_try: kalemTutariHesapla(k),
+            satis_tarihi: tarih, odeme_yontemi: odemeTipi === 'PESIN_NAKIT' ? 'NAKIT' : 'BANKA',
+            banka_hesap_id: bankaGerekli ? Number(bankaHesapId) : null,
+          });
+        }
+      } else if (taksitliBenzeri) {
+        await api.post('/taksitli-satis-planlari', {
+          musteri_cari_id: proforma.cari_id, pesinat: Number(pesinat || 0),
+          taksit_sayisi: Number(taksitSayisi), baslangic_tarihi: tarih, para_birimi: 'TRY',
+          kalemler: kalemler.map((k) => ({
+            stok_karti_id: k.stok_karti_id, miktar: k.miktar, birim_fiyat: kalemTutariHesapla(k) / k.miktar,
+          })),
+        });
+        for (const k of kalemler) {
+          await api.put(`/stok-seri-no/${urunSecimleri[k.id]}/durum`, {
+            durum: 'SATILDI', musteri_cari_id: proforma.cari_id,
+            satis_fiyati_try: kalemTutariHesapla(k), satis_tarihi: tarih,
+          });
+        }
+      } else if (odemeTipi === 'CEK') {
+        const { data: yeniCek } = await api.post('/cekler', {
+          tip: 'ALINAN', cek_no: cekNo || null, banka_adi: cekBankaAdi || null,
+          cari_id: proforma.cari_id, tutar: genelToplam,
+          vade_tarihi: cekVadeTarihi, alinma_verilme_tarihi: tarih,
+        });
+        for (const k of kalemler) {
+          await api.put(`/stok-seri-no/${urunSecimleri[k.id]}/durum`, {
+            durum: 'SATILDI', musteri_cari_id: proforma.cari_id,
+            satis_fiyati_try: kalemTutariHesapla(k), satis_tarihi: tarih,
+          });
+          await api.put(`/stok-seri-no/${urunSecimleri[k.id]}/satis-cek-baglantisi`, { cek_id: yeniCek.id });
+        }
+      }
+
+      const { data: sonrakiNo } = await api.get('/faturalar/sonraki-no');
+      await api.post(`/proforma-faturalar/${proforma.id}/faturaya-cevir`, null, { params: { fatura_no: sonrakiNo.fatura_no } });
+
+      onTamamlandi();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setKaydediliyor(false);
+    }
+  }
+
+  return (
+    <div style={{ padding: 14, background: 'var(--zemin)', border: '1px solid var(--kenarlik)', borderRadius: 8, marginTop: 10 }}>
+      <form onSubmit={tamamla}>
+        <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 10 }}>
+          Proformadaki tüm ürünleri (toplam {kalemler.length} kalem) tek işlemde satışa çevir
+        </div>
+        <HataMesaji>{hata}</HataMesaji>
+
+        {kalemler.map((k) => (
+          <div key={k.id} style={{ marginBottom: 10 }}>
+            <Alan etiket={`${k.aciklama} (${paraFormat(kalemTutariHesapla(k), proforma.para_birimi)}) — hangi ürün (seri no)?`}>
+              <select
+                required
+                value={urunSecimleri[k.id] || ''}
+                onChange={(e) => setUrunSecimleri((f) => ({ ...f, [k.id]: e.target.value }))}
+                style={girdiStili}
+              >
+                <option value="">Seçin...</option>
+                {(urunSecenekleriMap[k.id] || []).map((u) => <option key={u.id} value={u.id}>{u.seri_no}</option>)}
+              </select>
+              {urunSecenekleriMap[k.id] && urunSecenekleriMap[k.id].length === 0 && (
+                <div style={{ fontSize: 12, color: 'var(--kirmizi)', marginTop: 4 }}>
+                  Bu ürün tanımından Depoda/Antrepoda hazır ürün yok.
+                </div>
+              )}
+            </Alan>
+          </div>
+        ))}
+
+        <div style={{ marginBottom: 6 }}>
+          <span style={{ display: 'block', fontSize: 12, color: 'var(--metin-ikincil)', marginBottom: 6 }}>Ödeme Türü (toplam {paraFormat(genelToplam)} için)</span>
+          <Sekmeler sekmeler={ODEME_TIPLERI} aktif={odemeTipi} onDegistir={setOdemeTipi} />
+        </div>
+
+        {odemeTipi === 'LEASINGLI' && (
+          <div style={{ margin: '10px 0' }}>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" onClick={() => setLeasingAltTip('PESIN')}
+                style={eylemChipStili(leasingAltTip === 'PESIN' ? 'lacivert' : 'notr')}>
+                Peşin (banka)
+              </button>
+              <button type="button" onClick={() => setLeasingAltTip('TAKSITLI')}
+                style={eylemChipStili(leasingAltTip === 'TAKSITLI' ? 'lacivert' : 'notr')}>
+                Taksitli (biz takip edeceğiz)
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginTop: 10 }}>
+          <Alan etiket="Tarih">
+            <input required type="date" value={tarih} onChange={(e) => setTarih(e.target.value)} style={girdiStili} />
+          </Alan>
+          {bankaGerekli && (
+            <Alan etiket="Banka Hesabı">
+              <select required value={bankaHesapId} onChange={(e) => setBankaHesapId(e.target.value)} style={girdiStili}>
+                <option value="">Seçin...</option>
+                {bankaHesaplari.map((h) => (
+                  <option key={h.banka_hesap_id} value={h.banka_hesap_id}>{h.banka_adi} — {h.hesap_adi || h.para_birimi}</option>
+                ))}
+              </select>
+            </Alan>
+          )}
+          {taksitliBenzeri && (
+            <>
+              <Alan etiket="Peşinat (TL)">
+                <input type="number" step="0.01" value={pesinat} onChange={(e) => setPesinat(e.target.value)} style={girdiStili} />
+              </Alan>
+              <Alan etiket="Taksit Sayısı">
+                <input required type="number" min="2" value={taksitSayisi} onChange={(e) => setTaksitSayisi(e.target.value)} style={girdiStili} />
+              </Alan>
+            </>
+          )}
+          {odemeTipi === 'CEK' && (
+            <>
+              <Alan etiket="Çek No">
+                <input value={cekNo} onChange={(e) => setCekNo(e.target.value)} style={girdiStili} />
+              </Alan>
+              <Alan etiket="Çekin Bankası">
+                <input value={cekBankaAdi} onChange={(e) => setCekBankaAdi(e.target.value)} style={girdiStili} />
+              </Alan>
+              <Alan etiket="Vade Tarihi">
+                <input required type="date" value={cekVadeTarihi} onChange={(e) => setCekVadeTarihi(e.target.value)} style={girdiStili} />
+              </Alan>
+            </>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+          <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Tamamlanıyor...' : 'Tümünü Satışa Çevir ve Faturayı Oluştur'}</Buton>
+          <Buton type="button" variant="ikincil" onClick={onVazgec}>Vazgeç</Buton>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 function SatisaCevirFormu({ proforma, kalem, onTamamlandi, onVazgec }) {
   const [urunler, setUrunler] = useState([]);
   const [bankaHesaplari, setBankaHesaplari] = useState([]);
@@ -638,33 +833,25 @@ export default function ProformaFaturaSayfasi() {
               {(olusanProforma.kalemler || []).filter((k) => k.stok_karti_id).length > 0 && (
                 <div style={{ marginBottom: 20 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
-                    Anlaşma netleşti mi? Bir ürünü doğrudan satışa çevirip faturayı otomatik oluşturabilirsiniz:
+                    Anlaşma netleşti mi? Proformadaki tüm ürünleri tek işlemde satışa çevirip faturayı otomatik oluşturabilirsiniz:
                   </div>
-                  {olusanProforma.kalemler.filter((k) => k.stok_karti_id).map((k) => (
-                    <div key={k.id} style={{ marginBottom: 8 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', border: '1px solid var(--kenarlik)', borderRadius: 8 }}>
-                        <div style={{ fontSize: 13 }}>{k.aciklama} — {paraFormat(k.miktar * k.birim_fiyat, olusanProforma.para_birimi)}</div>
-                        <button
-                          onClick={() => setSatisaCevirAcikKalemId((mevcut) => (mevcut === k.id ? null : k.id))}
-                          style={eylemChipStili('yesil')}
-                        >
-                          {satisaCevirAcikKalemId === k.id ? 'Kapat' : 'Satışa Çevir'}
-                        </button>
-                      </div>
-                      {satisaCevirAcikKalemId === k.id && (
-                        <SatisaCevirFormu
-                          proforma={olusanProforma}
-                          kalem={k}
-                          onTamamlandi={() => {
-                            setSatisaCevirAcikKalemId(null);
-                            setOlusanProforma((p) => ({ ...p, durum: 'FATURALASTI' }));
-                            setGecmisYenidenYukleTetik((t) => t + 1);
-                          }}
-                          onVazgec={() => setSatisaCevirAcikKalemId(null)}
-                        />
-                      )}
-                    </div>
-                  ))}
+                  <button
+                    onClick={() => setSatisaCevirAcikKalemId((mevcut) => (mevcut === 'TUMU' ? null : 'TUMU'))}
+                    style={eylemChipStili('yesil')}
+                  >
+                    {satisaCevirAcikKalemId === 'TUMU' ? 'Kapat' : 'Tümünü Satışa Çevir'}
+                  </button>
+                  {satisaCevirAcikKalemId === 'TUMU' && (
+                    <ProformaTumunuSatisaCevirFormu
+                      proforma={olusanProforma}
+                      onTamamlandi={() => {
+                        setSatisaCevirAcikKalemId(null);
+                        setOlusanProforma((p) => ({ ...p, durum: 'FATURALASTI' }));
+                        setGecmisYenidenYukleTetik((t) => t + 1);
+                      }}
+                      onVazgec={() => setSatisaCevirAcikKalemId(null)}
+                    />
+                  )}
                 </div>
               )}
 
