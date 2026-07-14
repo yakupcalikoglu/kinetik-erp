@@ -57,29 +57,43 @@ class CekGecmisYanit(BaseModel):
 
 
 # ----------------------------------------------------------------- Leasing
+class LeasingKalemIstegi(BaseModel):
+    stok_karti_id: int
+    miktar: int = 1
+    birim_fiyat: Decimal
+
+
+class LeasingKalemYanit(BaseModel):
+    id: int
+    stok_karti_id: int
+    miktar: int
+    birim_fiyat: Decimal
+    urun_adi: str | None = None
+
+    class Config:
+        from_attributes = True
+
+
 class LeasingOlusturIstegi(BaseModel):
     leasing_firmasi_cari_id: int
-    stok_seri_no_id: int | None = None
     sozlesme_no: str | None = None
     baslangic_tarihi: date
-    toplam_tutar: Decimal
     para_birimi: ParaBirimi
     taksit_sayisi: int
     notlar: str | None = None
+    kalemler: list[LeasingKalemIstegi]
 
 
 class LeasingYanit(BaseModel):
     id: int
     leasing_firmasi_cari_id: int
     leasing_firmasi_unvan: str | None = None
-    stok_seri_no_id: int | None
-    urun_seri_no: str | None = None
-    urun_adi: str | None = None
     sozlesme_no: str | None
     baslangic_tarihi: date | None
     toplam_tutar: Decimal | None
     para_birimi: ParaBirimi
     taksit_sayisi: int | None
+    kalemler: list[LeasingKalemYanit] = []
 
     class Config:
         from_attributes = True
