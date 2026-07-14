@@ -314,6 +314,13 @@ def test_verilerini_temizle(istek: TemizlikOnayIstegi, db: Session = Depends(get
     from app.models.cari import CariHesap, CariHareket
     from app.models.banka import KasaHareketi, BankaHareketi
     from app.models.virman import UrunSahiplikGecmisi
+    from sqlalchemy import update as sa_update
+
+    # StokSeriNo.satis_cek_id, cekler tablosuna FK ile bagli - Cek silinmeden
+    # ONCE bu referansi temizlememiz gerekiyor, aksi halde "cek hala
+    # kullanimda" hatasi (foreign key ihlali) alinir.
+    db.execute(sa_update(StokSeriNo).values(satis_cek_id=None))
+    db.flush()
 
     # Silme sirasi onemli: cocuk kayitlar ebeveynden ONCE silinir.
     modeller = [
