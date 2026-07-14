@@ -124,6 +124,17 @@ class TaksitliSatisPlani(Base):
     notlar = Column(Text)
 
 
+class TaksitliSatisKalemi(Base):
+    """Bir taksitli satis planina dahil urun tipi + adet + birim fiyat (Leasing ile ayni mantik)."""
+    __tablename__ = "taksitli_satis_kalemleri"
+
+    id = Column(BigInteger, primary_key=True)
+    plan_id = Column(BigInteger, ForeignKey("taksitli_satis_planlari.id"), nullable=False)
+    stok_karti_id = Column(BigInteger, ForeignKey("stok_kartlari.id"), nullable=False)
+    miktar = Column(Integer, nullable=False, default=1)
+    birim_fiyat = Column(Numeric(18, 2), nullable=False)
+
+
 class TaksitDetay(Base):
     __tablename__ = "taksit_detay"
 
@@ -161,6 +172,17 @@ class KiralamaSozlesme(Base):
     depozito = Column(Numeric(18, 2), default=0)
     durum = Column(String(20), default="AKTIF")
     notlar = Column(Text)
+
+
+class KiralamaSozlesmeKalemi(Base):
+    """Bir kiralama sozlesmesine dahil urun tipi + adet + aylik birim fiyat (Leasing ile ayni mantik)."""
+    __tablename__ = "kiralama_sozlesme_kalemleri"
+
+    id = Column(BigInteger, primary_key=True)
+    sozlesme_id = Column(BigInteger, ForeignKey("kiralama_sozlesmeleri.id"), nullable=False)
+    stok_karti_id = Column(BigInteger, ForeignKey("stok_kartlari.id"), nullable=False)
+    miktar = Column(Integer, nullable=False, default=1)
+    birim_fiyat = Column(Numeric(18, 2), nullable=False)
 
 
 class KiralamaOdeme(Base):
