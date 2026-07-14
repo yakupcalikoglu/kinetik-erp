@@ -20,6 +20,7 @@ function SatisaCevirFormu({ proforma, kalem, onTamamlandi, onVazgec }) {
   const [bankaHesaplari, setBankaHesaplari] = useState([]);
   const [urunId, setUrunId] = useState('');
   const [odemeTipi, setOdemeTipi] = useState('PESIN_NAKIT');
+  const [leasingAltTip, setLeasingAltTip] = useState('PESIN'); // 'PESIN' | 'TAKSITLI' - sadece odemeTipi === 'LEASINGLI' iken kullanilir
   const [tutar, setTutar] = useState(String((Number(kalem.miktar) * Number(kalem.birim_fiyat) * (1 + Number(kalem.kdv_orani) / 100)).toFixed(2)));
   const [tarih, setTarih] = useState(new Date().toISOString().slice(0, 10));
   const [bankaHesapId, setBankaHesapId] = useState('');
@@ -43,7 +44,8 @@ function SatisaCevirFormu({ proforma, kalem, onTamamlandi, onVazgec }) {
     api.get('/banka-bakiyeleri').then((r) => setBankaHesaplari(r.data)).catch(() => {});
   }, [kalem.stok_karti_id]);
 
-  const bankaGerekli = odemeTipi === 'PESIN_HAVALE' || odemeTipi === 'PESIN_KART' || odemeTipi === 'LEASINGLI';
+  const leasingTaksitli = odemeTipi === 'LEASINGLI' && leasingAltTip === 'TAKSITLI';
+  const bankaGerekli = odemeTipi === 'PESIN_HAVALE' || odemeTipi === 'PESIN_KART' || (odemeTipi === 'LEASINGLI' && leasingAltTip === 'PESIN');
 
   async function satisiVeFaturayiTamamla(e) {
     e.preventDefault();
@@ -64,11 +66,15 @@ function SatisaCevirFormu({ proforma, kalem, onTamamlandi, onVazgec }) {
           musteri_cari_id: proforma.cari_id, satis_fiyati_try: Number(tutar),
           satis_tarihi: tarih, odeme_yontemi: 'BANKA', banka_hesap_id: Number(bankaHesapId),
         });
-      } else if (odemeTipi === 'TAKSITLI') {
+      } else if (odemeTipi === 'TAKSITLI' || leasingTaksitli) {
         await api.post('/taksitli-satis-planlari', {
-          musteri_cari_id: proforma.cari_id, stok_seri_no_id: Number(urunId),
-          toplam_tutar: Number(tutar), pesinat: Number(pesinat || 0),
+          musteri_cari_id: proforma.cari_id, pesinat: Number(pesinat || 0),
           taksit_sayisi: Number(taksitSayisi), baslangic_tarihi: tarih, para_birimi: 'TRY',
+          kalemler: [{ stok_karti_id: kalem.stok_karti_id, miktar: 1, birim_fiyat: Number(tutar) }],
+        });
+        await api.put(`/stok-seri-no/${urunId}/durum`, {
+          durum: 'SATILDI', musteri_cari_id: proforma.cari_id,
+          satis_fiyati_try: Number(tutar), satis_tarihi: tarih,
         });
       } else if (odemeTipi === 'CEK') {
         if (!cekVadeTarihi) { setHata('Lütfen çekin vade tarihini girin.'); setKaydediliyor(false); return; }
@@ -124,6 +130,22 @@ function SatisaCevirFormu({ proforma, kalem, onTamamlandi, onVazgec }) {
           <Sekmeler sekmeler={ODEME_TIPLERI} aktif={odemeTipi} onDegistir={setOdemeTipi} />
         </div>
 
+        {odemeTipi === 'LEASINGLI' && (
+          <div style={{ marginBottom: 10 }}>
+            <span style={{ display: 'block', fontSize: 12, color: 'var(--metin-ikincil)', marginBottom: 6 }}>Leasing nasıl tahsil edilsin?</span>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" onClick={() => setLeasingAltTip('PESIN')}
+                style={{ ...eylemChipStili(leasingAltTip === 'PESIN' ? 'lacivert' : 'notr') }}>
+                Peşin (banka - leasing firması tek seferde ödedi)
+              </button>
+              <button type="button" onClick={() => setLeasingAltTip('TAKSITLI')}
+                style={{ ...eylemChipStili(leasingAltTip === 'TAKSITLI' ? 'lacivert' : 'notr') }}>
+                Taksitli (biz taksitleri takip edeceğiz)
+              </button>
+            </div>
+          </div>
+        )}
+
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginTop: 10 }}>
           <Alan etiket="Tutar (TL)">
             <input required type="number" step="0.01" value={tutar} onChange={(e) => setTutar(e.target.value)} style={girdiStili} />
@@ -141,7 +163,7 @@ function SatisaCevirFormu({ proforma, kalem, onTamamlandi, onVazgec }) {
               </select>
             </Alan>
           )}
-          {odemeTipi === 'TAKSITLI' && (
+          {(odemeTipi === 'TAKSITLI' || leasingTaksitli) && (
             <>
               <Alan etiket="Peşinat (TL)">
                 <input type="number" step="0.01" value={pesinat} onChange={(e) => setPesinat(e.target.value)} style={girdiStili} />
