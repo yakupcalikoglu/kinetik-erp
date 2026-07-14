@@ -1739,17 +1739,34 @@ function BakimSekmesi() {
 }
 
 // ============================================================== LEASING
+function useUrunTanimlari() {
+  const [kartlar, setKartlar] = useState([]);
+  useEffect(() => {
+    api.get('/stok-kartlari').then((r) => setKartlar(r.data)).catch(() => {});
+  }, []);
+  return kartlar;
+}
+
+function bosLeasingKalemi() {
+  return { stok_karti_id: '', miktar: 1, birim_fiyat: '' };
+}
+
+function bosLeasingFormu() {
+  return {
+    sozlesme_no: '', leasing_firmasi_cari_id: '', para_birimi: 'TRY',
+    taksit_sayisi: 12, baslangic_tarihi: new Date().toISOString().slice(0, 10),
+    kalemler: [bosLeasingKalemi()],
+  };
+}
+
 function LeasingSekmesi() {
   const [liste, setListe] = useState([]);
   const cariler = useCariler();
-  const urunSecenekleri = useUrunSecenekleri();
+  const urunTanimlari = useUrunTanimlari();
   const [hata, setHata] = useState(null);
   const [seciliPlan, setSeciliPlan] = useState(null);
   const [formAcik, setFormAcik] = useState(false);
-  const [form, setForm] = useState({
-    sozlesme_no: '', leasing_firmasi_cari_id: '', stok_seri_no_id: '', toplam_tutar: '', para_birimi: 'TRY',
-    taksit_sayisi: 12, baslangic_tarihi: new Date().toISOString().slice(0, 10),
-  });
+  const [form, setForm] = useState(bosLeasingFormu());
   const [odemeAcikTaksitId, setOdemeAcikTaksitId] = useState(null);
 
   function yukle() {
@@ -1757,19 +1774,41 @@ function LeasingSekmesi() {
   }
   useEffect(yukle, []);
 
+  function kalemGuncelle(i, alan, deger) {
+    setForm((f) => ({
+      ...f,
+      kalemler: f.kalemler.map((k, idx) => (idx === i ? { ...k, [alan]: deger } : k)),
+    }));
+  }
+  function kalemEkle() {
+    setForm((f) => ({ ...f, kalemler: [...f.kalemler, bosLeasingKalemi()] }));
+  }
+  function kalemSil(i) {
+    setForm((f) => ({ ...f, kalemler: f.kalemler.filter((_, idx) => idx !== i) }));
+  }
+
+  const formToplamTutar = form.kalemler.reduce((acc, k) => acc + (Number(k.miktar) || 0) * (Number(k.birim_fiyat) || 0), 0);
+
   async function kaydet(e) {
     e.preventDefault();
     setHata(null);
+    if (form.kalemler.some((k) => !k.stok_karti_id || !k.birim_fiyat)) {
+      setHata('Lütfen her kalem için ürün ve birim fiyat girin.');
+      return;
+    }
     try {
       await api.post('/leasing-sozlesmeleri', {
-        ...form,
+        sozlesme_no: form.sozlesme_no,
         leasing_firmasi_cari_id: Number(form.leasing_firmasi_cari_id),
-        stok_seri_no_id: form.stok_seri_no_id ? Number(form.stok_seri_no_id) : null,
-        toplam_tutar: Number(form.toplam_tutar),
+        para_birimi: form.para_birimi,
         taksit_sayisi: Number(form.taksit_sayisi),
+        baslangic_tarihi: form.baslangic_tarihi,
+        kalemler: form.kalemler.map((k) => ({
+          stok_karti_id: Number(k.stok_karti_id), miktar: Number(k.miktar), birim_fiyat: Number(k.birim_fiyat),
+        })),
       });
       setFormAcik(false);
-      setForm({ sozlesme_no: '', leasing_firmasi_cari_id: '', stok_seri_no_id: '', toplam_tutar: '', para_birimi: 'TRY', taksit_sayisi: 12, baslangic_tarihi: new Date().toISOString().slice(0, 10) });
+      setForm(bosLeasingFormu());
       yukle();
     } catch (err) { setHata(hataMesajiCikar(err)); }
   }
@@ -1815,53 +1854,94 @@ function LeasingSekmesi() {
 
       {formAcik && (
         <Kart style={{ marginBottom: 16 }}>
-          <form onSubmit={kaydet} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-            <Alan etiket="Sözleşme no">
-              <input required value={form.sozlesme_no} onChange={(e) => setForm((f) => ({ ...f, sozlesme_no: e.target.value }))} style={girdiStili} />
-            </Alan>
-            <Alan etiket="Leasing şirketi (cari)">
-              <select required value={form.leasing_firmasi_cari_id} onChange={(e) => setForm((f) => ({ ...f, leasing_firmasi_cari_id: e.target.value }))} style={girdiStili}>
-                <option value="">Seçin...</option>
-                {cariler.map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
-              </select>
-            </Alan>
-            <Alan etiket="Ürün (opsiyonel)">
-              <select value={form.stok_seri_no_id} onChange={(e) => setForm((f) => ({ ...f, stok_seri_no_id: e.target.value }))} style={girdiStili}>
-                <option value="">Seçin...</option>
-                {urunSecenekleri.map((u) => <option key={u.id} value={u.id}>{u.etiket}</option>)}
-              </select>
-            </Alan>
-            <Alan etiket="Para birimi">
-              <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={girdiStili}>
-                <option value="TRY">TRY</option>
-                <option value="USD">USD</option>
-                <option value="EUR">EUR</option>
-              </select>
-            </Alan>
-            <Alan etiket="Toplam tutar">
-              <input required type="number" step="0.01" value={form.toplam_tutar} onChange={(e) => setForm((f) => ({ ...f, toplam_tutar: e.target.value }))} style={girdiStili} />
-            </Alan>
-            <DovizKarsiligiGosterge tutar={form.toplam_tutar} paraBirimi={form.para_birimi} />
-            <Alan etiket="Taksit sayısı">
-              <input required type="number" min="1" value={form.taksit_sayisi} onChange={(e) => setForm((f) => ({ ...f, taksit_sayisi: e.target.value }))} style={girdiStili} />
-            </Alan>
-            <Alan etiket="Başlangıç tarihi">
-              <input required type="date" value={form.baslangic_tarihi} onChange={(e) => setForm((f) => ({ ...f, baslangic_tarihi: e.target.value }))} style={girdiStili} />
-            </Alan>
-            <div style={{ alignSelf: 'end' }}><Buton type="submit">Sözleşmeyi oluştur</Buton></div>
+          <form onSubmit={kaydet}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 16 }}>
+              <Alan etiket="Sözleşme no">
+                <input required value={form.sozlesme_no} onChange={(e) => setForm((f) => ({ ...f, sozlesme_no: e.target.value }))} style={girdiStili} />
+              </Alan>
+              <Alan etiket="Leasing şirketi (cari)">
+                <select required value={form.leasing_firmasi_cari_id} onChange={(e) => setForm((f) => ({ ...f, leasing_firmasi_cari_id: e.target.value }))} style={girdiStili}>
+                  <option value="">Seçin...</option>
+                  {cariler.map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
+                </select>
+              </Alan>
+              <Alan etiket="Para birimi">
+                <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={girdiStili}>
+                  <option value="TRY">TRY</option>
+                  <option value="USD">USD</option>
+                  <option value="EUR">EUR</option>
+                </select>
+              </Alan>
+              <Alan etiket="Taksit sayısı">
+                <input required type="number" min="1" value={form.taksit_sayisi} onChange={(e) => setForm((f) => ({ ...f, taksit_sayisi: e.target.value }))} style={girdiStili} />
+              </Alan>
+              <Alan etiket="Başlangıç tarihi">
+                <input required type="date" value={form.baslangic_tarihi} onChange={(e) => setForm((f) => ({ ...f, baslangic_tarihi: e.target.value }))} style={girdiStili} />
+              </Alan>
+            </div>
+
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Ürün kalemleri (birden fazla ürün türü ekleyebilirsiniz)</div>
+            <table style={{ width: '100%', marginBottom: 8 }}>
+              <thead>
+                <tr style={{ background: 'var(--zemin)' }}>
+                  {['Ürün', 'Adet', 'Birim Fiyat', 'Satır Toplamı', ''].map((b) => (
+                    <th key={b} style={{ textAlign: 'left', padding: '6px 8px', fontSize: 12, color: 'var(--metin-ikincil)' }}>{b}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {form.kalemler.map((k, i) => {
+                  const satirToplam = (Number(k.miktar) || 0) * (Number(k.birim_fiyat) || 0);
+                  return (
+                    <tr key={i} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                      <td style={{ padding: 6 }}>
+                        <select required value={k.stok_karti_id} onChange={(e) => kalemGuncelle(i, 'stok_karti_id', e.target.value)} style={girdiStili}>
+                          <option value="">Seçin...</option>
+                          {urunTanimlari.map((u) => <option key={u.id} value={u.id}>{u.marka} {u.model}</option>)}
+                        </select>
+                      </td>
+                      <td style={{ padding: 6 }}>
+                        <input required type="number" min="1" value={k.miktar} onChange={(e) => kalemGuncelle(i, 'miktar', e.target.value)} style={{ ...girdiStili, width: 80 }} />
+                      </td>
+                      <td style={{ padding: 6 }}>
+                        <input required type="number" step="0.01" value={k.birim_fiyat} onChange={(e) => kalemGuncelle(i, 'birim_fiyat', e.target.value)} style={{ ...girdiStili, width: 130 }} />
+                      </td>
+                      <td style={{ padding: 6, fontSize: 13, fontWeight: 500 }}>{paraFormat(satirToplam, form.para_birimi)}</td>
+                      <td style={{ padding: 6 }}>
+                        {form.kalemler.length > 1 && (
+                          <button type="button" onClick={() => kalemSil(i)} style={eylemChipStili('kirmizi')}>Sil</button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <button type="button" onClick={kalemEkle} style={eylemChipStili('lacivert')}>+ Kalem ekle</button>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12, marginBottom: 12 }}>
+              <div style={{ fontSize: 14, fontWeight: 700 }}>
+                Genel toplam: {paraFormat(formToplamTutar, form.para_birimi)}
+              </div>
+            </div>
+            <DovizKarsiligiGosterge tutar={formToplamTutar} paraBirimi={form.para_birimi} />
+
+            <div style={{ marginTop: 12 }}><Buton type="submit">Sözleşmeyi oluştur</Buton></div>
           </form>
         </Kart>
       )}
 
       <Kart style={{ padding: 0, marginBottom: 16 }}>
         <BasitTablo
-          basliklar={['Sözleşme No', 'Leasing Firması', 'Ürün', 'Toplam Tutar', 'Taksit Sayısı', 'İşlem']}
+          basliklar={['Sözleşme No', 'Leasing Firması', 'Ürünler', 'Toplam Tutar', 'Taksit Sayısı', 'İşlem']}
           satirlar={liste}
           render={(l) => (
             <tr key={l.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
               <td style={{ padding: '10px 16px', fontWeight: 500 }}>{l.sozlesme_no || `#${l.id}`}</td>
               <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{l.leasing_firmasi_unvan || `#${l.leasing_firmasi_cari_id}`}</td>
-              <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{l.urun_adi ? `${l.urun_adi} (${l.urun_seri_no})` : (l.urun_seri_no || '—')}</td>
+              <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>
+                {(l.kalemler || []).map((k) => `${k.miktar}x ${k.urun_adi || '#' + k.stok_karti_id}`).join(', ') || '—'}
+              </td>
               <td style={{ padding: '10px 16px' }}>{paraFormat(l.toplam_tutar, l.para_birimi)}</td>
               <td style={{ padding: '10px 16px' }}>{l.taksit_sayisi}</td>
               <td style={{ padding: '10px 16px' }}>
