@@ -78,6 +78,23 @@ class LeasingSozlesme(Base):
     notlar = Column(Text)
 
 
+class LeasingSozlesmeKalemi(Base):
+    """
+    Bir leasing sozlesmesine dahil edilen urun tipi + adet + birim fiyat.
+    Bir sozlesmede birden fazla urun turu olabilir (orn. 3x forklift A,
+    3x forklift B, 2x forklift C - tek sozlesme altinda). Bu tablo, Siparis
+    modulundeki SiparisDetay ile ayni mantigi kullanir - stok_karti_id
+    (urun TANIMINA, belirli bir seri numarali fiziksel birime degil) baglidir.
+    """
+    __tablename__ = "leasing_sozlesme_kalemleri"
+
+    id = Column(BigInteger, primary_key=True)
+    leasing_id = Column(BigInteger, ForeignKey("leasing_sozlesmeleri.id"), nullable=False)
+    stok_karti_id = Column(BigInteger, ForeignKey("stok_kartlari.id"), nullable=False)
+    miktar = Column(Integer, nullable=False, default=1)
+    birim_fiyat = Column(Numeric(18, 2), nullable=False)
+
+
 class LeasingOdeme(Base):
     __tablename__ = "leasing_odeme_plani"
 
