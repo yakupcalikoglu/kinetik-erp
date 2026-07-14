@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { api, hataMesajiCikar } from '../api/client';
-import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat, Sekmeler } from '../components/Ortak';
+import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat, Sekmeler, eylemChipStili } from '../components/Ortak';
 
 const ODEME_TIPLERI = [
   { deger: 'PESIN_NAKIT', etiket: 'Nakit' },
@@ -17,7 +17,7 @@ const ODEME_TIPI_ACIKLAMA = {
   PESIN_HAVALE: 'Tutar seçtiğiniz banka hesabına yatar.',
   PESIN_KART: 'Tutar POS\'unuzun bağlı olduğu banka hesabına yatar.',
   TAKSITLI: 'Müşteri, belirlediğiniz sayıda taksitle öder.',
-  LEASINGLI: 'Leasing şirketi üzerinden taksitli ödeme yapılır.',
+  LEASINGLI: 'Leasing şirketi peşin mi ödedi, yoksa taksitleri biz mi takip edeceğiz — aşağıdan seçin.',
   CEK: 'Müşteriden çek alınır, vadesinde tahsil edilir.',
 };
 
@@ -32,6 +32,7 @@ export default function SatisYapSayfasi() {
   const [urunId, setUrunId] = useState(onSeciliUrunId || '');
   const [musteriCariId, setMusteriCariId] = useState('');
   const [odemeTipi, setOdemeTipi] = useState('PESIN_NAKIT');
+  const [leasingAltTip, setLeasingAltTip] = useState('PESIN'); // 'PESIN' | 'TAKSITLI' - sadece odemeTipi === 'LEASINGLI' iken kullanilir
   const [tutar, setTutar] = useState('');
   const [tarih, setTarih] = useState(new Date().toISOString().slice(0, 10));
   const [bankaHesapId, setBankaHesapId] = useState('');
@@ -63,7 +64,9 @@ export default function SatisYapSayfasi() {
   }
 
   const seciliUrun = urunler.find((u) => String(u.id) === String(urunId));
-  const bankaGerekli = odemeTipi === 'PESIN_HAVALE' || odemeTipi === 'PESIN_KART' || odemeTipi === 'LEASINGLI';
+  const leasingTaksitli = odemeTipi === 'LEASINGLI' && leasingAltTip === 'TAKSITLI';
+  const taksitliBenzeri = odemeTipi === 'TAKSITLI' || leasingTaksitli;
+  const bankaGerekli = odemeTipi === 'PESIN_HAVALE' || odemeTipi === 'PESIN_KART' || (odemeTipi === 'LEASINGLI' && leasingAltTip === 'PESIN');
 
   async function satisiTamamla(e) {
     e.preventDefault();
@@ -80,17 +83,22 @@ export default function SatisYapSayfasi() {
           musteri_cari_id: Number(musteriCariId), satis_fiyati_try: Number(tutar),
           satis_tarihi: tarih, odeme_yontemi: 'NAKIT', banka_hesap_id: null,
         });
-      } else if (odemeTipi === 'PESIN_HAVALE' || odemeTipi === 'PESIN_KART' || odemeTipi === 'LEASINGLI') {
+      } else if (bankaGerekli) {
         if (!bankaHesapId) { setHata('Lütfen paranın yatacağı banka hesabını seçin.'); setKaydediliyor(false); return; }
         await api.post(`/stok-seri-no/${urunId}/satis`, {
           musteri_cari_id: Number(musteriCariId), satis_fiyati_try: Number(tutar),
           satis_tarihi: tarih, odeme_yontemi: 'BANKA', banka_hesap_id: Number(bankaHesapId),
         });
-      } else if (odemeTipi === 'TAKSITLI') {
+      } else if (taksitliBenzeri) {
+        if (!seciliUrun) { setHata('Lütfen bir ürün seçin.'); setKaydediliyor(false); return; }
         await api.post('/taksitli-satis-planlari', {
-          musteri_cari_id: Number(musteriCariId), stok_seri_no_id: Number(urunId),
-          toplam_tutar: Number(tutar), pesinat: Number(pesinat || 0),
+          musteri_cari_id: Number(musteriCariId), pesinat: Number(pesinat || 0),
           taksit_sayisi: Number(taksitSayisi), baslangic_tarihi: tarih, para_birimi: 'TRY',
+          kalemler: [{ stok_karti_id: seciliUrun.stok_karti_id, miktar: 1, birim_fiyat: Number(tutar) }],
+        });
+        await api.put(`/stok-seri-no/${urunId}/durum`, {
+          durum: 'SATILDI', musteri_cari_id: Number(musteriCariId),
+          satis_fiyati_try: Number(tutar), satis_tarihi: tarih,
         });
       } else if (odemeTipi === 'CEK') {
         if (!cekVadeTarihi) { setHata('Lütfen çekin vade tarihini girin.'); setKaydediliyor(false); return; }
@@ -125,8 +133,8 @@ export default function SatisYapSayfasi() {
           <div style={{ fontSize: 13.5, color: 'var(--metin-ikincil)', marginBottom: 16 }}>
             Ürün "Satıldı" olarak işaretlendi ve ilgili kayıt oluşturuldu.
             {odemeTipi === 'PESIN_NAKIT' && ' Yanlışlıkla yapıldıysa Stok sayfasından "Satışı Geri Al" ile düzeltebilirsiniz.'}
-            {(odemeTipi === 'PESIN_HAVALE' || odemeTipi === 'PESIN_KART' || odemeTipi === 'LEASINGLI') && ' Yanlışlıkla yapıldıysa Stok sayfasından "Satışı Geri Al" ile düzeltebilirsiniz.'}
-            {odemeTipi === 'TAKSITLI' && ' Yanlışlıkla yapıldıysa Finansal Takip → Taksitli Satış\'tan planı silerek ürünü geri alabilirsiniz.'}
+            {bankaGerekli && ' Yanlışlıkla yapıldıysa Stok sayfasından "Satışı Geri Al" ile düzeltebilirsiniz.'}
+            {taksitliBenzeri && ' Yanlışlıkla yapıldıysa Finansal Takip → Taksitli Satış\'tan planı silerek ürünü geri alabilirsiniz.'}
             {odemeTipi === 'CEK' && ' Yanlışlıkla yapıldıysa Stok sayfasından "Satışı Geri Al" ile hem çek hem ürün geri alınır (çek henüz ciro/tahsil edilmediyse).'}
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
@@ -175,8 +183,23 @@ export default function SatisYapSayfasi() {
             {ODEME_TIPI_ACIKLAMA[odemeTipi]}
           </div>
 
+          {odemeTipi === 'LEASINGLI' && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" onClick={() => setLeasingAltTip('PESIN')}
+                  style={eylemChipStili(leasingAltTip === 'PESIN' ? 'lacivert' : 'notr')}>
+                  Peşin (banka - leasing firması tek seferde ödedi)
+                </button>
+                <button type="button" onClick={() => setLeasingAltTip('TAKSITLI')}
+                  style={eylemChipStili(leasingAltTip === 'TAKSITLI' ? 'lacivert' : 'notr')}>
+                  Taksitli (biz taksitleri takip edeceğiz)
+                </button>
+              </div>
+            </div>
+          )}
+
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
-            <Alan etiket={odemeTipi === 'TAKSITLI' || odemeTipi === 'LEASINGLI' ? 'Toplam Tutar (TL)' : 'Tutar (TL)'}>
+            <Alan etiket={taksitliBenzeri ? 'Toplam Tutar (TL)' : 'Tutar (TL)'}>
               <input required type="number" step="0.01" value={tutar} onChange={(e) => setTutar(e.target.value)} style={girdiStili} />
             </Alan>
             <Alan etiket="Tarih">
@@ -194,7 +217,7 @@ export default function SatisYapSayfasi() {
               </Alan>
             )}
 
-            {(odemeTipi === 'TAKSITLI' || odemeTipi === 'LEASINGLI') && (
+            {taksitliBenzeri && (
               <>
                 <Alan etiket="Peşinat (TL)">
                   <input type="number" step="0.01" value={pesinat} onChange={(e) => setPesinat(e.target.value)} style={girdiStili} />
