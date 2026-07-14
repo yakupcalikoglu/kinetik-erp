@@ -119,29 +119,43 @@ class OdemeTahsilIstegi(BaseModel):
 
 
 # ------------------------------------------------------------ Taksitli Satış
+class TaksitKalemIstegi(BaseModel):
+    stok_karti_id: int
+    miktar: int = 1
+    birim_fiyat: Decimal
+
+
+class TaksitKalemYanit(BaseModel):
+    id: int
+    stok_karti_id: int
+    miktar: int
+    birim_fiyat: Decimal
+    urun_adi: str | None = None
+
+    class Config:
+        from_attributes = True
+
+
 class TaksitliSatisOlusturIstegi(BaseModel):
     musteri_cari_id: int
-    stok_seri_no_id: int | None = None
-    toplam_tutar: Decimal
     para_birimi: ParaBirimi
     pesinat: Decimal = Decimal("0")
     taksit_sayisi: int
     baslangic_tarihi: date
     notlar: str | None = None
+    kalemler: list[TaksitKalemIstegi]
 
 
 class TaksitliSatisYanit(BaseModel):
     id: int
     musteri_cari_id: int
     musteri_unvan: str | None = None
-    stok_seri_no_id: int | None
-    urun_seri_no: str | None = None
-    urun_adi: str | None = None
     toplam_tutar: Decimal
     para_birimi: ParaBirimi
     pesinat: Decimal
     taksit_sayisi: int
     baslangic_tarihi: date
+    kalemler: list[TaksitKalemYanit] = []
 
     class Config:
         from_attributes = True
@@ -187,22 +201,35 @@ class TaksitOdemeSonucu(BaseModel):
 
 
 # --------------------------------------------------------------- Kiralama
+class KiralamaKalemIstegi(BaseModel):
+    stok_karti_id: int
+    miktar: int = 1
+    birim_fiyat: Decimal  # bu urun turu icin aylik kira bedeli
+
+
+class KiralamaKalemYanit(BaseModel):
+    id: int
+    stok_karti_id: int
+    miktar: int
+    birim_fiyat: Decimal
+    urun_adi: str | None = None
+
+    class Config:
+        from_attributes = True
+
+
 class KiralamaOlusturIstegi(BaseModel):
-    stok_seri_no_id: int
     kiraci_cari_id: int
     baslangic_tarihi: date
     bitis_tarihi: date | None = None
-    aylik_kira_tutari: Decimal
     para_birimi: ParaBirimi
     depozito: Decimal = Decimal("0")
     notlar: str | None = None
+    kalemler: list[KiralamaKalemIstegi]
 
 
 class KiralamaYanit(BaseModel):
     id: int
-    stok_seri_no_id: int
-    urun_seri_no: str | None = None
-    urun_adi: str | None = None
     kiraci_cari_id: int
     kiraci_unvan: str | None = None
     baslangic_tarihi: date
@@ -211,6 +238,7 @@ class KiralamaYanit(BaseModel):
     para_birimi: ParaBirimi
     depozito: Decimal
     durum: str
+    kalemler: list[KiralamaKalemYanit] = []
 
     class Config:
         from_attributes = True
