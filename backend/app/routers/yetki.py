@@ -272,6 +272,8 @@ def rol_sil(
     db.delete(rol)
     db.commit()
     return {"silindi": True}
+
+
 # ============================================================== TEHLİKELİ İŞLEM: TEST VERİLERİNİ TEMİZLE
 class TemizlikOnayIstegi(BaseModel):
     onay_metni: str
@@ -297,8 +299,9 @@ def test_verilerini_temizle(istek: TemizlikOnayIstegi, db: Session = Depends(get
     from sqlalchemy import delete as sa_delete
 
     from app.models.finansal import (
-        Cek, CekGecmis, LeasingSozlesme, LeasingOdeme,
-        TaksitliSatisPlani, TaksitDetay, KiralamaSozlesme, KiralamaOdeme, BakimKaydi,
+        Cek, CekGecmis, LeasingSozlesme, LeasingOdeme, LeasingSozlesmeKalemi,
+        TaksitliSatisPlani, TaksitDetay, TaksitliSatisKalemi,
+        KiralamaSozlesme, KiralamaOdeme, KiralamaSozlesmeKalemi, BakimKaydi,
     )
     from app.models.akreditif import Akreditif, AkreditifKalemi
     from app.models.akreditif_maliyet import AkreditifMaliyetDagitimi
@@ -307,7 +310,7 @@ def test_verilerini_temizle(istek: TemizlikOnayIstegi, db: Session = Depends(get
         PersonelOdeme, Personel, SabitGider, Borc, BorcOdeme,
         ProformaDetay, ProformaFatura, FaturaDetay, Fatura,
     )
-    from app.models.stok import Siparis, SiparisDetay, StokSeriNo, StokMaliyetKalemi
+    from app.models.stok import Siparis, SiparisDetay, StokSeriNo, StokMaliyetKalemi, SiparisOdeme
     from app.models.cari import CariHesap, CariHareket
     from app.models.banka import KasaHareketi, BankaHareketi
     from app.models.virman import UrunSahiplikGecmisi
@@ -320,12 +323,15 @@ def test_verilerini_temizle(istek: TemizlikOnayIstegi, db: Session = Depends(get
         Akreditif,
 
         LeasingOdeme,
+        LeasingSozlesmeKalemi,
         LeasingSozlesme,
 
         TaksitDetay,
+        TaksitliSatisKalemi,
         TaksitliSatisPlani,
 
         KiralamaOdeme,
+        KiralamaSozlesmeKalemi,
         KiralamaSozlesme,
 
         BakimKaydi,
@@ -353,6 +359,7 @@ def test_verilerini_temizle(istek: TemizlikOnayIstegi, db: Session = Depends(get
 
         CariHareket,
 
+        SiparisOdeme,
         StokMaliyetKalemi,
         StokSeriNo,
 
@@ -372,7 +379,9 @@ def test_verilerini_temizle(istek: TemizlikOnayIstegi, db: Session = Depends(get
 
     db.commit()
     return {"toplam_silinen": toplam, "detaylar": sonuclar}
-  # ================================================== ESKİ AÇIKLAMALARI YENİDEN ÜRET
+
+
+# ================================================== ESKİ AÇIKLAMALARI YENİDEN ÜRET
 @router.post("/admin/aciklamalari-yeniden-uret",
              dependencies=[Depends(izin_gerektir("KULLANICI_YONET"))])
 def aciklamalari_yeniden_uret(
