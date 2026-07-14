@@ -14,6 +14,8 @@ export default function SiparisTeslimAlSayfasi() {
   const { siparisId } = useParams();
   const navigate = useNavigate();
   const [siparis, setSiparis] = useState(null);
+  const [stokKartlari, setStokKartlari] = useState([]);
+  const [tedarikciUnvani, setTedarikciUnvani] = useState('');
   const [satirlar, setSatirlar] = useState([]);
   const [hedefDurum, setHedefDurum] = useState('');
   const [kur, setKur] = useState('1');
@@ -29,12 +31,18 @@ export default function SiparisTeslimAlSayfasi() {
         if (res.data.para_birimi !== 'TRY') {
           api.get(`/kur/${res.data.para_birimi}`).then((r) => setKur(r.data.kur)).catch(() => {});
         }
+        api.get('/cariler').then((cr) => {
+          const t = cr.data.find((c) => c.id === res.data.tedarikci_cari_id);
+          setTedarikciUnvani(t ? t.unvan : '');
+        }).catch(() => {});
         // Her urun satiri icin miktar kadar seri no girisi olustur
         const acilanSatirlar = [];
         for (const urun of res.data.urunler) {
           for (let i = 0; i < urun.miktar; i++) {
             acilanSatirlar.push({
               siparis_detay_id: urun.id,
+              stok_karti_id: urun.stok_karti_id,
+              ilk_satir_mi: i === 0,
               seri_no: '',
               sasi_no: '',
               uretim_yili: '',
@@ -46,7 +54,13 @@ export default function SiparisTeslimAlSayfasi() {
         setSatirlar(acilanSatirlar);
       })
       .catch((err) => setHata(hataMesajiCikar(err)));
+    api.get('/stok-kartlari').then((r) => setStokKartlari(r.data)).catch(() => {});
   }, [siparisId]);
+
+  function urunAdiGoster(stokKartiId) {
+    const kart = stokKartlari.find((k) => k.id === stokKartiId);
+    return kart ? `${kart.marka} ${kart.model}` : `Ürün #${stokKartiId}`;
+  }
 
   function satirGuncelle(index, alan, deger) {
     setSatirlar((liste) => liste.map((s, i) => (i === index ? { ...s, [alan]: deger } : s)));
@@ -107,7 +121,7 @@ export default function SiparisTeslimAlSayfasi() {
   return (
     <div>
       <SayfaBasligi
-        baslik={`Teslim al — ${siparis.siparis_no}`}
+        baslik={`Teslim al — ${siparis.siparis_no}${tedarikciUnvani ? ` (${tedarikciUnvani})` : ''}`}
         aciklama="Her ürün için gerçek seri numarasını girin; ürünler stok kaydına dönüştürülecek"
       />
       <form onSubmit={teslimAl}>
@@ -137,18 +151,23 @@ export default function SiparisTeslimAlSayfasi() {
           <table>
             <thead>
               <tr style={{ background: 'var(--zemin)' }}>
-                {['#', 'Sipariş Satırı', 'Seri No', 'Şasi No', 'Üretim Yılı', 'Garanti Bitiş', 'Barkod'].map((b) => (
+                {['#', 'Tedarikçi / Ürün', 'Seri No', 'Şasi No', 'Üretim Yılı', 'Garanti Bitiş', 'Barkod'].map((b) => (
                   <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)' }}>{b}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {satirlar.map((s, i) => (
-                <tr key={i} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                <tr
+                  key={i}
+                  style={{
+                    borderTop: s.ilk_satir_mi ? '3px solid var(--lacivert)' : '1px solid var(--kenarlik)',
+                  }}
+                >
                   <td style={{ padding: '10px 16px' }}>{i + 1}</td>
-                  <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>Stok Kartı #{
-                    siparis.urunler.find((u) => u.id === s.siparis_detay_id)?.stok_karti_id
-                  }</td>
+                  <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>
+                    {tedarikciUnvani ? `${tedarikciUnvani} — ` : ''}{urunAdiGoster(s.stok_karti_id)}
+                  </td>
                   <td style={{ padding: 8 }}>
                     <input required value={s.seri_no} onChange={(e) => satirGuncelle(i, 'seri_no', e.target.value)}
                       placeholder="HC2026-00451" style={{ ...girdiStili, width: 160 }} />
