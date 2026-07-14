@@ -1,3 +1,4 @@
+from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import select
@@ -10,7 +11,7 @@ from app.models.cari import CariHesap
 from app.models.stok import StokSeriNo, StokKarti, StokDurum
 from app.models.finansal import (
     Cek, CekGecmis, CekDurum, CekTip,
-    LeasingSozlesme, LeasingOdeme,
+    LeasingSozlesme, LeasingOdeme, LeasingSozlesmeKalemi,
     TaksitliSatisPlani, TaksitDetay,
     KiralamaSozlesme, KiralamaOdeme,
     BakimKaydi, BakimTip,
@@ -59,6 +60,15 @@ def _urun_bilgisi_ekle(nesne, urun_id, urun_haritasi):
     urun = urun_haritasi.get(urun_id) if urun_id else None
     nesne.urun_seri_no = urun["seri_no"] if urun else None
     nesne.urun_adi = urun["urun_adi"] if urun else None
+
+
+def _urun_tanimi_haritasi(db: Session, sirket_id: int) -> dict:
+    """stok_karti_id -> 'marka model' haritasi (Leasing kalemleri gibi urun TANIMINA - seri no'suz - bagli kayitlar icin)."""
+    return {
+        k.id: f"{k.marka} {k.model}".strip() for k in db.execute(
+            select(StokKarti).where(StokKarti.sirket_id == sirket_id)
+        ).scalars()
+    }
 
 
 # ============================================================================ ÇEK
@@ -158,24 +168,43 @@ def cek_gecmisi(cek_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db
 def leasing_olustur(
     istek: LeasingOlusturIstegi, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
 ):
-    yeni = LeasingSozlesme(sirket_id=sirket_id, **istek.model_dump())
+    if not istek.kalemler:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "En az bir ürün kalemi eklemelisiniz.")
+
+    toplam_tutar = sum((k.miktar * k.birim_fiyat for k in istek.kalemler), Decimal("0"))
+
+    yeni = LeasingSozlesme(
+        sirket_id=sirket_id,
+        leasing_firmasi_cari_id=istek.leasing_firmasi_cari_id,
+        sozlesme_no=istek.sozlesme_no,
+        baslangic_tarihi=istek.baslangic_tarihi,
+        toplam_tutar=toplam_tutar,
+        para_birimi=istek.para_birimi,
+        taksit_sayisi=istek.taksit_sayisi,
+        notlar=istek.notlar,
+    )
     db.add(yeni)
     db.flush()
 
-    taksit_tutari = round(istek.toplam_tutar / istek.taksit_sayisi, 2)
+    for k in istek.kalemler:
+        db.add(LeasingSozlesmeKalemi(leasing_id=yeni.id, stok_karti_id=k.stok_karti_id, miktar=k.miktar, birim_fiyat=k.birim_fiyat))
+
+    taksit_tutari = round(toplam_tutar / istek.taksit_sayisi, 2)
     for i in range(1, istek.taksit_sayisi + 1):
         vade = istek.baslangic_tarihi + relativedelta(months=i)
         tutar = taksit_tutari
         if i == istek.taksit_sayisi:
-            tutar = istek.toplam_tutar - taksit_tutari * (istek.taksit_sayisi - 1)
+            tutar = toplam_tutar - taksit_tutari * (istek.taksit_sayisi - 1)
         db.add(LeasingOdeme(leasing_id=yeni.id, taksit_no=i, vade_tarihi=vade, tutar=tutar))
 
     db.commit()
     db.refresh(yeni)
     cari_h = _cari_haritasi(db, sirket_id)
-    urun_h = _urun_haritasi(db, sirket_id)
+    urun_tanimi_h = _urun_tanimi_haritasi(db, sirket_id)
     yeni.leasing_firmasi_unvan = cari_h.get(yeni.leasing_firmasi_cari_id)
-    _urun_bilgisi_ekle(yeni, yeni.stok_seri_no_id, urun_h)
+    yeni.kalemler = list(db.execute(select(LeasingSozlesmeKalemi).where(LeasingSozlesmeKalemi.leasing_id == yeni.id)).scalars())
+    for k in yeni.kalemler:
+        k.urun_adi = urun_tanimi_h.get(k.stok_karti_id)
     return yeni
 
 
@@ -185,10 +214,12 @@ def leasing_listele(sirket_id: int = Depends(aktif_sirket_id_getir), db: Session
     sorgu = select(LeasingSozlesme).where(LeasingSozlesme.sirket_id == sirket_id)
     sonuclar = list(db.execute(sorgu).scalars())
     cari_h = _cari_haritasi(db, sirket_id)
-    urun_h = _urun_haritasi(db, sirket_id)
+    urun_tanimi_h = _urun_tanimi_haritasi(db, sirket_id)
     for l in sonuclar:
         l.leasing_firmasi_unvan = cari_h.get(l.leasing_firmasi_cari_id)
-        _urun_bilgisi_ekle(l, l.stok_seri_no_id, urun_h)
+        l.kalemler = list(db.execute(select(LeasingSozlesmeKalemi).where(LeasingSozlesmeKalemi.leasing_id == l.id)).scalars())
+        for k in l.kalemler:
+            k.urun_adi = urun_tanimi_h.get(k.stok_karti_id)
     return sonuclar
 
 
@@ -646,6 +677,8 @@ def leasing_sil(leasing_id: int, sirket_id: int = Depends(aktif_sirket_id_getir)
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ödenmiş taksiti olan bir sözleşme silinemez.")
     for o in odemeler:
         db.delete(o)
+    for k in list(db.execute(select(LeasingSozlesmeKalemi).where(LeasingSozlesmeKalemi.leasing_id == leasing_id)).scalars()):
+        db.delete(k)
     db.delete(sozlesme)
     db.commit()
     return {"silindi": True}
