@@ -833,25 +833,62 @@ export default function ProformaFaturaSayfasi() {
               {(olusanProforma.kalemler || []).filter((k) => k.stok_karti_id).length > 0 && (
                 <div style={{ marginBottom: 20 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
-                    Anlaşma netleşti mi? Proformadaki tüm ürünleri tek işlemde satışa çevirip faturayı otomatik oluşturabilirsiniz:
+                    Anlaşma netleşti mi? İki şekilde satışa çevirebilirsiniz:
                   </div>
-                  <button
-                    onClick={() => setSatisaCevirAcikKalemId((mevcut) => (mevcut === 'TUMU' ? null : 'TUMU'))}
-                    style={eylemChipStili('yesil')}
-                  >
-                    {satisaCevirAcikKalemId === 'TUMU' ? 'Kapat' : 'Tümünü Satışa Çevir'}
-                  </button>
-                  {satisaCevirAcikKalemId === 'TUMU' && (
-                    <ProformaTumunuSatisaCevirFormu
-                      proforma={olusanProforma}
-                      onTamamlandi={() => {
-                        setSatisaCevirAcikKalemId(null);
-                        setOlusanProforma((p) => ({ ...p, durum: 'FATURALASTI' }));
-                        setGecmisYenidenYukleTetik((t) => t + 1);
-                      }}
-                      onVazgec={() => setSatisaCevirAcikKalemId(null)}
-                    />
+
+                  {(olusanProforma.kalemler || []).filter((k) => k.stok_karti_id).length > 1 && (
+                    <div style={{ marginBottom: 14 }}>
+                      <div style={{ fontSize: 12.5, color: 'var(--metin-ikincil)', marginBottom: 6 }}>
+                        Seçenek 1 — Tüm ürünleri birlikte, tek ödeme türüyle satışa çevir:
+                      </div>
+                      <button
+                        onClick={() => setSatisaCevirAcikKalemId((mevcut) => (mevcut === 'TUMU' ? null : 'TUMU'))}
+                        style={eylemChipStili('yesil')}
+                      >
+                        {satisaCevirAcikKalemId === 'TUMU' ? 'Kapat' : 'Tümünü Satışa Çevir'}
+                      </button>
+                      {satisaCevirAcikKalemId === 'TUMU' && (
+                        <ProformaTumunuSatisaCevirFormu
+                          proforma={olusanProforma}
+                          onTamamlandi={() => {
+                            setSatisaCevirAcikKalemId(null);
+                            setOlusanProforma((p) => ({ ...p, durum: 'FATURALASTI' }));
+                            setGecmisYenidenYukleTetik((t) => t + 1);
+                          }}
+                          onVazgec={() => setSatisaCevirAcikKalemId(null)}
+                        />
+                      )}
+                    </div>
                   )}
+
+                  <div style={{ fontSize: 12.5, color: 'var(--metin-ikincil)', marginBottom: 6 }}>
+                    Seçenek 2 — Her ürünü ayrı ayrı, farklı ödeme türleriyle satışa çevir:
+                  </div>
+                  {olusanProforma.kalemler.filter((k) => k.stok_karti_id).map((k) => (
+                    <div key={k.id} style={{ marginBottom: 8 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', border: '1px solid var(--kenarlik)', borderRadius: 8 }}>
+                        <div style={{ fontSize: 13 }}>{k.aciklama} — {paraFormat(k.miktar * k.birim_fiyat, olusanProforma.para_birimi)}</div>
+                        <button
+                          onClick={() => setSatisaCevirAcikKalemId((mevcut) => (mevcut === k.id ? null : k.id))}
+                          style={eylemChipStili('lacivert')}
+                        >
+                          {satisaCevirAcikKalemId === k.id ? 'Kapat' : 'Bu Ürünü Satışa Çevir'}
+                        </button>
+                      </div>
+                      {satisaCevirAcikKalemId === k.id && (
+                        <SatisaCevirFormu
+                          proforma={olusanProforma}
+                          kalem={k}
+                          onTamamlandi={() => {
+                            setSatisaCevirAcikKalemId(null);
+                            setOlusanProforma((p) => ({ ...p, durum: 'FATURALASTI' }));
+                            setGecmisYenidenYukleTetik((t) => t + 1);
+                          }}
+                          onVazgec={() => setSatisaCevirAcikKalemId(null)}
+                        />
+                      )}
+                    </div>
+                  ))}
                 </div>
               )}
 
