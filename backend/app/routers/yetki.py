@@ -354,10 +354,10 @@ def test_verilerini_temizle(istek: TemizlikOnayIstegi, db: Session = Depends(get
         BorcOdeme,
         Borc,
 
-        ProformaDetay,
-        ProformaFatura,
         FaturaDetay,
         Fatura,
+        ProformaDetay,
+        ProformaFatura,
 
         UrunSahiplikGecmisi,
 
