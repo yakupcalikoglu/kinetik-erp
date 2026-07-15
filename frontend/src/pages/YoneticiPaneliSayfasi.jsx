@@ -452,6 +452,8 @@ const TABLO_ADI_METIN = {
   sabit_giderler: 'Diğer Gider',
   kiralama_sozlesmeleri: 'Kiralama Sözleşmesi',
   akreditif_kalemleri: 'Akreditif Kalemi',
+  stok_seri_no: 'Stok Ürünü',
+  stok_maliyet_kalemleri: 'Stok Maliyet Kalemi',
 };
 
 function DuzenlemeGecmisiSekmesi() {
