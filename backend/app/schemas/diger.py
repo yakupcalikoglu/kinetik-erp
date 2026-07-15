@@ -61,6 +61,16 @@ class SabitGiderOlusturIstegi(BaseModel):
     aciklama: str | None = None
 
 
+class SabitGiderDuzenleIstegi(BaseModel):
+    sifre: str  # kullanicinin kendi giris sifresi - degisiklik onayi icin zorunlu
+    kategori: str
+    donem: date
+    tutar: Decimal
+    para_birimi: ParaBirimi = ParaBirimi.TRY
+    kur: Decimal = Decimal("1")
+    aciklama: str | None = None
+
+
 class SabitGiderYanit(BaseModel):
     id: int
     kategori: str | None
