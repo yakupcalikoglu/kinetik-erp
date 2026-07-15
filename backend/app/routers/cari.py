@@ -1,3 +1,4 @@
+import json
 from sqlalchemy.exc import IntegrityError
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -5,8 +6,11 @@ from sqlalchemy import select, func, case
 from datetime import date
 
 from app.db.session import get_db
-from app.core.deps import aktif_sirket_id_getir, izin_gerektir
+from app.core.deps import aktif_sirket_id_getir, izin_gerektir, aktif_kullanici_getir
+from app.models.auth import Kullanici
 from app.models.cari import CariHesap, CariHareket
+from app.models.denetim import DuzenlemeKaydi
+from app.core.security import sifre_dogrula
 from app.schemas.cari import (
     VergiNoSorguIstegi, VergiNoSorguYaniti, CariOlusturIstegi,
     CariGuncelleIstegi, CariYanit, CariHareketYanit, CariBakiyeYanit,
@@ -14,6 +18,15 @@ from app.schemas.cari import (
 from app.services import uyumsoft_mock
 
 router = APIRouter(prefix="/cariler", tags=["Cari"])
+
+
+def _degisiklikleri_kaydet(db: Session, sirket_id: int, kullanici_id: int, tablo_adi: str, kayit_id: int, degisiklikler: dict) -> None:
+    if not degisiklikler:
+        return
+    db.add(DuzenlemeKaydi(
+        sirket_id=sirket_id, kullanici_id=kullanici_id, tablo_adi=tablo_adi,
+        kayit_id=kayit_id, degisiklikler=json.dumps(degisiklikler, ensure_ascii=False, default=str),
+    ))
 
 
 @router.post("/vergi-no-sorgula", response_model=VergiNoSorguYaniti,
@@ -76,14 +89,31 @@ def cari_guncelle(
     cari_id: int,
     istek: CariGuncelleIstegi,
     sirket_id: int = Depends(aktif_sirket_id_getir),
+    kullanici: Kullanici = Depends(aktif_kullanici_getir),
     db: Session = Depends(get_db),
 ):
+    """Bir cari kaydini duzenler. Sifre onayi zorunludur; degisiklikler denetim_kayitlari'na islenir."""
+    if not sifre_dogrula(istek.sifre, kullanici.sifre_hash):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Şifre yanlış, düzenleme yapılamadı.")
+
     cari = db.get(CariHesap, cari_id)
     if cari is None or cari.sirket_id != sirket_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Cari kayıt bulunamadı.")
 
-    for alan, deger in istek.model_dump(exclude_unset=True).items():
-        setattr(cari, alan, deger)
+    alan_adlari = {
+        "unvan": "Unvan", "vergi_no": "Vergi No", "vergi_dairesi": "Vergi Dairesi",
+        "adres": "Adres", "telefon": "Telefon", "email": "E-posta", "aktif": "Aktif",
+    }
+    degisiklikler = {}
+    guncellenecekler = istek.model_dump(exclude_unset=True, exclude={"sifre"})
+    for alan, yeni in guncellenecekler.items():
+        eski = getattr(cari, alan)
+        if str(eski) != str(yeni):
+            degisiklikler[alan_adlari.get(alan, alan)] = {"eski": eski, "yeni": yeni}
+        setattr(cari, alan, yeni)
+
+    _degisiklikleri_kaydet(db, sirket_id, kullanici.id, "cari_hesaplar", cari.id, degisiklikler)
+
     db.commit()
     db.refresh(cari)
     return cari
@@ -146,6 +176,8 @@ def cari_bakiye(
             net_bakiye=(r.toplam_giris or 0) - (r.toplam_cikis or 0),
         )
         for r in sonuclar]
+
+
 @router.delete("/{cari_id}",
                dependencies=[Depends(izin_gerektir("CARI_DUZENLE"))])
 def cari_sil(
