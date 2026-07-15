@@ -449,6 +449,8 @@ const YONETICI_SEKMELERI = [
 const TABLO_ADI_METIN = {
   banka_hareketleri: 'Banka Hareketi',
   kasa_hareketleri: 'Ana Kasa Hareketi',
+  sabit_giderler: 'Diğer Gider',
+  kiralama_sozlesmeleri: 'Kiralama Sözleşmesi',
 };
 
 function DuzenlemeGecmisiSekmesi() {
