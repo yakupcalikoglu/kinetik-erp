@@ -696,7 +696,7 @@ function AkreditifKalemOdemeFormu({ kalem, akreditif, onKaydedildi, onVazgec }) 
 
 function AkreditifKalemDuzenleFormu({ kalem, onKaydedildi, onVazgec }) {
   const [form, setForm] = useState({
-    tip: kalem.tip, aciklama: kalem.aciklama || '', tutar: kalem.tutar, vade_tarihi: kalem.vade_tarihi,
+    tip: kalem.tip, aciklama: kalem.aciklama || '', tutar: kalem.tutar, vade_tarihi: kalem.vade_tarihi, sifre: '',
   });
   const [hata, setHata] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
@@ -738,6 +738,9 @@ function AkreditifKalemDuzenleFormu({ kalem, onKaydedildi, onVazgec }) {
               </Alan>
               <Alan etiket="Vade tarihi">
                 <input required type="date" value={form.vade_tarihi} onChange={(e) => setForm((f) => ({ ...f, vade_tarihi: e.target.value }))} style={girdiStili} />
+              </Alan>
+              <Alan etiket="Şifreniz (onay için zorunlu)">
+                <input required type="password" value={form.sifre} onChange={(e) => setForm((f) => ({ ...f, sifre: e.target.value }))} style={girdiStili} placeholder="Giriş şifreniz" />
               </Alan>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
