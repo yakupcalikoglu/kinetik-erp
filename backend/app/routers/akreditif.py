@@ -11,15 +11,27 @@ from app.models.akreditif_maliyet import AkreditifMaliyetDagitimi
 from app.models.akreditif_taksit import AkreditifKalemTaksiti
 from app.models.stok import Siparis, StokSeriNo
 from app.models.banka import BankaHesabi
+import json
+from app.models.denetim import DuzenlemeKaydi
+from app.core.security import sifre_dogrula
 from app.schemas.akreditif import (
     AkreditifOlusturIstegi, AkreditifYanit, AkreditifDurumGuncelleIstegi,
-    AkreditifKalemEkleIstegi, AkreditifKalemOdeIstegi,
+    AkreditifKalemEkleIstegi, AkreditifKalemOdeIstegi, AkreditifKalemDuzenleIstegi,
     AkreditifUrunSecenegi, AkreditifMaliyetDagitIstegi, AkreditifMaliyetDagitYaniti,
     AkreditifMaliyetDagitimSatiri,
     AkreditifKalemTaksitlendirIstegi, AkreditifKalemTaksitiYanit, AkreditifKalemTaksitOdeIstegi,
     AkreditifKalemTaksitiDuzenleIstegi,
 )
 from app.services.para_hareketi import para_hareketi_olustur
+
+
+def _degisiklikleri_kaydet(db: Session, sirket_id: int, kullanici_id: int, tablo_adi: str, kayit_id: int, degisiklikler: dict) -> None:
+    if not degisiklikler:
+        return
+    db.add(DuzenlemeKaydi(
+        sirket_id=sirket_id, kullanici_id=kullanici_id, tablo_adi=tablo_adi,
+        kayit_id=kayit_id, degisiklikler=json.dumps(degisiklikler, ensure_ascii=False, default=str),
+    ))
 
 router = APIRouter(prefix="/akreditifler", tags=["Akreditif"])
 
@@ -100,11 +112,6 @@ def akreditif_sil(
     sirket_id: int = Depends(aktif_sirket_id_getir),
     db: Session = Depends(get_db),
 ):
-    """
-    Akreditifi ve ona bagli TUM alt kayitlari (kalemler, kalem taksitleri,
-    maliyet dagitim kayitlari) siler. Her asamadan sonra flush() ile silme
-    sirasi kesin olarak garanti edilir (once cocuk, sonra ebeveyn).
-    """
     akreditif = _akreditif_getir_veya_404(db, akreditif_id, sirket_id)
     try:
         kalemler = list(db.execute(
@@ -112,27 +119,23 @@ def akreditif_sil(
         ).scalars())
         kalem_idleri = [k.id for k in kalemler]
 
-        # 1) ONCE en alttaki cocuk: kalem taksitleri (varsa)
         if kalem_idleri:
             for taksit in list(db.execute(
                 select(AkreditifKalemTaksiti).where(AkreditifKalemTaksiti.kalem_id.in_(kalem_idleri))
             ).scalars()):
                 db.delete(taksit)
-            db.flush()  # taksitlerin gercekten silindiginden emin ol
+            db.flush()
 
-        # 2) SONRA maliyet dagitim kayitlari (varsa)
         for dagitim in list(db.execute(
             select(AkreditifMaliyetDagitimi).where(AkreditifMaliyetDagitimi.akreditif_id == akreditif_id)
         ).scalars()):
             db.delete(dagitim)
         db.flush()
 
-        # 3) SONRA kalemlerin kendisi
         for kalem in kalemler:
             db.delete(kalem)
-        db.flush()  # kalemlerin gercekten silindiginden emin ol
+        db.flush()
 
-        # 4) EN SON akreditifin kendisi
         db.delete(akreditif)
         db.commit()
     except IntegrityError as e:
@@ -192,8 +195,6 @@ def akreditif_durum_guncelle(
 
 
 def _durumu_yeniden_hesapla(db: Session, akreditif: Akreditif) -> None:
-    """Kalemlerin odenme durumuna gore akreditifin genel durumunu gunceller.
-    Bir odeme geri alindiginda ACIK'a donebilmesi icin de kontrol eder."""
     kalemler = list(db.execute(
         select(AkreditifKalemi).where(AkreditifKalemi.akreditif_id == akreditif.id)
     ).scalars())
@@ -255,7 +256,6 @@ def akreditif_kalemi_ode(
     return {"odendi": True}
 
 
-# --------------------------------------------------------- Maliyet Dağıtımı
 @router.get("/{akreditif_id}/urun-secenekleri", response_model=list[AkreditifUrunSecenegi],
             dependencies=[Depends(izin_gerektir("AKREDITIF_GORUNTULE"))])
 def akreditif_urun_secenekleri(
@@ -263,7 +263,6 @@ def akreditif_urun_secenekleri(
     sirket_id: int = Depends(aktif_sirket_id_getir),
     db: Session = Depends(get_db),
 ):
-    """Dağıtım formunda seçilebilecek ürün listesi - akreditifin bağlı olduğu siparişten gelen ürünler."""
     akreditif = _akreditif_getir_veya_404(db, akreditif_id, sirket_id)
     urunler = list(db.execute(
         select(StokSeriNo).where(StokSeriNo.siparis_id == akreditif.siparis_id, StokSeriNo.sirket_id == sirket_id)
@@ -317,16 +316,6 @@ def akreditif_maliyet_dagit(
     sirket_id: int = Depends(aktif_sirket_id_getir),
     db: Session = Depends(get_db),
 ):
-    """
-    Akreditifin KOMISYON ve MASRAF kalemlerinin toplamini, secilen urunlere
-    (ya da secim yapilmadiysa siparisteki TUM urunlere) dagitir ve
-    diger_maliyet_try alanina ekler. Her urun icin ayri bir
-    AkreditifMaliyetDagitimi kaydi acilir, boylece daha sonra tek tek
-    "Geri Al" ile iptal edilebilir.
-
-    ESIT: toplam masraf, secilen urun adedine esit bolunur.
-    AGIRLIKLI: toplam masraf, urunlerin satinalma maliyetine oranla dagilir.
-    """
     akreditif = _akreditif_getir_veya_404(db, akreditif_id, sirket_id)
 
     kalemler = list(db.execute(
@@ -395,7 +384,6 @@ def akreditif_maliyet_dagitimi_geri_al(
     sirket_id: int = Depends(aktif_sirket_id_getir),
     db: Session = Depends(get_db),
 ):
-    """Tek bir dağıtım kaydını iptal eder: tutarı ilgili ürünün diger_maliyet_try alanından düşer ve kaydı siler."""
     kayit = db.get(AkreditifMaliyetDagitimi, dagitim_id)
     if kayit is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Dağıtım kaydı bulunamadı.")
@@ -409,7 +397,6 @@ def akreditif_maliyet_dagitimi_geri_al(
     return {"geri_alindi": True}
 
 
-# --------------------------------------------------------- Kalem Taksitlendirme
 @kalem_router.post("/{kalem_id}/taksitlendir", response_model=list[AkreditifKalemTaksitiYanit],
                     dependencies=[Depends(izin_gerektir("AKREDITIF_DUZENLE"))])
 def akreditif_kalemi_taksitlendir(
@@ -418,12 +405,6 @@ def akreditif_kalemi_taksitlendir(
     sirket_id: int = Depends(aktif_sirket_id_getir),
     db: Session = Depends(get_db),
 ):
-    """
-    Finansman sikintisinda, henuz odenmemis bir akreditif kalemini
-    (ek_ucret dahil toplam tutar) esit taksitlere boler. Kalemin kendisi
-    DEGISMEZ (tutari sabit kalir); taksitler ayri bir tabloda izlenir.
-    Bir kalem sadece BIR KEZ taksitlendirilebilir.
-    """
     kalem = db.get(AkreditifKalemi, kalem_id)
     if kalem is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Akreditif kalemi bulunamadı.")
@@ -482,11 +463,6 @@ def akreditif_kalem_taksiti_ode(
     kullanici: Kullanici = Depends(aktif_kullanici_getir),
     db: Session = Depends(get_db),
 ):
-    """
-    Bir akreditif kalem taksitini oder. Tum taksitler odendiginde, orijinal
-    AkreditifKalemi.odendi_mi de otomatik True yapilir ve akreditifin genel
-    durumu (Acik/Kismi Odendi/Kapandi) yeniden hesaplanir.
-    """
     taksit = db.get(AkreditifKalemTaksiti, taksit_id)
     if taksit is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Taksit bulunamadı.")
@@ -522,16 +498,19 @@ def akreditif_kalem_taksiti_ode(
     return taksit
 
 
-# --------------------------------------------------------- Kalem Düzenle/Sil
 @kalem_router.put("/{kalem_id}", response_model=AkreditifYanit,
                    dependencies=[Depends(izin_gerektir("AKREDITIF_DUZENLE"))])
 def akreditif_kalemi_duzenle(
     kalem_id: int,
-    istek: AkreditifKalemEkleIstegi,
+    istek: AkreditifKalemDuzenleIstegi,
     sirket_id: int = Depends(aktif_sirket_id_getir),
+    kullanici: Kullanici = Depends(aktif_kullanici_getir),
     db: Session = Depends(get_db),
 ):
-    """Odenmemis ve taksitlendirilmemis bir kalemin bilgilerini duzeltir (yanlis girilen tutar/tarih icin)."""
+    """Yanlis girilmis bir maliyet kalemini duzeltir. Sifre onayi zorunludur; degisiklikler denetim_kayitlari'na islenir."""
+    if not sifre_dogrula(istek.sifre, kullanici.sifre_hash):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Şifre yanlış, düzenleme yapılamadı.")
+
     kalem = db.get(AkreditifKalemi, kalem_id)
     if kalem is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Akreditif kalemi bulunamadı.")
@@ -550,10 +529,20 @@ def akreditif_kalemi_duzenle(
             "Taksitlendirilmiş bir kalem düzenlenemez; önce taksitleri silin."
         )
 
-    kalem.tip = istek.tip
-    kalem.aciklama = istek.aciklama
-    kalem.tutar = istek.tutar
-    kalem.vade_tarihi = istek.vade_tarihi
+    alan_adlari = {"tip": "Tip", "aciklama": "Açıklama", "tutar": "Tutar", "vade_tarihi": "Vade Tarihi"}
+    yeni_degerler = {"tip": istek.tip, "aciklama": istek.aciklama, "tutar": istek.tutar, "vade_tarihi": istek.vade_tarihi}
+    degisiklikler = {}
+    for alan, etiket in alan_adlari.items():
+        eski = getattr(kalem, alan)
+        yeni = yeni_degerler[alan]
+        eski_metin = eski.value if hasattr(eski, "value") else eski
+        yeni_metin = yeni.value if hasattr(yeni, "value") else yeni
+        if str(eski_metin) != str(yeni_metin):
+            degisiklikler[etiket] = {"eski": eski_metin, "yeni": yeni_metin}
+        setattr(kalem, alan, yeni)
+
+    _degisiklikleri_kaydet(db, sirket_id, kullanici.id, "akreditif_kalemleri", kalem.id, degisiklikler)
+
     db.commit()
     return _detayli_getir(db, akreditif.id)
 
@@ -564,7 +553,6 @@ def akreditif_kalemi_sil(
     sirket_id: int = Depends(aktif_sirket_id_getir),
     db: Session = Depends(get_db),
 ):
-    """Odenmemis bir kalemi siler. Taksitlendirilmisse, henuz odenmemis taksitleri de birlikte siler."""
     kalem = db.get(AkreditifKalemi, kalem_id)
     if kalem is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Akreditif kalemi bulunamadı.")
@@ -587,7 +575,6 @@ def akreditif_kalemi_sil(
     return {"silindi": True}
 
 
-# --------------------------------------------------------- Taksit Düzenle/Sil
 @taksit_router.put("/{taksit_id}", response_model=AkreditifKalemTaksitiYanit,
                     dependencies=[Depends(izin_gerektir("AKREDITIF_DUZENLE"))])
 def akreditif_kalem_taksitini_duzenle(
@@ -634,18 +621,12 @@ def akreditif_kalem_taksitini_sil(
     return {"silindi": True}
 
 
-# --------------------------------------------------------- Ödemeyi Geri Al
 @kalem_router.put("/{kalem_id}/odemeyi-geri-al", dependencies=[Depends(izin_gerektir("AKREDITIF_DUZENLE"))])
 def akreditif_kalemi_odemesini_geri_al(
     kalem_id: int,
     sirket_id: int = Depends(aktif_sirket_id_getir),
     db: Session = Depends(get_db),
 ):
-    """
-    Yanlislikla odenmis/isaretlenmis bir kalemin odemesini geri alir:
-    olusturulan Kasa/Banka hareketini siler ve kalemi tekrar 'Bekliyor'
-    durumuna dondurur - boylece duzenlenebilir/silinebilir hale gelir.
-    """
     kalem = db.get(AkreditifKalemi, kalem_id)
     if kalem is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Akreditif kalemi bulunamadı.")
@@ -679,8 +660,6 @@ def akreditif_kalem_taksitinin_odemesini_geri_al(
     sirket_id: int = Depends(aktif_sirket_id_getir),
     db: Session = Depends(get_db),
 ):
-    """Bir taksit odemesini geri alir: Kasa/Banka hareketini siler, taksidi ve
-    (tum taksitler odendi diye isaretlenmisse) kalemi tekrar 'Bekliyor' yapar."""
     taksit = db.get(AkreditifKalemTaksiti, taksit_id)
     if taksit is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Taksit bulunamadı.")
