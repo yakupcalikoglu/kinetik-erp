@@ -15,7 +15,7 @@ from app.models.denetim import DuzenlemeKaydi
 from app.schemas.banka import (
     BankaHesabiOlusturIstegi, BankaHesabiYanit, BankaBakiyeYanit,
     BankaHareketiOlusturIstegi, BankaHareketiYanit, BankaHareketiDuzenleIstegi,
-    KasaHareketiOlusturIstegi, KasaHareketiYanit, KasaBakiyeYanit, KasaBakiyeSatiri,
+    KasaHareketiOlusturIstegi, KasaHareketiYanit, KasaHareketiDuzenleIstegi, KasaBakiyeYanit, KasaBakiyeSatiri,
 )
 from app.services.kur_servisi import guncel_kur_getir
 
@@ -348,11 +348,19 @@ def kasa_hareketlerini_listele(
             dependencies=[Depends(izin_gerektir("KASA_DUZENLE"))])
 def kasa_hareketi_guncelle(
     hareket_id: int,
-    istek: KasaHareketiOlusturIstegi,
+    istek: KasaHareketiDuzenleIstegi,
     sirket_id: int = Depends(aktif_sirket_id_getir),
+    kullanici: Kullanici = Depends(aktif_kullanici_getir),
     db: Session = Depends(get_db),
 ):
-    """Mevcut bir kasa hareketini duzenler. Sadece KASA_DUZENLE iznine sahip kullanicilar cagirabilir."""
+    """
+    Mevcut bir kasa hareketini duzenler. Sadece KASA_DUZENLE iznine sahip
+    kullanicilar cagirabilir VE kendi sifresini dogrulamalidir. Her basarili
+    duzenleme denetim_kayitlari'na islenir (Yonetici Paneli > Duzenleme Gecmisi).
+    """
+    if not sifre_dogrula(istek.sifre, kullanici.sifre_hash):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Şifre yanlış, düzenleme yapılamadı.")
+
     kayit = db.get(KasaHareketi, hareket_id)
     if kayit is None or kayit.sirket_id != sirket_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Kasa hareketi bulunamadı.")
@@ -364,13 +372,25 @@ def kasa_hareketi_guncelle(
         )
     tutar_try_karsiligi = istek.tutar_try_karsiligi if istek.para_birimi.value != "TRY" else istek.tutar
 
-    kayit.tarih = istek.tarih
-    kayit.yon = istek.yon
-    kayit.para_birimi = istek.para_birimi
-    kayit.tutar = istek.tutar
-    kayit.tutar_try_karsiligi = tutar_try_karsiligi
-    kayit.aciklama = istek.aciklama
-    kayit.cari_id = istek.cari_id
+    alan_adlari = {
+        "tarih": "Tarih", "yon": "Yön", "para_birimi": "Para Birimi", "tutar": "Tutar",
+        "tutar_try_karsiligi": "TL Karşılığı", "aciklama": "Açıklama", "cari_id": "Cari",
+    }
+    yeni_degerler = {
+        "tarih": istek.tarih, "yon": istek.yon, "para_birimi": istek.para_birimi, "tutar": istek.tutar,
+        "tutar_try_karsiligi": tutar_try_karsiligi, "aciklama": istek.aciklama, "cari_id": istek.cari_id,
+    }
+    degisiklikler = {}
+    for alan, etiket in alan_adlari.items():
+        eski = getattr(kayit, alan)
+        yeni = yeni_degerler[alan]
+        eski_metin = eski.value if hasattr(eski, "value") else eski
+        yeni_metin = yeni.value if hasattr(yeni, "value") else yeni
+        if str(eski_metin) != str(yeni_metin):
+            degisiklikler[etiket] = {"eski": eski_metin, "yeni": yeni_metin}
+        setattr(kayit, alan, yeni)
+
+    _degisiklikleri_kaydet(db, sirket_id, kullanici.id, "kasa_hareketleri", kayit.id, degisiklikler)
 
     db.commit()
     db.refresh(kayit)
