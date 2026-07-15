@@ -10,15 +10,27 @@ from app.models.auth import Kullanici
 from datetime import date
 from app.models.stok import (StokKarti, StokSeriNo, StokMaliyetKalemi,
                               MALIYET_TIP_SUTUN_ESLEME, StokDurum, MaliyetTip, ParaBirimi)
+import json
 from app.schemas.stok import (StokKartiOlusturIstegi, StokKartiYanit,
                                StokSeriNoYanit, StokDurumGuncelleIstegi,
-                               MaliyetKalemiEkleIstegi, KarRaporuYanit, StokSatisIstegi,
+                               MaliyetKalemiEkleIstegi, MaliyetKalemiDuzenleIstegi, KarRaporuYanit, StokSatisIstegi,
                                StokMaliyetKalemiYanit, TopluDurumGuncelleIstegi,
-                               StokSeriNoDuzenleIstegi)
+                               StokSeriNoDuzenleIstegi, StokSeriNoDuzenleSifreliIstegi)
 from app.services.para_hareketi import para_hareketi_olustur
+from app.models.denetim import DuzenlemeKaydi
+from app.core.security import sifre_dogrula
 from pydantic import BaseModel
 
 router = APIRouter(tags=["Stok"])
+
+
+def _degisiklikleri_kaydet(db: Session, sirket_id: int, kullanici_id: int, tablo_adi: str, kayit_id: int, degisiklikler: dict) -> None:
+    if not degisiklikler:
+        return
+    db.add(DuzenlemeKaydi(
+        sirket_id=sirket_id, kullanici_id=kullanici_id, tablo_adi=tablo_adi,
+        kayit_id=kayit_id, degisiklikler=json.dumps(degisiklikler, ensure_ascii=False, default=str),
+    ))
 
 
 class SatisCekBaglaIstegi(BaseModel):
@@ -237,16 +249,27 @@ def stok_toplu_maliyet_dagit(
             dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
 def stok_seri_no_duzenle(
     seri_id: int,
-    istek: StokSeriNoDuzenleIstegi,
+    istek: StokSeriNoDuzenleSifreliIstegi,
     sirket_id: int = Depends(aktif_sirket_id_getir),
+    kullanici: Kullanici = Depends(aktif_kullanici_getir),
     db: Session = Depends(get_db),
 ):
-    """Bir urunun seri numarasini veya hangi urun tanimina (stok karti) ait oldugunu duzeltir."""
+    """Bir urunun seri numarasini veya hangi urun tanimina (stok karti) ait oldugunu duzeltir. Sifre onayi zorunludur."""
+    if not sifre_dogrula(istek.sifre, kullanici.sifre_hash):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Şifre yanlış, düzenleme yapılamadı.")
+
     kayit = _seri_no_getir_veya_404(db, seri_id, sirket_id)
 
     yeni_kart = db.get(StokKarti, istek.stok_karti_id)
     if yeni_kart is None or yeni_kart.sirket_id != sirket_id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ürün tanımı bulunamadı.")
+
+    degisiklikler = {}
+    if kayit.seri_no != istek.seri_no:
+        degisiklikler["Seri No"] = {"eski": kayit.seri_no, "yeni": istek.seri_no}
+    if kayit.stok_karti_id != istek.stok_karti_id:
+        degisiklikler["Ürün Tanımı"] = {"eski": kayit.stok_karti_id, "yeni": istek.stok_karti_id}
+    _degisiklikleri_kaydet(db, sirket_id, kullanici.id, "stok_seri_no", kayit.id, degisiklikler)
 
     kayit.seri_no = istek.seri_no
     kayit.stok_karti_id = istek.stok_karti_id
@@ -588,20 +611,41 @@ def kar_raporu(
 def maliyet_kalemi_duzenle(
     seri_id: int,
     kalem_id: int,
-    istek: MaliyetKalemiEkleIstegi,
+    istek: MaliyetKalemiDuzenleIstegi,
     sirket_id: int = Depends(aktif_sirket_id_getir),
+    kullanici: Kullanici = Depends(aktif_kullanici_getir),
     db: Session = Depends(get_db),
 ):
     """
-    Yanlis girilmis bir maliyet kalemini duzeltir. Ozet sutun (orn.
+    Yanlis girilmis bir maliyet kalemini duzeltir. Sifre onayi zorunludur;
+    degisiklikler denetim_kayitlari'na islenir. Ozet sutun (orn.
     nakliye_maliyeti_try) once eski tutar dusulerek, sonra yeni tutar
     eklenerek guncellenir - tip degisse bile (orn. Nakliye -> Gumruk)
     dogru sutunlar etkilenir.
     """
+    if not sifre_dogrula(istek.sifre, kullanici.sifre_hash):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Şifre yanlış, düzenleme yapılamadı.")
+
     kayit = _seri_no_getir_veya_404(db, seri_id, sirket_id)
     kalem = db.get(StokMaliyetKalemi, kalem_id)
     if kalem is None or kalem.stok_seri_no_id != seri_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Maliyet kalemi bulunamadı.")
+
+    alan_adlari = {"tip": "Tip", "aciklama": "Açıklama", "tedarikci_cari_id": "Tedarikçi", "para_birimi": "Para Birimi", "tutar": "Tutar", "kur": "Kur", "belge_no": "Belge No", "tarih": "Tarih"}
+    yeni_degerler = {
+        "tip": istek.tip, "aciklama": istek.aciklama, "tedarikci_cari_id": istek.tedarikci_cari_id,
+        "para_birimi": istek.para_birimi, "tutar": istek.tutar, "kur": istek.kur,
+        "belge_no": istek.belge_no, "tarih": istek.tarih,
+    }
+    degisiklikler = {}
+    for alan, etiket in alan_adlari.items():
+        eski = getattr(kalem, alan)
+        yeni = yeni_degerler[alan]
+        eski_metin = eski.value if hasattr(eski, "value") else eski
+        yeni_metin = yeni.value if hasattr(yeni, "value") else yeni
+        if str(eski_metin) != str(yeni_metin):
+            degisiklikler[etiket] = {"eski": eski_metin, "yeni": yeni_metin}
+    _degisiklikleri_kaydet(db, sirket_id, kullanici.id, "stok_maliyet_kalemleri", kalem.id, degisiklikler)
 
     eski_ozet_sutun = MALIYET_TIP_SUTUN_ESLEME[kalem.tip]
     eski_deger = getattr(kayit, eski_ozet_sutun) or 0
