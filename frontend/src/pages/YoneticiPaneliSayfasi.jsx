@@ -451,6 +451,7 @@ const TABLO_ADI_METIN = {
   kasa_hareketleri: 'Ana Kasa Hareketi',
   sabit_giderler: 'Diğer Gider',
   kiralama_sozlesmeleri: 'Kiralama Sözleşmesi',
+  akreditif_kalemleri: 'Akreditif Kalemi',
 };
 
 function DuzenlemeGecmisiSekmesi() {
