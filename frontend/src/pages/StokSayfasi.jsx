@@ -120,7 +120,7 @@ function MaliyetKalemiDuzenleFormu({ kalem, urunId, onKaydedildi, onVazgec }) {
   const [form, setForm] = useState({
     tip: kalem.tip, tutar: kalem.tutar, para_birimi: kalem.para_birimi, kur: kalem.kur,
     tedarikci_cari_id: kalem.tedarikci_cari_id || '', belge_no: kalem.belge_no || '',
-    tarih: kalem.tarih, aciklama: kalem.aciklama || '',
+    tarih: kalem.tarih, aciklama: kalem.aciklama || '', sifre: '',
   });
   const [hata, setHata] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
@@ -135,6 +135,7 @@ function MaliyetKalemiDuzenleFormu({ kalem, urunId, onKaydedildi, onVazgec }) {
     setKaydediliyor(true);
     try {
       await api.put(`/stok-seri-no/${urunId}/maliyet-kalemi/${kalem.id}`, {
+        sifre: form.sifre,
         tip: form.tip,
         tutar: Number(form.tutar),
         para_birimi: form.para_birimi,
@@ -191,6 +192,9 @@ function MaliyetKalemiDuzenleFormu({ kalem, urunId, onKaydedildi, onVazgec }) {
               </Alan>
               <Alan etiket="Açıklama">
                 <input value={form.aciklama} onChange={(e) => setForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
+              </Alan>
+              <Alan etiket="Şifreniz (onay için zorunlu)">
+                <input required type="password" value={form.sifre} onChange={(e) => setForm((f) => ({ ...f, sifre: e.target.value }))} style={girdiStili} placeholder="Giriş şifreniz" />
               </Alan>
             </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
@@ -393,7 +397,7 @@ function DurumDegistirFormu({ urun, onKaydedildi, onVazgec }) {
 }
 
 function UrunDuzenleFormu({ urun, stokKartlari, onKaydedildi, onVazgec }) {
-  const [form, setForm] = useState({ seri_no: urun.seri_no, stok_karti_id: String(urun.stok_karti_id) });
+  const [form, setForm] = useState({ seri_no: urun.seri_no, stok_karti_id: String(urun.stok_karti_id), sifre: '' });
   const [hata, setHata] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
 
@@ -403,6 +407,7 @@ function UrunDuzenleFormu({ urun, stokKartlari, onKaydedildi, onVazgec }) {
     setKaydediliyor(true);
     try {
       await api.put(`/stok-seri-no/${urun.id}`, {
+        sifre: form.sifre,
         seri_no: form.seri_no,
         stok_karti_id: Number(form.stok_karti_id),
       });
@@ -429,6 +434,9 @@ function UrunDuzenleFormu({ urun, stokKartlari, onKaydedildi, onVazgec }) {
                 <select required value={form.stok_karti_id} onChange={(e) => setForm((f) => ({ ...f, stok_karti_id: e.target.value }))} style={girdiStili}>
                   {stokKartlari.map((k) => <option key={k.id} value={k.id}>{k.marka} {k.model}</option>)}
                 </select>
+              </Alan>
+              <Alan etiket="Şifreniz (onay için zorunlu)">
+                <input required type="password" value={form.sifre} onChange={(e) => setForm((f) => ({ ...f, sifre: e.target.value }))} style={girdiStili} placeholder="Giriş şifreniz" />
               </Alan>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
