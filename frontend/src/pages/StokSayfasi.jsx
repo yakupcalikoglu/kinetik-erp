@@ -460,6 +460,11 @@ export default function StokSayfasi() {
   const [topluDurum, setTopluDurum] = useState('DEPODA');
   const [topluHata, setTopluHata] = useState(null);
   const [topluIslemDevamEdiyor, setTopluIslemDevamEdiyor] = useState(false);
+  const [topluMaliyetAcik, setTopluMaliyetAcik] = useState(false);
+  const [topluMaliyetForm, setTopluMaliyetForm] = useState({
+    tip: 'MILLILESTIRME', aciklama: '', para_birimi: 'USD', toplam_tutar: '', kur: '1',
+    tarih: new Date().toISOString().slice(0, 10), yontem: 'ESIT',
+  });
 
   function seciliMi(id) {
     return seciliIdler.includes(id);
@@ -474,6 +479,32 @@ export default function StokSayfasi() {
       setSeciliIdler([]);
     } else {
       setSeciliIdler(urunler.map((u) => u.id));
+    }
+  }
+
+  async function topluMaliyetDagit() {
+    setTopluHata(null);
+    setTopluIslemDevamEdiyor(true);
+    try {
+      await api.post('/stok-seri-no/toplu-maliyet-dagit', {
+        stok_seri_no_idleri: seciliIdler,
+        tip: topluMaliyetForm.tip,
+        aciklama: topluMaliyetForm.aciklama || null,
+        para_birimi: topluMaliyetForm.para_birimi,
+        toplam_tutar: Number(topluMaliyetForm.toplam_tutar),
+        kur: Number(topluMaliyetForm.kur),
+        tarih: topluMaliyetForm.tarih,
+        yontem: topluMaliyetForm.yontem,
+      });
+      setSeciliIdler([]);
+      setTopluMaliyetAcik(false);
+      setTopluMaliyetForm((f) => ({ ...f, toplam_tutar: '', aciklama: '' }));
+      tumUrunleriYukle();
+      urunleriYukle();
+    } catch (err) {
+      setTopluHata(hataMesajiCikar(err));
+    } finally {
+      setTopluIslemDevamEdiyor(false);
     }
   }
 
@@ -676,9 +707,57 @@ export default function StokSayfasi() {
             <Buton onClick={topluDurumGuncelle} disabled={topluIslemDevamEdiyor} variant="ikincil">
               {topluIslemDevamEdiyor ? 'Güncelleniyor...' : 'Seçilenlerin durumunu güncelle'}
             </Buton>
+            <Buton variant="ikincil" onClick={() => setTopluMaliyetAcik((a) => !a)}>
+              {topluMaliyetAcik ? 'Maliyet formunu kapat' : 'Seçilenlere Maliyet Ekle (Dağıt)'}
+            </Buton>
             <Buton variant="ikincil" onClick={() => setSeciliIdler([])}>Seçimi temizle</Buton>
           </div>
           {topluHata && <div style={{ marginTop: 8, fontSize: 13, color: '#ffd7d7' }}>{topluHata}</div>}
+
+          {topluMaliyetAcik && (
+            <div style={{ marginTop: 14, padding: 14, background: 'white', borderRadius: 8, color: 'var(--metin-birincil)' }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>
+                {seciliIdler.length} ürüne toplam bir maliyet ekle ve aralarında dağıt
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+                <Alan etiket="Maliyet tipi">
+                  <select value={topluMaliyetForm.tip} onChange={(e) => setTopluMaliyetForm((f) => ({ ...f, tip: e.target.value }))} style={girdiStili}>
+                    {Object.entries(MALIYET_TIP_METIN).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                  </select>
+                </Alan>
+                <Alan etiket="Para birimi">
+                  <select value={topluMaliyetForm.para_birimi} onChange={(e) => setTopluMaliyetForm((f) => ({ ...f, para_birimi: e.target.value }))} style={girdiStili}>
+                    <option value="TRY">TRY</option>
+                    <option value="USD">USD</option>
+                    <option value="EUR">EUR</option>
+                  </select>
+                </Alan>
+                <Alan etiket="Toplam tutar">
+                  <input type="number" step="0.01" value={topluMaliyetForm.toplam_tutar} onChange={(e) => setTopluMaliyetForm((f) => ({ ...f, toplam_tutar: e.target.value }))} style={girdiStili} />
+                </Alan>
+                {topluMaliyetForm.para_birimi !== 'TRY' && (
+                  <Alan etiket="Kur">
+                    <input type="number" step="0.0001" value={topluMaliyetForm.kur} onChange={(e) => setTopluMaliyetForm((f) => ({ ...f, kur: e.target.value }))} style={girdiStili} />
+                  </Alan>
+                )}
+                <Alan etiket="Tarih">
+                  <input type="date" value={topluMaliyetForm.tarih} onChange={(e) => setTopluMaliyetForm((f) => ({ ...f, tarih: e.target.value }))} style={girdiStili} />
+                </Alan>
+                <Alan etiket="Dağıtım yöntemi">
+                  <select value={topluMaliyetForm.yontem} onChange={(e) => setTopluMaliyetForm((f) => ({ ...f, yontem: e.target.value }))} style={girdiStili}>
+                    <option value="ESIT">Eşit dağıt</option>
+                    <option value="AGIRLIKLI">Satınalma maliyetine göre ağırlıklı dağıt</option>
+                  </select>
+                </Alan>
+                <Alan etiket="Açıklama (opsiyonel)">
+                  <input value={topluMaliyetForm.aciklama} onChange={(e) => setTopluMaliyetForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
+                </Alan>
+              </div>
+              <Buton onClick={topluMaliyetDagit} disabled={topluIslemDevamEdiyor || !topluMaliyetForm.toplam_tutar} style={{ marginTop: 10 }}>
+                {topluIslemDevamEdiyor ? 'Dağıtılıyor...' : 'Dağıt ve Kaydet'}
+              </Buton>
+            </div>
+          )}
         </Kart>
       )}
 
