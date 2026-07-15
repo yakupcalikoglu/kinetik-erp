@@ -71,7 +71,10 @@ class SabitGider(Base):
     kategori_id = Column(BigInteger, ForeignKey("sabit_gider_kategorileri.id"))  # artik kullanilmiyor, gecmis kayitlar icin duruyor
     kategori = Column(String(150))  # serbest metin - Harcama Turleri ile ayni otomatik tamamlama listesi
     donem = Column(Date, nullable=False)
-    tutar = Column(Numeric(18, 2), nullable=False)
+    tutar = Column(Numeric(18, 2), nullable=False)  # girildigi orijinal para biriminde
+    para_birimi = Column(SAEnum(ParaBirimi, name="para_birimi_t"), nullable=False, default=ParaBirimi.TRY)
+    kur = Column(Numeric(18, 6), nullable=False, default=1)
+    tutar_try = Column(Numeric(18, 2), nullable=False)  # tutar * kur - TL karsiligi (odeme/rapor bunu kullanir)
     odendi_mi = Column(Boolean, default=False)
     odeme_tarihi = Column(Date)
     aciklama = Column(String(300))
