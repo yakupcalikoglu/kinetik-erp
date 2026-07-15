@@ -1,3 +1,4 @@
+import json
 from datetime import date
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -7,14 +8,26 @@ from sqlalchemy.exc import IntegrityError
 
 from app.db.session import get_db
 from app.core.deps import aktif_sirket_id_getir, izin_gerektir, aktif_kullanici_getir
+from app.core.security import sifre_dogrula
 from app.models.auth import Kullanici
 from app.models.banka import BankaHesabi, BankaHareketi, KasaHareketi, BankaHareketTip
+from app.models.denetim import DuzenlemeKaydi
 from app.schemas.banka import (
     BankaHesabiOlusturIstegi, BankaHesabiYanit, BankaBakiyeYanit,
-    BankaHareketiOlusturIstegi, BankaHareketiYanit,
+    BankaHareketiOlusturIstegi, BankaHareketiYanit, BankaHareketiDuzenleIstegi,
     KasaHareketiOlusturIstegi, KasaHareketiYanit, KasaBakiyeYanit, KasaBakiyeSatiri,
 )
 from app.services.kur_servisi import guncel_kur_getir
+
+
+def _degisiklikleri_kaydet(db: Session, sirket_id: int, kullanici_id: int, tablo_adi: str, kayit_id: int, degisiklikler: dict) -> None:
+    """Bos olmayan bir degisiklik sozlugu varsa denetim izi olusturur."""
+    if not degisiklikler:
+        return
+    db.add(DuzenlemeKaydi(
+        sirket_id=sirket_id, kullanici_id=kullanici_id, tablo_adi=tablo_adi,
+        kayit_id=kayit_id, degisiklikler=json.dumps(degisiklikler, ensure_ascii=False, default=str),
+    ))
 
 router = APIRouter(tags=["Banka ve Ana Kasa"])
 
@@ -240,30 +253,44 @@ def tum_banka_hareketlerini_listele(
             dependencies=[Depends(izin_gerektir("BANKA_DUZENLE"))])
 def banka_hareketi_guncelle(
     hareket_id: int,
-    istek: BankaHareketiOlusturIstegi,
+    istek: BankaHareketiDuzenleIstegi,
     sirket_id: int = Depends(aktif_sirket_id_getir),
+    kullanici: Kullanici = Depends(aktif_kullanici_getir),
     db: Session = Depends(get_db),
 ):
     """
     Mevcut bir banka hareketini duzenler. Sadece BANKA_DUZENLE iznine sahip
-    kullanicilar cagirabilir (Yonetici Paneli > Rol/Izinler'den atanir).
+    kullanicilar cagirabilir VE kendi sifresini dogrulamalidir (yanlislikla
+    ya da yetkisiz degisiklikleri onlemek icin). Her basarili duzenleme,
+    kim/ne zaman/hangi alanlar degisti bilgisiyle denetim_kayitlari'na
+    islenir - Yonetici Paneli'nden goruntulenebilir.
     Not: cift tarafli (transfer/doviz) hareketlerde SADECE bu satir
     guncellenir, otomatik acilmis karsi kayit degismez - gerekirse o da
     ayrica duzenlenmelidir.
     """
+    if not sifre_dogrula(istek.sifre, kullanici.sifre_hash):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Şifre yanlış, düzenleme yapılamadı.")
+
     kayit = db.get(BankaHareketi, hareket_id)
     if kayit is None or kayit.sirket_id != sirket_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Banka hareketi bulunamadı.")
 
-    kayit.banka_hesap_id = istek.banka_hesap_id
-    kayit.tarih = istek.tarih
-    kayit.tip = istek.tip
-    kayit.tutar = istek.tutar
-    kayit.aciklama = istek.aciklama
-    kayit.karsi_hesap_id = istek.karsi_hesap_id
-    kayit.kullanilan_kur = istek.kullanilan_kur
-    kayit.cari_id = istek.cari_id
-    kayit.tutar_try_karsiligi = istek.tutar_try_karsiligi
+    alan_adlari = {
+        "banka_hesap_id": "Banka Hesabı", "tarih": "Tarih", "tip": "Tür", "tutar": "Tutar",
+        "aciklama": "Açıklama", "karsi_hesap_id": "Karşı Hesap", "kullanilan_kur": "Kur",
+        "cari_id": "Cari", "tutar_try_karsiligi": "TL Karşılığı",
+    }
+    degisiklikler = {}
+    for alan, etiket in alan_adlari.items():
+        eski = getattr(kayit, alan)
+        yeni = getattr(istek, alan)
+        eski_metin = eski.value if hasattr(eski, "value") else eski
+        yeni_metin = yeni.value if hasattr(yeni, "value") else yeni
+        if str(eski_metin) != str(yeni_metin):
+            degisiklikler[etiket] = {"eski": eski_metin, "yeni": yeni_metin}
+        setattr(kayit, alan, yeni)
+
+    _degisiklikleri_kaydet(db, sirket_id, kullanici.id, "banka_hareketleri", kayit.id, degisiklikler)
 
     db.commit()
     db.refresh(kayit)
