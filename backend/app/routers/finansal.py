@@ -16,6 +16,9 @@ from app.models.finansal import (
     KiralamaSozlesme, KiralamaOdeme, KiralamaSozlesmeKalemi,
     BakimKaydi, BakimTip,
 )
+import json
+from app.models.denetim import DuzenlemeKaydi
+from app.core.security import sifre_dogrula
 from app.schemas.finansal import (
     CekOlusturIstegi, CekYanit, CekDurumGuncelleIstegi, CekGecmisYanit,
     LeasingOlusturIstegi, LeasingYanit, LeasingOdemeYanit, OdemeTahsilIstegi,
@@ -60,6 +63,15 @@ def _urun_bilgisi_ekle(nesne, urun_id, urun_haritasi):
     urun = urun_haritasi.get(urun_id) if urun_id else None
     nesne.urun_seri_no = urun["seri_no"] if urun else None
     nesne.urun_adi = urun["urun_adi"] if urun else None
+
+
+def _degisiklikleri_kaydet(db: Session, sirket_id: int, kullanici_id: int, tablo_adi: str, kayit_id: int, degisiklikler: dict) -> None:
+    if not degisiklikler:
+        return
+    db.add(DuzenlemeKaydi(
+        sirket_id=sirket_id, kullanici_id=kullanici_id, tablo_adi=tablo_adi,
+        kayit_id=kayit_id, degisiklikler=json.dumps(degisiklikler, ensure_ascii=False, default=str),
+    ))
 
 
 def _urun_tanimi_haritasi(db: Session, sirket_id: int) -> dict:
@@ -503,30 +515,58 @@ def kiralama_olustur(
 @router.put("/kiralama-sozlesmeleri/{sozlesme_id}", response_model=KiralamaYanit,
             dependencies=[Depends(izin_gerektir("KIRALAMA_DUZENLE"))])
 def kiralama_sozlesmesi_duzenle(
-    sozlesme_id: int, istek: KiralamaOlusturIstegi,
-    sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
+    sozlesme_id: int, istek: KiralamaDuzenleIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    kullanici: Kullanici = Depends(aktif_kullanici_getir),
+    db: Session = Depends(get_db),
 ):
     """
     Sozlesme sartlarini (kiraci, aylik kira tutari, para birimi vb.)
-    duzenler. Bu, GECMISTE olusturulmus donem odemelerini ETKILEMEZ - her
+    duzenler. Sifre onayi zorunludur; degisiklikler denetim_kayitlari'na
+    islenir. Bu, GECMISTE olusturulmus donem odemelerini ETKILEMEZ - her
     donem kendi tutarini tasir (donem eklerken elle girilir). Yani fiyat
     degisikligi icin yeni sozlesme acmaya veya mevcut sozlesmeyi silmeye
     GEREK YOKTUR; sadece ileride eklenecek donemlerde yeni degerler
     varsayilan/referans olarak gorunur.
     """
+    if not sifre_dogrula(istek.sifre, kullanici.sifre_hash):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Şifre yanlış, düzenleme yapılamadı.")
+
     sozlesme = db.get(KiralamaSozlesme, sozlesme_id)
     if sozlesme is None or sozlesme.sirket_id != sirket_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Kiralama sözleşmesi bulunamadı.")
     if not istek.kalemler:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "En az bir ürün kalemi eklemelisiniz.")
 
-    sozlesme.kiraci_cari_id = istek.kiraci_cari_id
-    sozlesme.baslangic_tarihi = istek.baslangic_tarihi
-    sozlesme.bitis_tarihi = istek.bitis_tarihi
-    sozlesme.para_birimi = istek.para_birimi
-    sozlesme.depozito = istek.depozito
-    sozlesme.notlar = istek.notlar
-    sozlesme.aylik_kira_tutari = sum((k.miktar * k.birim_fiyat for k in istek.kalemler), Decimal("0"))
+    yeni_aylik_kira = sum((k.miktar * k.birim_fiyat for k in istek.kalemler), Decimal("0"))
+    alan_adlari = {
+        "kiraci_cari_id": "Kiracı", "baslangic_tarihi": "Başlangıç Tarihi", "bitis_tarihi": "Bitiş Tarihi",
+        "para_birimi": "Para Birimi", "depozito": "Depozito", "notlar": "Notlar", "aylik_kira_tutari": "Aylık Kira Tutarı",
+    }
+    yeni_degerler = {
+        "kiraci_cari_id": istek.kiraci_cari_id, "baslangic_tarihi": istek.baslangic_tarihi,
+        "bitis_tarihi": istek.bitis_tarihi, "para_birimi": istek.para_birimi, "depozito": istek.depozito,
+        "notlar": istek.notlar, "aylik_kira_tutari": yeni_aylik_kira,
+    }
+    degisiklikler = {}
+    for alan, etiket in alan_adlari.items():
+        eski = getattr(sozlesme, alan)
+        yeni = yeni_degerler[alan]
+        eski_metin = eski.value if hasattr(eski, "value") else eski
+        yeni_metin = yeni.value if hasattr(yeni, "value") else yeni
+        if str(eski_metin) != str(yeni_metin):
+            degisiklikler[etiket] = {"eski": eski_metin, "yeni": yeni_metin}
+        setattr(sozlesme, alan, yeni)
+
+    eski_kalemler_ozet = ", ".join(
+        f"{k.miktar}x #{k.stok_karti_id}@{k.birim_fiyat}"
+        for k in db.execute(select(KiralamaSozlesmeKalemi).where(KiralamaSozlesmeKalemi.sozlesme_id == sozlesme_id)).scalars()
+    )
+    yeni_kalemler_ozet = ", ".join(f"{k.miktar}x #{k.stok_karti_id}@{k.birim_fiyat}" for k in istek.kalemler)
+    if eski_kalemler_ozet != yeni_kalemler_ozet:
+        degisiklikler["Ürün Kalemleri"] = {"eski": eski_kalemler_ozet, "yeni": yeni_kalemler_ozet}
+
+    _degisiklikleri_kaydet(db, sirket_id, kullanici.id, "kiralama_sozlesmeleri", sozlesme.id, degisiklikler)
 
     for eski in list(db.execute(select(KiralamaSozlesmeKalemi).where(KiralamaSozlesmeKalemi.sozlesme_id == sozlesme_id)).scalars()):
         db.delete(eski)
