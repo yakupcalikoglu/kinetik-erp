@@ -29,10 +29,14 @@ function ProformaTumunuSatisaCevirFormu({ proforma, onTamamlandi, onVazgec }) {
   const [cekNo, setCekNo] = useState('');
   const [cekBankaAdi, setCekBankaAdi] = useState('');
   const [cekVadeTarihi, setCekVadeTarihi] = useState('');
+  const [kur, setKur] = useState('1');
   const [hata, setHata] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
 
   useEffect(() => {
+    if (proforma.para_birimi !== 'TRY') {
+      api.get(`/kur/${proforma.para_birimi}`).then((r) => setKur(String(r.data.kur))).catch(() => {});
+    }
     kalemler.forEach((k) => {
       Promise.all([
         api.get('/stok-seri-no', { params: { durum: 'DEPODA', stok_karti_id: k.stok_karti_id } }),
@@ -47,9 +51,15 @@ function ProformaTumunuSatisaCevirFormu({ proforma, onTamamlandi, onVazgec }) {
   }, []); // eslint-disable-line
 
   function kalemTutariHesapla(k) {
+    // Proformanin kendi para biriminde (orn. USD) kalem tutari
     return Number(k.miktar) * Number(k.birim_fiyat) * (1 + Number(k.kdv_orani) / 100);
   }
+  function kalemTutariTRY(k) {
+    // Stok/Taksitli Satis gibi TL bekleyen alanlar icin kur ile TL karsiligi
+    return kalemTutariHesapla(k) * (Number(kur) || 1);
+  }
   const genelToplam = kalemler.reduce((acc, k) => acc + kalemTutariHesapla(k), 0);
+  const genelToplamTRY = kalemler.reduce((acc, k) => acc + kalemTutariTRY(k), 0);
   const leasingTaksitli = odemeTipi === 'LEASINGLI' && leasingAltTip === 'TAKSITLI';
   const taksitliBenzeri = odemeTipi === 'TAKSITLI' || leasingTaksitli;
   const bankaGerekli = odemeTipi === 'PESIN_HAVALE' || odemeTipi === 'PESIN_KART' || (odemeTipi === 'LEASINGLI' && leasingAltTip === 'PESIN');
@@ -68,7 +78,7 @@ function ProformaTumunuSatisaCevirFormu({ proforma, onTamamlandi, onVazgec }) {
       if (odemeTipi === 'PESIN_NAKIT' || bankaGerekli) {
         for (const k of kalemler) {
           await api.post(`/stok-seri-no/${urunSecimleri[k.id]}/satis`, {
-            musteri_cari_id: proforma.cari_id, satis_fiyati_try: kalemTutariHesapla(k),
+            musteri_cari_id: proforma.cari_id, satis_fiyati_try: kalemTutariTRY(k),
             satis_tarihi: tarih, odeme_yontemi: odemeTipi === 'PESIN_NAKIT' ? 'NAKIT' : 'BANKA',
             banka_hesap_id: bankaGerekli ? Number(bankaHesapId) : null,
           });
@@ -78,25 +88,25 @@ function ProformaTumunuSatisaCevirFormu({ proforma, onTamamlandi, onVazgec }) {
           musteri_cari_id: proforma.cari_id, pesinat: Number(pesinat || 0),
           taksit_sayisi: Number(taksitSayisi), baslangic_tarihi: tarih, para_birimi: 'TRY',
           kalemler: kalemler.map((k) => ({
-            stok_karti_id: k.stok_karti_id, miktar: k.miktar, birim_fiyat: kalemTutariHesapla(k) / k.miktar,
+            stok_karti_id: k.stok_karti_id, miktar: k.miktar, birim_fiyat: kalemTutariTRY(k) / k.miktar,
           })),
         });
         for (const k of kalemler) {
           await api.put(`/stok-seri-no/${urunSecimleri[k.id]}/durum`, {
             durum: 'SATILDI', musteri_cari_id: proforma.cari_id,
-            satis_fiyati_try: kalemTutariHesapla(k), satis_tarihi: tarih,
+            satis_fiyati_try: kalemTutariTRY(k), satis_tarihi: tarih,
           });
         }
       } else if (odemeTipi === 'CEK') {
         const { data: yeniCek } = await api.post('/cekler', {
           tip: 'ALINAN', cek_no: cekNo || null, banka_adi: cekBankaAdi || null,
-          cari_id: proforma.cari_id, tutar: genelToplam,
+          cari_id: proforma.cari_id, tutar: genelToplamTRY,
           vade_tarihi: cekVadeTarihi, alinma_verilme_tarihi: tarih,
         });
         for (const k of kalemler) {
           await api.put(`/stok-seri-no/${urunSecimleri[k.id]}/durum`, {
             durum: 'SATILDI', musteri_cari_id: proforma.cari_id,
-            satis_fiyati_try: kalemTutariHesapla(k), satis_tarihi: tarih,
+            satis_fiyati_try: kalemTutariTRY(k), satis_tarihi: tarih,
           });
           await api.put(`/stok-seri-no/${urunSecimleri[k.id]}/satis-cek-baglantisi`, { cek_id: yeniCek.id });
         }
@@ -142,8 +152,21 @@ function ProformaTumunuSatisaCevirFormu({ proforma, onTamamlandi, onVazgec }) {
           </div>
         ))}
 
+        {proforma.para_birimi !== 'TRY' && (
+          <Alan etiket={`Kur (${proforma.para_birimi} → TL) — stok ve tahsilat kayıtları TL cinsinden tutulur`}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input type="number" step="0.0001" value={kur} onChange={(e) => setKur(e.target.value)} style={{ ...girdiStili, width: 120 }} />
+              <span style={{ fontSize: 12.5, color: 'var(--metin-ikincil)' }}>
+                Toplam ≈ {paraFormat(genelToplamTRY)} (TL karşılığı)
+              </span>
+            </div>
+          </Alan>
+        )}
+
         <div style={{ marginBottom: 6 }}>
-          <span style={{ display: 'block', fontSize: 12, color: 'var(--metin-ikincil)', marginBottom: 6 }}>Ödeme Türü (toplam {paraFormat(genelToplam)} için)</span>
+          <span style={{ display: 'block', fontSize: 12, color: 'var(--metin-ikincil)', marginBottom: 6 }}>
+            Ödeme Türü (toplam {paraFormat(genelToplam, proforma.para_birimi)}{proforma.para_birimi !== 'TRY' ? ` ≈ ${paraFormat(genelToplamTRY)}` : ''} için)
+          </span>
           <Sekmeler sekmeler={ODEME_TIPLERI} aktif={odemeTipi} onDegistir={setOdemeTipi} />
         </div>
 
@@ -228,6 +251,16 @@ function SatisaCevirFormu({ proforma, kalem, onTamamlandi, onVazgec }) {
   const [kaydediliyor, setKaydediliyor] = useState(false);
 
   useEffect(() => {
+    // Proforma TL disi bir para biriminde ise (orn. USD), varsayilan tutari
+    // gunun kuruyla TL karsiligina cevirerek doldur - aksi halde kullanici
+    // "Tutar (TL)" alaninda yanlislikla dolar rakamini TL sanabilir.
+    if (proforma.para_birimi !== 'TRY') {
+      api.get(`/kur/${proforma.para_birimi}`).then((r) => {
+        const kur = Number(r.data.kur) || 1;
+        const hamTutar = Number(kalem.miktar) * Number(kalem.birim_fiyat) * (1 + Number(kalem.kdv_orani) / 100);
+        setTutar((hamTutar * kur).toFixed(2));
+      }).catch(() => {});
+    }
     Promise.all([
       api.get('/stok-seri-no', { params: { durum: 'DEPODA', stok_karti_id: kalem.stok_karti_id } }),
       api.get('/stok-seri-no', { params: { durum: 'ANTREPODA', stok_karti_id: kalem.stok_karti_id } }),
