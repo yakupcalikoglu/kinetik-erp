@@ -712,7 +712,7 @@ export default function StokSayfasi() {
                     onChange={tumunuSecVeyaKaldir}
                   />
                 </th>
-                {['Seri No', 'Ürün', 'Sipariş', 'Durum', 'Toplam Maliyet (TL)', 'Toplam Maliyet (USD)', 'Satış Fiyatı', 'Kâr/Zarar', 'İşlem'].map((b) => (
+                {['Seri No', 'Ürün', 'Sipariş', 'Durum', 'Toplam Maliyet (TL)', 'Toplam Maliyet (USD)', 'Satış Fiyatı (TL)', 'Satış Fiyatı (USD)', 'Kâr/Zarar', 'İşlem'].map((b) => (
                   <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
                 ))}
               </tr>
@@ -769,6 +769,9 @@ export default function StokSayfasi() {
                         {usdKur ? paraFormat(u.toplam_maliyet_try / usdKur, 'USD') : '—'}
                       </td>
                       <td style={{ padding: '12px 16px' }}>{u.satis_fiyati_try != null ? paraFormat(u.satis_fiyati_try) : '—'}</td>
+                      <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>
+                        {u.satis_fiyati_try != null && usdKur ? paraFormat(u.satis_fiyati_try / usdKur, 'USD') : '—'}
+                      </td>
                       <td style={{ padding: '12px 16px', color: karZarar == null ? 'var(--metin-soluk)' : karZarar >= 0 ? 'var(--yesil)' : 'var(--kirmizi)', fontWeight: 500 }}>
                         {karZarar != null ? paraFormat(karZarar) : '—'}
                       </td>
