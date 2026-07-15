@@ -48,6 +48,7 @@ class OdeIstegi(BaseModel):
     odeme_tarihi: date
     odeme_yontemi: str  # "NAKIT" | "BANKA"
     banka_hesap_id: int | None = None
+    kur: Decimal | None = None
 
 
 # ------------------------------------------------------------ Sabit Giderler
@@ -55,6 +56,8 @@ class SabitGiderOlusturIstegi(BaseModel):
     kategori: str  # Serbest metin - Harcama Turleri ile ayni oneri listesini kullanir
     donem: date
     tutar: Decimal
+    para_birimi: ParaBirimi = ParaBirimi.TRY
+    kur: Decimal = Decimal("1")
     aciklama: str | None = None
 
 
@@ -63,12 +66,28 @@ class SabitGiderYanit(BaseModel):
     kategori: str | None
     donem: date
     tutar: Decimal
+    para_birimi: ParaBirimi
+    kur: Decimal
+    tutar_try: Decimal
     odendi_mi: bool
     odeme_tarihi: date | None
     aciklama: str | None
 
     class Config:
         from_attributes = True
+
+
+# --------------------------------------------- Sabit Gideri Siparişe Dağıtma
+class GiderSipariseDagitIstegi(BaseModel):
+    siparis_id: int
+    maliyet_tipi: str  # StokMaliyetKalemi.MaliyetTip degerlerinden biri (orn. "NAKLIYE", "GUMRUK", "DIGER")
+    yontem: str  # "ESIT" | "AGIRLIKLI"
+    kur: Decimal = Decimal("1")  # gider TRY disi ise, stok tarafinda TL karsiligi icin
+
+
+class GiderSipariseDagitYaniti(BaseModel):
+    dagitilan_urun_sayisi: int
+    toplam_dagitilan_try: Decimal
 
 
 # ------------------------------------------------------------- Ortak/Dış Borç
@@ -103,6 +122,7 @@ class BorcOdemeOlusturIstegi(BaseModel):
     aciklama: str | None = None
     odeme_yontemi: str  # "NAKIT" | "BANKA"
     banka_hesap_id: int | None = None
+    kur: Decimal | None = None
 
 
 class BorcOdemeYanit(BaseModel):
