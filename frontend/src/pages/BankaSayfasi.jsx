@@ -569,18 +569,23 @@ function YeniBankaHareketiFormu({ hesaplar, onKaydedildi, onVazgec }) {
   );
 }
 
-function BankaHareketiDuzenleFormu({ hareket, hesaplar, onKaydedildi, onVazgec }) {
+function BankaHareketiDuzenleFormu({ hareket, hesaplar, cariler, onKaydedildi, onVazgec }) {
   const [form, setForm] = useState({
     banka_hesap_id: String(hareket.banka_hesap_id), tarih: hareket.tarih, tip: hareket.tip,
     tutar: hareket.tutar, aciklama: hareket.aciklama || '',
     karsi_hesap_id: hareket.karsi_hesap_id ? String(hareket.karsi_hesap_id) : '',
     kullanilan_kur: hareket.kullanilan_kur ?? '',
+    cari_id: hareket.cari_id ? String(hareket.cari_id) : '',
+    tutar_try_karsiligi: hareket.tutar_try_karsiligi ?? '',
+    sifre: '',
   });
   const harcamaTurleri = useHarcamaTurleri();
   const [hata, setHata] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
 
   const ciftTarafli = ['HESAPLAR_ARASI_TRANSFER', 'DOVIZ_ALIM', 'DOVIZ_SATIM'].includes(form.tip);
+  const seciliHesap = hesaplar.find((h) => String(h.banka_hesap_id) === form.banka_hesap_id);
+  const hesapDovizli = seciliHesap && seciliHesap.para_birimi !== 'TRY';
 
   async function kaydet(e) {
     e.preventDefault();
@@ -588,6 +593,7 @@ function BankaHareketiDuzenleFormu({ hareket, hesaplar, onKaydedildi, onVazgec }
     setKaydediliyor(true);
     try {
       await api.put(`/banka-hareketleri/${hareket.id}`, {
+        sifre: form.sifre,
         banka_hesap_id: Number(form.banka_hesap_id),
         tarih: form.tarih,
         tip: form.tip,
@@ -595,6 +601,8 @@ function BankaHareketiDuzenleFormu({ hareket, hesaplar, onKaydedildi, onVazgec }
         aciklama: form.aciklama || null,
         karsi_hesap_id: form.karsi_hesap_id ? Number(form.karsi_hesap_id) : null,
         kullanilan_kur: form.kullanilan_kur ? Number(form.kullanilan_kur) : null,
+        cari_id: form.cari_id ? Number(form.cari_id) : null,
+        tutar_try_karsiligi: form.tutar_try_karsiligi ? Number(form.tutar_try_karsiligi) : null,
       });
       onKaydedildi();
     } catch (err) {
@@ -634,6 +642,17 @@ function BankaHareketiDuzenleFormu({ hareket, hesaplar, onKaydedildi, onVazgec }
               <Alan etiket="Tutar">
                 <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
               </Alan>
+              <Alan etiket="Cari (opsiyonel)">
+                <select value={form.cari_id} onChange={(e) => setForm((f) => ({ ...f, cari_id: e.target.value }))} style={girdiStili}>
+                  <option value="">Yok</option>
+                  {(cariler || []).map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
+                </select>
+              </Alan>
+              {hesapDovizli && (
+                <Alan etiket="TL Karşılığı (opsiyonel)">
+                  <input type="number" step="0.01" value={form.tutar_try_karsiligi} onChange={(e) => setForm((f) => ({ ...f, tutar_try_karsiligi: e.target.value }))} style={girdiStili} />
+                </Alan>
+              )}
               {ciftTarafli && (
                 <>
                   <Alan etiket="Karşı hesap">
@@ -658,6 +677,9 @@ function BankaHareketiDuzenleFormu({ hareket, hesaplar, onKaydedildi, onVazgec }
                   placeholder="Yazmaya başlayın veya listeden seçin"
                 />
               </Alan>
+              <Alan etiket="Şifreniz (onay için zorunlu)">
+                <input required type="password" value={form.sifre} onChange={(e) => setForm((f) => ({ ...f, sifre: e.target.value }))} style={girdiStili} placeholder="Giriş şifreniz" />
+              </Alan>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Kaydediliyor...' : 'Değişiklikleri kaydet'}</Buton>
@@ -672,6 +694,7 @@ function BankaHareketiDuzenleFormu({ hareket, hesaplar, onKaydedildi, onVazgec }
 
 function HareketlerSekmesi() {
   const cariHaritasi = useCariHaritasi();
+  const cariler = useCariler();
   const [hesaplar, setHesaplar] = useState([]);
   const [bankaHareketleri, setBankaHareketleri] = useState([]);
   const [hesapFiltre, setHesapFiltre] = useState('');
@@ -788,6 +811,7 @@ function HareketlerSekmesi() {
                       key={h.id}
                       hareket={h}
                       hesaplar={hesaplar}
+                      cariler={cariler}
                       onKaydedildi={() => { setDuzenlenenId(null); yukle(); }}
                       onVazgec={() => setDuzenlenenId(null)}
                     />
