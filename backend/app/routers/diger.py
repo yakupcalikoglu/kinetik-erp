@@ -103,7 +103,12 @@ def personel_odemesi_yap(
 # ===================================================================== SABİT GİDERLER
 @router.post("/sabit-giderler", response_model=SabitGiderYanit, dependencies=[Depends(izin_gerektir("GIDER_DUZENLE"))])
 def sabit_gider_ekle(istek: SabitGiderOlusturIstegi, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
-    yeni = SabitGider(sirket_id=sirket_id, **istek.model_dump())
+    tutar_try = istek.tutar * istek.kur
+    yeni = SabitGider(
+        sirket_id=sirket_id, kategori=istek.kategori, donem=istek.donem,
+        tutar=istek.tutar, para_birimi=istek.para_birimi, kur=istek.kur,
+        tutar_try=tutar_try, aciklama=istek.aciklama,
+    )
     db.add(yeni)
     db.commit()
     db.refresh(yeni)
@@ -118,6 +123,32 @@ def sabit_giderleri_listele(
     if donem:
         sorgu = sorgu.where(func.to_char(SabitGider.donem, "YYYY-MM") == donem)
     return list(db.execute(sorgu).scalars())
+
+
+@router.put("/sabit-giderler/{gider_id}", response_model=SabitGiderYanit,
+            dependencies=[Depends(izin_gerektir("GIDER_DUZENLE"))])
+def sabit_gider_duzenle(
+    gider_id: int, istek: SabitGiderOlusturIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
+):
+    """Odenmemis bir gider kaydini duzeltir (yanlis girilen tutar/kategori/tarih icin)."""
+    gider = db.get(SabitGider, gider_id)
+    if gider is None or gider.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Gider kaydı bulunamadı.")
+    if gider.odendi_mi:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ödenmiş bir gider kaydı düzenlenemez; önce ödemeyi geri alın.")
+
+    gider.kategori = istek.kategori
+    gider.donem = istek.donem
+    gider.tutar = istek.tutar
+    gider.para_birimi = istek.para_birimi
+    gider.kur = istek.kur
+    gider.tutar_try = istek.tutar * istek.kur
+    gider.aciklama = istek.aciklama
+
+    db.commit()
+    db.refresh(gider)
+    return gider
 
 
 @router.put("/sabit-giderler/{gider_id}/ode", response_model=SabitGiderYanit,
@@ -136,10 +167,11 @@ def sabit_gider_ode(
     gider.odeme_tarihi = istek.odeme_tarihi
 
     para_hareketi_olustur(
-        db, sirket_id, kullanici.id, "CIKIS", gider.tutar,
+        db, sirket_id, kullanici.id, "CIKIS", gider.tutar_try,
         istek.odeme_yontemi, istek.banka_hesap_id,
-        aciklama=gider.aciklama or "Sabit gider ödemesi",
+        aciklama=gider.aciklama or f"{gider.kategori or 'Diğer gider'} ödemesi",
         kaynak_tablo="SABIT_GIDER", kaynak_id=gider.id,
+        para_birimi=gider.para_birimi.value, kur=gider.kur,
     )
 
     db.commit()
