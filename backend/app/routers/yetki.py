@@ -1,3 +1,4 @@
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import select
@@ -7,6 +8,7 @@ from app.db.session import get_db
 from app.core.deps import aktif_sirket_id_getir, izin_gerektir
 from app.models.auth import (Izin, Rol, rol_izinleri, Kullanici,
                               KullaniciSirketErisim, KullaniciRolu)
+from app.models.denetim import DuzenlemeKaydi
 from app.core.security import sifre_hashle
 
 router = APIRouter(tags=["Yetki Yönetimi"])
@@ -386,6 +388,46 @@ def test_verilerini_temizle(istek: TemizlikOnayIstegi, db: Session = Depends(get
 
     db.commit()
     return {"toplam_silinen": toplam, "detaylar": sonuclar}
+
+
+# ================================================== DÜZENLEME GEÇMİŞİ (DENETİM)
+class DuzenlemeKaydiYanit(BaseModel):
+    id: int
+    kullanici_adi: str
+    tablo_adi: str
+    kayit_id: int
+    degisiklikler: str | None
+    tarih: datetime | None
+
+
+@router.get("/admin/duzenleme-gecmisi", response_model=list[DuzenlemeKaydiYanit],
+            dependencies=[Depends(izin_gerektir("KULLANICI_YONET"))])
+def duzenleme_gecmisini_listele(
+    tablo_adi: str | None = None,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Sifre onayi gerektiren tum duzenleme islemlerinin denetim izini
+    (kim, ne zaman, hangi kayit, hangi alanlar) en yeniden eskiye listeler.
+    Sadece KULLANICI_YONET iznine sahip yoneticiler gorebilir.
+    """
+    sorgu = select(DuzenlemeKaydi).where(DuzenlemeKaydi.sirket_id == sirket_id).order_by(DuzenlemeKaydi.tarih.desc())
+    if tablo_adi:
+        sorgu = sorgu.where(DuzenlemeKaydi.tablo_adi == tablo_adi)
+    kayitlar = list(db.execute(sorgu).scalars())
+
+    kullanici_haritasi = {k.id: k.ad_soyad for k in db.execute(select(Kullanici)).scalars()}
+
+    return [
+        DuzenlemeKaydiYanit(
+            id=k.id,
+            kullanici_adi=kullanici_haritasi.get(k.kullanici_id, f"Kullanıcı #{k.kullanici_id}"),
+            tablo_adi=k.tablo_adi, kayit_id=k.kayit_id,
+            degisiklikler=k.degisiklikler, tarih=k.tarih,
+        )
+        for k in kayitlar
+    ]
 
 
 # ================================================== ESKİ AÇIKLAMALARI YENİDEN ÜRET
