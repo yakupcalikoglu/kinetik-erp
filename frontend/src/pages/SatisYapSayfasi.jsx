@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { api, hataMesajiCikar } from '../api/client';
 import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat, Sekmeler, eylemChipStili } from '../components/Ortak';
+import AramaliSecici from '../components/AramaliSecici';
 
 const ODEME_TIPLERI = [
   { deger: 'PESIN_NAKIT', etiket: 'Nakit' },
@@ -38,6 +39,8 @@ export default function SatisYapSayfasi() {
   const [bankaHesapId, setBankaHesapId] = useState('');
   const [taksitSayisi, setTaksitSayisi] = useState(3);
   const [pesinat, setPesinat] = useState('0');
+  const [tutarParaBirimi, setTutarParaBirimi] = useState('TRY');
+  const [tutarKur, setTutarKur] = useState('1');
   const [cekNo, setCekNo] = useState('');
   const [cekBankaAdi, setCekBankaAdi] = useState('');
   const [cekVadeTarihi, setCekVadeTarihi] = useState('');
@@ -57,6 +60,12 @@ export default function SatisYapSayfasi() {
     api.get('/banka-bakiyeleri').then((r) => setBankaHesaplari(r.data)).catch(() => {});
   }, []);
 
+  useEffect(() => {
+    if (tutarParaBirimi !== 'TRY') {
+      api.get(`/kur/${tutarParaBirimi}`).then((r) => setTutarKur(String(r.data.kur))).catch(() => {});
+    }
+  }, [tutarParaBirimi]);
+
   function urunEtiketi(u) {
     const kart = stokKartlari.find((k) => k.id === u.stok_karti_id);
     const ad = kart ? `${kart.marka} ${kart.model}` : null;
@@ -64,6 +73,7 @@ export default function SatisYapSayfasi() {
   }
 
   const seciliUrun = urunler.find((u) => String(u.id) === String(urunId));
+  const tutarTRY = tutarParaBirimi === 'TRY' ? Number(tutar || 0) : Number(tutar || 0) * Number(tutarKur || 1);
   const leasingTaksitli = odemeTipi === 'LEASINGLI' && leasingAltTip === 'TAKSITLI';
   const taksitliBenzeri = odemeTipi === 'TAKSITLI' || leasingTaksitli;
   const bankaGerekli = odemeTipi === 'PESIN_HAVALE' || odemeTipi === 'PESIN_KART' || (odemeTipi === 'LEASINGLI' && leasingAltTip === 'PESIN');
@@ -80,13 +90,13 @@ export default function SatisYapSayfasi() {
     try {
       if (odemeTipi === 'PESIN_NAKIT') {
         await api.post(`/stok-seri-no/${urunId}/satis`, {
-          musteri_cari_id: Number(musteriCariId), satis_fiyati_try: Number(tutar),
+          musteri_cari_id: Number(musteriCariId), satis_fiyati_try: tutarTRY,
           satis_tarihi: tarih, odeme_yontemi: 'NAKIT', banka_hesap_id: null,
         });
       } else if (bankaGerekli) {
         if (!bankaHesapId) { setHata('Lütfen paranın yatacağı banka hesabını seçin.'); setKaydediliyor(false); return; }
         await api.post(`/stok-seri-no/${urunId}/satis`, {
-          musteri_cari_id: Number(musteriCariId), satis_fiyati_try: Number(tutar),
+          musteri_cari_id: Number(musteriCariId), satis_fiyati_try: tutarTRY,
           satis_tarihi: tarih, odeme_yontemi: 'BANKA', banka_hesap_id: Number(bankaHesapId),
         });
       } else if (taksitliBenzeri) {
@@ -94,11 +104,11 @@ export default function SatisYapSayfasi() {
         await api.post('/taksitli-satis-planlari', {
           musteri_cari_id: Number(musteriCariId), pesinat: Number(pesinat || 0),
           taksit_sayisi: Number(taksitSayisi), baslangic_tarihi: tarih, para_birimi: 'TRY',
-          kalemler: [{ stok_karti_id: seciliUrun.stok_karti_id, miktar: 1, birim_fiyat: Number(tutar) }],
+          kalemler: [{ stok_karti_id: seciliUrun.stok_karti_id, miktar: 1, birim_fiyat: tutarTRY }],
         });
         await api.put(`/stok-seri-no/${urunId}/durum`, {
           durum: 'SATILDI', musteri_cari_id: Number(musteriCariId),
-          satis_fiyati_try: Number(tutar), satis_tarihi: tarih,
+          satis_fiyati_try: tutarTRY, satis_tarihi: tarih,
         });
       } else if (odemeTipi === 'CEK') {
         if (!cekVadeTarihi) { setHata('Lütfen çekin vade tarihini girin.'); setKaydediliyor(false); return; }
@@ -107,12 +117,12 @@ export default function SatisYapSayfasi() {
         // otomatik olarak Depoda'ya donebilir.
         const { data: yeniCek } = await api.post('/cekler', {
           tip: 'ALINAN', cek_no: cekNo || null, banka_adi: cekBankaAdi || null,
-          cari_id: Number(musteriCariId), tutar: Number(tutar),
+          cari_id: Number(musteriCariId), tutar: Number(tutar), para_birimi: tutarParaBirimi,
           vade_tarihi: cekVadeTarihi, alinma_verilme_tarihi: tarih,
         });
         await api.put(`/stok-seri-no/${urunId}/durum`, {
           durum: 'SATILDI', musteri_cari_id: Number(musteriCariId),
-          satis_fiyati_try: Number(tutar), satis_tarihi: tarih,
+          satis_fiyati_try: tutarTRY, satis_tarihi: tarih,
         });
         await api.put(`/stok-seri-no/${urunId}/satis-cek-baglantisi`, { cek_id: yeniCek.id });
       }
@@ -155,12 +165,13 @@ export default function SatisYapSayfasi() {
         <form onSubmit={satisiTamamla}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
             <Alan etiket="Ürün">
-              <select required value={urunId} onChange={(e) => setUrunId(e.target.value)} style={girdiStili}>
-                <option value="">Seçin...</option>
-                {urunler.map((u) => (
-                  <option key={u.id} value={u.id}>{urunEtiketi(u)}</option>
-                ))}
-              </select>
+              <AramaliSecici
+                secenekler={urunler}
+                deger={urunId}
+                onDegistir={setUrunId}
+                etiketFn={urunEtiketi}
+                bosMetin="Seri no veya ürün adı yazarak arayın..."
+              />
               {urunler.length === 0 && (
                 <div style={{ fontSize: 12.5, color: 'var(--metin-soluk)', marginTop: 4 }}>
                   Depoda veya Antrepoda ürün yok. Stok sayfasından bir ürünün durumunu güncelleyin.
@@ -168,10 +179,13 @@ export default function SatisYapSayfasi() {
               )}
             </Alan>
             <Alan etiket="Müşteri">
-              <select required value={musteriCariId} onChange={(e) => setMusteriCariId(e.target.value)} style={girdiStili}>
-                <option value="">Seçin...</option>
-                {cariler.map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
-              </select>
+              <AramaliSecici
+                secenekler={cariler}
+                deger={musteriCariId}
+                onDegistir={setMusteriCariId}
+                etiketFn={(c) => c.unvan}
+                bosMetin="Müşteri adı yazarak arayın..."
+              />
             </Alan>
           </div>
 
@@ -199,9 +213,24 @@ export default function SatisYapSayfasi() {
           )}
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
-            <Alan etiket={taksitliBenzeri ? 'Toplam Tutar (TL)' : 'Tutar (TL)'}>
-              <input required type="number" step="0.01" value={tutar} onChange={(e) => setTutar(e.target.value)} style={girdiStili} />
+            <Alan etiket={taksitliBenzeri ? 'Toplam Tutar' : 'Tutar'}>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input required type="number" step="0.01" value={tutar} onChange={(e) => setTutar(e.target.value)} style={{ ...girdiStili, flex: 1 }} />
+                <select value={tutarParaBirimi} onChange={(e) => setTutarParaBirimi(e.target.value)} style={{ ...girdiStili, width: 80 }}>
+                  <option value="TRY">TL</option>
+                  <option value="USD">USD</option>
+                  <option value="EUR">EUR</option>
+                </select>
+              </div>
+              {tutarParaBirimi !== 'TRY' && tutar && (
+                <div style={{ fontSize: 12, color: 'var(--metin-soluk)', marginTop: 4 }}>≈ {paraFormat(tutarTRY)}</div>
+              )}
             </Alan>
+            {tutarParaBirimi !== 'TRY' && (
+              <Alan etiket={`Kur (${tutarParaBirimi} → TL) — otomatik, değiştirilebilir`}>
+                <input type="number" step="0.0001" value={tutarKur} onChange={(e) => setTutarKur(e.target.value)} style={girdiStili} />
+              </Alan>
+            )}
             <Alan etiket="Tarih">
               <input required type="date" value={tarih} onChange={(e) => setTarih(e.target.value)} style={girdiStili} />
             </Alan>
@@ -246,9 +275,9 @@ export default function SatisYapSayfasi() {
           {seciliUrun && tutar && (
             <div style={{
               marginTop: 4, marginBottom: 16, padding: 10, borderRadius: 7, background: 'var(--zemin)', fontSize: 13,
-              color: Number(tutar) - seciliUrun.toplam_maliyet_try >= 0 ? 'var(--yesil)' : 'var(--kirmizi)',
+              color: tutarTRY - seciliUrun.toplam_maliyet_try >= 0 ? 'var(--yesil)' : 'var(--kirmizi)',
             }}>
-              Tahmini kâr/zarar: {paraFormat(Number(tutar) - seciliUrun.toplam_maliyet_try)}
+              Tahmini kâr/zarar: {paraFormat(tutarTRY - seciliUrun.toplam_maliyet_try)}
               <span style={{ color: 'var(--metin-soluk)' }}> (maliyet: {paraFormat(seciliUrun.toplam_maliyet_try)})</span>
             </div>
           )}
