@@ -1,3 +1,4 @@
+from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import select
@@ -22,6 +23,18 @@ router = APIRouter(tags=["Stok"])
 
 class SatisCekBaglaIstegi(BaseModel):
     cek_id: int
+
+
+class TopluMaliyetDagitIstegi(BaseModel):
+    stok_seri_no_idleri: list[int]
+    tip: MaliyetTip
+    aciklama: str | None = None
+    tedarikci_cari_id: int | None = None
+    para_birimi: ParaBirimi
+    toplam_tutar: Decimal
+    kur: Decimal = Decimal("1")
+    tarih: date
+    yontem: str  # "ESIT" | "AGIRLIKLI"
 
 
 @router.post("/stok-kartlari", response_model=StokKartiYanit,
@@ -154,6 +167,67 @@ def stok_toplu_durum_guncelle(
     for k in guncellenenler:
         db.refresh(k)
     return guncellenenler
+
+
+@router.post("/stok-seri-no/toplu-maliyet-dagit", response_model=list[StokSeriNoYanit],
+             dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
+def stok_toplu_maliyet_dagit(
+    istek: TopluMaliyetDagitIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Birden fazla urune AYNI ANDA bir maliyet kalemi ekler ve toplam tutari
+    aralarinda dagitir (Akreditif'teki maliyet dagitimi ile ayni mantik).
+    ESIT: toplam, secilen urun adedine esit bolunur.
+    AGIRLIKLI: toplam, urunlerin mevcut satinalma_maliyeti_try degerine
+    oranla dagilir (satinalma maliyeti daha yuksek olan urun, daha fazla pay alir).
+    Her urun icin ayri bir StokMaliyetKalemi satiri olusturulur - boylece
+    her biri daha sonra tek tek duzenlenebilir/silinebilir.
+    """
+    if not istek.stok_seri_no_idleri:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "En az bir ürün seçmelisiniz.")
+
+    urunler = []
+    for seri_id in istek.stok_seri_no_idleri:
+        u = db.get(StokSeriNo, seri_id)
+        if u is None or u.sirket_id != sirket_id:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Ürün bulunamadı (ID={seri_id}).")
+        urunler.append(u)
+
+    toplam_tutar_try = istek.toplam_tutar * istek.kur
+    ozet_sutun = MALIYET_TIP_SUTUN_ESLEME[istek.tip]
+
+    if istek.yontem == "ESIT":
+        pay_try = toplam_tutar_try / len(urunler)
+        paylar = {u.id: pay_try for u in urunler}
+    elif istek.yontem == "AGIRLIKLI":
+        toplam_satinalma = sum(u.satinalma_maliyeti_try or 0 for u in urunler)
+        if toplam_satinalma == 0:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "Ürünlerin satınalma maliyeti girilmemiş, ağırlıklı dağıtım yapılamıyor."
+            )
+        paylar = {u.id: toplam_tutar_try * ((u.satinalma_maliyeti_try or 0) / toplam_satinalma) for u in urunler}
+    else:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "yontem 'ESIT' veya 'AGIRLIKLI' olmalıdır.")
+
+    for u in urunler:
+        pay_try = paylar[u.id]
+        pay_orijinal = pay_try / istek.kur if istek.kur else pay_try
+        db.add(StokMaliyetKalemi(
+            stok_seri_no_id=u.id, tip=istek.tip, aciklama=istek.aciklama,
+            tedarikci_cari_id=istek.tedarikci_cari_id, para_birimi=istek.para_birimi,
+            tutar=pay_orijinal, kur=istek.kur, tutar_try=pay_try,
+            tarih=istek.tarih,
+        ))
+        mevcut = getattr(u, ozet_sutun) or 0
+        setattr(u, ozet_sutun, mevcut + pay_try)
+
+    db.commit()
+    for u in urunler:
+        db.refresh(u)
+    return urunler
 
 
 @router.put("/stok-seri-no/{seri_id}", response_model=StokSeriNoYanit,
