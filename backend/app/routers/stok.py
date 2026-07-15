@@ -106,6 +106,7 @@ def stok_kartlarini_listele(
 def stok_seri_no_listele(
     durum: StokDurum | None = None,
     stok_karti_id: int | None = None,
+    siparis_id: int | None = None,
     sirket_id: int = Depends(aktif_sirket_id_getir),
     db: Session = Depends(get_db),
 ):
@@ -114,6 +115,8 @@ def stok_seri_no_listele(
         sorgu = sorgu.where(StokSeriNo.durum == durum)
     if stok_karti_id:
         sorgu = sorgu.where(StokSeriNo.stok_karti_id == stok_karti_id)
+    if siparis_id:
+        sorgu = sorgu.where(StokSeriNo.siparis_id == siparis_id)
     return list(db.execute(sorgu).scalars())
 
 
