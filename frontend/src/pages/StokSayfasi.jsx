@@ -466,6 +466,14 @@ export default function StokSayfasi() {
     tarih: new Date().toISOString().slice(0, 10), yontem: 'ESIT',
   });
 
+  useEffect(() => {
+    if (topluMaliyetForm.para_birimi !== 'TRY') {
+      api.get(`/kur/${topluMaliyetForm.para_birimi}`)
+        .then((r) => setTopluMaliyetForm((f) => ({ ...f, kur: String(r.data.kur) })))
+        .catch(() => {});
+    }
+  }, [topluMaliyetForm.para_birimi]);
+
   function seciliMi(id) {
     return seciliIdler.includes(id);
   }
