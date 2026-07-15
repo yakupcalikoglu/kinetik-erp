@@ -228,6 +228,17 @@ class KiralamaOlusturIstegi(BaseModel):
     kalemler: list[KiralamaKalemIstegi]
 
 
+class KiralamaDuzenleIstegi(BaseModel):
+    sifre: str  # kullanicinin kendi giris sifresi - degisiklik onayi icin zorunlu
+    kiraci_cari_id: int
+    baslangic_tarihi: date
+    bitis_tarihi: date | None = None
+    para_birimi: ParaBirimi
+    depozito: Decimal = Decimal("0")
+    notlar: str | None = None
+    kalemler: list[KiralamaKalemIstegi]
+
+
 class KiralamaYanit(BaseModel):
     id: int
     kiraci_cari_id: int
