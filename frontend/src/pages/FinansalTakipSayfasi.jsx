@@ -2591,26 +2591,146 @@ function TaksitSekmesi() {
 }
 
 // ============================================================== SABİT GİDERLER
+const MALIYET_TIPLERI_STOK = {
+  NAKLIYE: 'Nakliye', GUMRUK: 'Gümrük', ANTREPO: 'Antrepo', MILLILESTIRME: 'Millileştirme',
+  LEASING: 'Leasing', DIGER: 'Diğer',
+};
+
+function bosSabitGiderFormu() {
+  return { kategori: '', donem: new Date().toISOString().slice(0, 10), tutar: '', para_birimi: 'TRY', kur: '1', aciklama: '' };
+}
+
+function GiderSipariseDagitPaneli({ gider, onTamam, onVazgec }) {
+  const [siparisler, setSiparisler] = useState([]);
+  const [siparisId, setSiparisId] = useState('');
+  const [urunSayisi, setUrunSayisi] = useState(null);
+  const [maliyetTipi, setMaliyetTipi] = useState('DIGER');
+  const [yontem, setYontem] = useState('ESIT');
+  const [hata, setHata] = useState(null);
+  const [kaydediliyor, setKaydediliyor] = useState(false);
+
+  useEffect(() => {
+    api.get('/siparisler').then((r) => setSiparisler(r.data)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!siparisId) { setUrunSayisi(null); return; }
+    api.get('/stok-seri-no', { params: { siparis_id: siparisId } })
+      .then((r) => setUrunSayisi(r.data.length))
+      .catch(() => setUrunSayisi(null));
+  }, [siparisId]);
+
+  async function dagit() {
+    if (!siparisId) { setHata('Lütfen bir sipariş seçin.'); return; }
+    setHata(null);
+    setKaydediliyor(true);
+    try {
+      const { data: urunler } = await api.get('/stok-seri-no', { params: { siparis_id: siparisId } });
+      if (urunler.length === 0) {
+        setHata('Bu siparişe ait teslim alınmış ürün bulunamadı.');
+        setKaydediliyor(false);
+        return;
+      }
+      await api.post('/stok-seri-no/toplu-maliyet-dagit', {
+        stok_seri_no_idleri: urunler.map((u) => u.id),
+        tip: maliyetTipi,
+        aciklama: gider.kategori ? `${gider.kategori} (Diğer Giderler'den dağıtıldı)` : "Diğer Giderler'den dağıtıldı",
+        para_birimi: gider.para_birimi,
+        toplam_tutar: Number(gider.tutar),
+        kur: Number(gider.kur),
+        tarih: gider.donem,
+        yontem,
+      });
+      onTamam();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setKaydediliyor(false);
+    }
+  }
+
+  return (
+    <div style={{ padding: 14, background: 'var(--zemin)', borderRadius: 8 }}>
+      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
+        "{gider.kategori}" giderini ({paraFormat(gider.tutar, gider.para_birimi)}) bir siparişin ürünlerine maliyet olarak dağıt
+      </div>
+      <HataMesaji>{hata}</HataMesaji>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+        <Alan etiket="Sipariş">
+          <select value={siparisId} onChange={(e) => setSiparisId(e.target.value)} style={girdiStili}>
+            <option value="">Seçin...</option>
+            {siparisler.map((s) => <option key={s.id} value={s.id}>{s.siparis_no}</option>)}
+          </select>
+          {siparisId && urunSayisi != null && (
+            <div style={{ fontSize: 12, color: 'var(--metin-ikincil)', marginTop: 4 }}>
+              Bu siparişte teslim alınmış {urunSayisi} ürün bulundu, tutar aralarında dağıtılacak.
+            </div>
+          )}
+        </Alan>
+        <Alan etiket="Maliyet tipi">
+          <select value={maliyetTipi} onChange={(e) => setMaliyetTipi(e.target.value)} style={girdiStili}>
+            {Object.entries(MALIYET_TIPLERI_STOK).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+        </Alan>
+        <Alan etiket="Dağıtım yöntemi">
+          <select value={yontem} onChange={(e) => setYontem(e.target.value)} style={girdiStili}>
+            <option value="ESIT">Eşit dağıt</option>
+            <option value="AGIRLIKLI">Satınalma maliyetine göre ağırlıklı dağıt</option>
+          </select>
+        </Alan>
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+        <Buton onClick={dagit} disabled={kaydediliyor || !siparisId}>{kaydediliyor ? 'Dağıtılıyor...' : 'Dağıt ve Kaydet'}</Buton>
+        <Buton variant="ikincil" onClick={onVazgec}>Vazgeç</Buton>
+      </div>
+    </div>
+  );
+}
+
 function SabitGiderSekmesi() {
   const [liste, setListe] = useState([]);
   const harcamaTurleri = useHarcamaTurleri();
   const [formAcik, setFormAcik] = useState(false);
-  const [form, setForm] = useState({ kategori: '', donem: new Date().toISOString().slice(0, 10), tutar: '', aciklama: '' });
+  const [duzenlenenGider, setDuzenlenenGider] = useState(null);
+  const [form, setForm] = useState(bosSabitGiderFormu());
   const [hata, setHata] = useState(null);
   const [odemeAcikId, setOdemeAcikId] = useState(null);
+  const [dagitimAcikId, setDagitimAcikId] = useState(null);
 
   function yukle() {
     api.get('/sabit-giderler').then((r) => setListe(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
   }
   useEffect(yukle, []);
 
+  useEffect(() => {
+    if (form.para_birimi !== 'TRY') {
+      api.get(`/kur/${form.para_birimi}`).then((r) => setForm((f) => ({ ...f, kur: String(r.data.kur) }))).catch(() => {});
+    }
+  }, [form.para_birimi]);
+
+  function duzenlemeyeBasla(g) {
+    setDuzenlenenGider(g);
+    setForm({ kategori: g.kategori || '', donem: g.donem, tutar: String(g.tutar), para_birimi: g.para_birimi, kur: String(g.kur), aciklama: g.aciklama || '' });
+    setFormAcik(true);
+  }
+
+  function formuKapat() {
+    setFormAcik(false);
+    setDuzenlenenGider(null);
+    setForm(bosSabitGiderFormu());
+  }
+
   async function kaydet(e) {
     e.preventDefault();
     setHata(null);
     try {
-      await api.post('/sabit-giderler', { ...form, tutar: Number(form.tutar) });
-      setFormAcik(false);
-      setForm({ kategori: '', donem: new Date().toISOString().slice(0, 10), tutar: '', aciklama: '' });
+      const govde = { ...form, tutar: Number(form.tutar), kur: Number(form.kur) };
+      if (duzenlenenGider) {
+        await api.put(`/sabit-giderler/${duzenlenenGider.id}`, govde);
+      } else {
+        await api.post('/sabit-giderler', govde);
+      }
+      formuKapat();
       yukle();
     } catch (err) { setHata(hataMesajiCikar(err)); }
   }
@@ -2640,13 +2760,16 @@ function SabitGiderSekmesi() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-        <Buton onClick={() => setFormAcik((a) => !a)}>{formAcik ? 'Kapat' : '+ Yeni gider'}</Buton>
+        <Buton onClick={() => (formAcik ? formuKapat() : setFormAcik(true))}>{formAcik ? 'Kapat' : '+ Yeni gider'}</Buton>
       </div>
       <HataMesaji>{hata}</HataMesaji>
 
       {formAcik && (
         <Kart style={{ marginBottom: 16 }}>
-          <form onSubmit={kaydet} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>
+            {duzenlenenGider ? 'Gideri düzenle' : 'Yeni gider'}
+          </div>
+          <form onSubmit={kaydet} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr', gap: 12 }}>
             <Alan etiket="Kategori">
               <OtomatikTamamlamaGirdisi
                 value={form.kategori}
@@ -2659,9 +2782,21 @@ function SabitGiderSekmesi() {
             <Alan etiket="Dönem">
               <input required type="date" value={form.donem} onChange={(e) => setForm((f) => ({ ...f, donem: e.target.value }))} style={girdiStili} />
             </Alan>
-            <Alan etiket="Tutar (TL)">
+            <Alan etiket="Para birimi">
+              <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={girdiStili}>
+                <option value="TRY">TRY</option>
+                <option value="USD">USD</option>
+                <option value="EUR">EUR</option>
+              </select>
+            </Alan>
+            <Alan etiket="Tutar">
               <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
             </Alan>
+            {form.para_birimi !== 'TRY' ? (
+              <Alan etiket={`Kur (${form.para_birimi} → TL)`}>
+                <input type="number" step="0.0001" value={form.kur} onChange={(e) => setForm((f) => ({ ...f, kur: e.target.value }))} style={girdiStili} />
+              </Alan>
+            ) : <div />}
             <Alan etiket="Açıklama">
               <OtomatikTamamlamaGirdisi
                 value={form.aciklama}
@@ -2671,7 +2806,9 @@ function SabitGiderSekmesi() {
                 placeholder="Yazmaya başlayın veya listeden seçin"
               />
             </Alan>
-            <div style={{ alignSelf: 'end' }}><Buton type="submit">Kaydet</Buton></div>
+            <div style={{ alignSelf: 'end' }}>
+              <Buton type="submit">{duzenlenenGider ? 'Değişiklikleri kaydet' : 'Kaydet'}</Buton>
+            </div>
           </form>
         </Kart>
       )}
@@ -2681,7 +2818,7 @@ function SabitGiderSekmesi() {
           <table>
             <thead>
               <tr style={{ background: 'var(--zemin)' }}>
-                {['Kategori', 'Dönem', 'Tutar', 'Açıklama', 'Durum', ''].map((b) => (
+                {['Kategori', 'Dönem', 'Tutar', 'TL Karşılığı', 'Açıklama', 'Durum', ''].map((b) => (
                   <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
                 ))}
               </tr>
@@ -2692,20 +2829,28 @@ function SabitGiderSekmesi() {
                   <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
                     <td style={{ padding: '10px 16px', fontWeight: 500 }}>{g.kategori || '—'}</td>
                     <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{g.donem}</td>
-                    <td style={{ padding: '10px 16px' }}>{paraFormat(g.tutar)}</td>
+                    <td style={{ padding: '10px 16px' }}>{paraFormat(g.tutar, g.para_birimi)}</td>
+                    <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{g.para_birimi !== 'TRY' ? paraFormat(g.tutar_try) : '—'}</td>
                     <td style={{ padding: '10px 16px' }}>{g.aciklama || '—'}</td>
                     <td style={{ padding: '10px 16px' }}><Etiket ton={g.odendi_mi ? 'yesil' : 'amber'}>{g.odendi_mi ? 'Ödendi' : 'Bekliyor'}</Etiket></td>
                     <td style={{ padding: '10px 16px' }}>
-                      <div style={{ display: 'flex', gap: 6 }}>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                         {g.odendi_mi ? (
                           <button onClick={() => odemeyiGeriAl(g.id)} style={eylemChipStili('kirmizi')}>Geri Al</button>
                         ) : (
                           <>
+                            <button onClick={() => duzenlemeyeBasla(g)} style={eylemChipStili('notr')}>Düzenle</button>
                             <button
                               onClick={() => setOdemeAcikId((mevcut) => (mevcut === g.id ? null : g.id))}
                               style={eylemChipStili('lacivert')}
                             >
                               {odemeAcikId === g.id ? 'Kapat' : 'Öde'}
+                            </button>
+                            <button
+                              onClick={() => setDagitimAcikId((mevcut) => (mevcut === g.id ? null : g.id))}
+                              style={eylemChipStili('amber')}
+                            >
+                              {dagitimAcikId === g.id ? 'Kapat' : 'Siparişe Dağıt'}
                             </button>
                             <button onClick={() => sil(g.id)} style={eylemChipStili('kirmizi')}>Sil</button>
                           </>
@@ -2715,12 +2860,23 @@ function SabitGiderSekmesi() {
                   </tr>
                   {odemeAcikId === g.id && (
                     <tr>
-                      <td colSpan={6} style={{ padding: '0 16px 10px' }}>
+                      <td colSpan={7} style={{ padding: '0 16px 10px' }}>
                         <OdemeFormu
-                          tutar={g.tutar}
+                          tutar={g.tutar_try}
                           paraBirimi="TRY"
                           onOde={(secim) => odemeyiTamamla(g, secim)}
                           onVazgec={() => setOdemeAcikId(null)}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                  {dagitimAcikId === g.id && (
+                    <tr>
+                      <td colSpan={7} style={{ padding: '0 16px 10px' }}>
+                        <GiderSipariseDagitPaneli
+                          gider={g}
+                          onTamam={() => setDagitimAcikId(null)}
+                          onVazgec={() => setDagitimAcikId(null)}
                         />
                       </td>
                     </tr>
