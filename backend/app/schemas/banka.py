@@ -89,6 +89,17 @@ class KasaHareketiOlusturIstegi(BaseModel):
     cari_id: int | None = None
 
 
+class KasaHareketiDuzenleIstegi(BaseModel):
+    sifre: str  # kullanicinin kendi giris sifresi - degisiklik onayi icin zorunlu
+    tarih: date
+    yon: HareketYon
+    tutar: Decimal
+    para_birimi: ParaBirimi = ParaBirimi.TRY
+    tutar_try_karsiligi: Decimal | None = None
+    aciklama: str | None = None
+    cari_id: int | None = None
+
+
 class KasaHareketiYanit(BaseModel):
     id: int
     tarih: date
