@@ -813,7 +813,7 @@ export default function ProformaFaturaSayfasi() {
                 {kalemler.map((k, i) => (
                   <tr key={i} style={{ borderTop: '1px solid var(--kenarlik)' }}>
                     <td style={{ padding: 8 }}>
-                      <select value={k.stok_karti_id} onChange={(e) => kalemGuncelle(i, 'stok_karti_id', e.target.value)} style={{ ...girdiStili, width: 200 }}>
+                      <select value={k.stok_karti_id} onChange={(e) => kalemGuncelle(i, 'stok_karti_id', e.target.value)} style={{ ...girdiStili, width: 320 }}>
                         <option value="">Seçin (ya da elle yazın)...</option>
                         {stokKartlari.map((s) => <option key={s.id} value={s.id}>{s.marka} {s.model}</option>)}
                       </select>
