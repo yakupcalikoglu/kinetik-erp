@@ -29,6 +29,7 @@ class CariOlusturIstegi(BaseModel):
 
 
 class CariGuncelleIstegi(BaseModel):
+    sifre: str  # kullanicinin kendi giris sifresi - degisiklik onayi icin zorunlu
     unvan: str | None = None
     vergi_no: str | None = None
     vergi_dairesi: str | None = None
@@ -67,8 +68,6 @@ class CariHareketYanit(BaseModel):
     tutar_try_karsiligi: Decimal | None
     kaynak_tablo: str | None
     kaynak_id: int | None
-    class Config:
-        from_attributes = True
 
     class Config:
         from_attributes = True
