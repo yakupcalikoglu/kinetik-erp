@@ -58,6 +58,14 @@ class AkreditifKalemEkleIstegi(BaseModel):
     vade_tarihi: date
 
 
+class AkreditifKalemDuzenleIstegi(BaseModel):
+    sifre: str  # kullanicinin kendi giris sifresi - degisiklik onayi icin zorunlu
+    tip: AkreditifKalemTip
+    aciklama: str | None = None
+    tutar: Decimal
+    vade_tarihi: date
+
+
 class AkreditifKalemOdeIstegi(BaseModel):
     odeme_tarihi: date
     odeme_yontemi: str  # "NAKIT" | "BANKA"
@@ -122,7 +130,8 @@ class AkreditifKalemTaksitOdeIstegi(BaseModel):
     odeme_yontemi: str  # "NAKIT" | "BANKA"
     banka_hesap_id: int | None = None
     kur: Decimal | None = None
-    
+
+
 class AkreditifKalemTaksitiDuzenleIstegi(BaseModel):
     vade_tarihi: date
     tutar: Decimal
