@@ -318,7 +318,7 @@ function KasaHareketiDuzenleFormu({ hareket, onKaydedildi, onVazgec }) {
   const [form, setForm] = useState({
     tarih: hareket.tarih, yon: hareket.yon, tutar: hareket.tutar, para_birimi: hareket.para_birimi,
     tutar_try_karsiligi: hareket.tutar_try_karsiligi ?? '', aciklama: hareket.aciklama || '',
-    cari_id: hareket.cari_id ? String(hareket.cari_id) : '',
+    cari_id: hareket.cari_id ? String(hareket.cari_id) : '', sifre: '',
   });
   const [kur, setKur] = useState(() => (
     hareket.para_birimi !== 'TRY' && hareket.tutar_try_karsiligi
@@ -353,6 +353,7 @@ function KasaHareketiDuzenleFormu({ hareket, onKaydedildi, onVazgec }) {
         tutar_try_karsiligi: form.para_birimi === 'TRY' ? null : Number(form.tutar_try_karsiligi),
         cari_id: form.cari_id ? Number(form.cari_id) : null,
       });
+      // NOT: 'sifre' alani ...form icinde zaten govdeye dahil ediliyor.
       onKaydedildi();
     } catch (err) {
       setHata(hataMesajiCikar(err));
@@ -416,6 +417,9 @@ function KasaHareketiDuzenleFormu({ hareket, onKaydedildi, onVazgec }) {
                   listeId="harcama-turleri-duzenle-kasa"
                   placeholder="Yazmaya başlayın veya listeden seçin"
                 />
+              </Alan>
+              <Alan etiket="Şifreniz (onay için zorunlu)">
+                <input required type="password" value={form.sifre} onChange={(e) => setForm((f) => ({ ...f, sifre: e.target.value }))} style={girdiStili} placeholder="Giriş şifreniz" />
               </Alan>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
