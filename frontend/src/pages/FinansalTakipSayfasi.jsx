@@ -2069,6 +2069,7 @@ function KiralamaSekmesi() {
       kalemler: (sozlesme.kalemler || []).length > 0
         ? sozlesme.kalemler.map((k) => ({ stok_karti_id: String(k.stok_karti_id), miktar: k.miktar, birim_fiyat: k.birim_fiyat }))
         : [bosKiralamaKalemi()],
+      sifre: '',
     });
     setFormAcik(true);
   }
@@ -2098,7 +2099,7 @@ function KiralamaSekmesi() {
         })),
       };
       if (duzenlenenSozlesme) {
-        await api.put(`/kiralama-sozlesmeleri/${duzenlenenSozlesme.id}`, govde);
+        await api.put(`/kiralama-sozlesmeleri/${duzenlenenSozlesme.id}`, { ...govde, sifre: form.sifre });
       } else {
         await api.post('/kiralama-sozlesmeleri', govde);
       }
@@ -2225,6 +2226,12 @@ function KiralamaSekmesi() {
               </div>
             </div>
             <DovizKarsiligiGosterge tutar={formAylikToplam} paraBirimi={form.para_birimi} />
+
+            {duzenlenenSozlesme && (
+              <Alan etiket="Şifreniz (onay için zorunlu)">
+                <input required type="password" value={form.sifre || ''} onChange={(e) => setForm((f) => ({ ...f, sifre: e.target.value }))} style={{ ...girdiStili, maxWidth: 260 }} placeholder="Giriş şifreniz" />
+              </Alan>
+            )}
 
             <div style={{ marginTop: 12 }}><Buton type="submit">{duzenlenenSozlesme ? 'Değişiklikleri kaydet' : 'Kaydet'}</Buton></div>
           </form>
@@ -2597,7 +2604,7 @@ const MALIYET_TIPLERI_STOK = {
 };
 
 function bosSabitGiderFormu() {
-  return { kategori: '', donem: new Date().toISOString().slice(0, 10), tutar: '', para_birimi: 'TRY', kur: '1', aciklama: '' };
+  return { kategori: '', donem: new Date().toISOString().slice(0, 10), tutar: '', para_birimi: 'TRY', kur: '1', aciklama: '', sifre: '' };
 }
 
 function GiderSipariseDagitPaneli({ gider, onTamam, onVazgec }) {
@@ -2710,7 +2717,7 @@ function SabitGiderSekmesi() {
 
   function duzenlemeyeBasla(g) {
     setDuzenlenenGider(g);
-    setForm({ kategori: g.kategori || '', donem: g.donem, tutar: String(g.tutar), para_birimi: g.para_birimi, kur: String(g.kur), aciklama: g.aciklama || '' });
+    setForm({ kategori: g.kategori || '', donem: g.donem, tutar: String(g.tutar), para_birimi: g.para_birimi, kur: String(g.kur), aciklama: g.aciklama || '', sifre: '' });
     setFormAcik(true);
   }
 
@@ -2724,11 +2731,16 @@ function SabitGiderSekmesi() {
     e.preventDefault();
     setHata(null);
     try {
-      const govde = { ...form, tutar: Number(form.tutar), kur: Number(form.kur) };
       if (duzenlenenGider) {
-        await api.put(`/sabit-giderler/${duzenlenenGider.id}`, govde);
+        await api.put(`/sabit-giderler/${duzenlenenGider.id}`, {
+          sifre: form.sifre, kategori: form.kategori, donem: form.donem,
+          tutar: Number(form.tutar), para_birimi: form.para_birimi, kur: Number(form.kur), aciklama: form.aciklama,
+        });
       } else {
-        await api.post('/sabit-giderler', govde);
+        await api.post('/sabit-giderler', {
+          kategori: form.kategori, donem: form.donem, tutar: Number(form.tutar),
+          para_birimi: form.para_birimi, kur: Number(form.kur), aciklama: form.aciklama,
+        });
       }
       formuKapat();
       yukle();
@@ -2806,6 +2818,11 @@ function SabitGiderSekmesi() {
                 placeholder="Yazmaya başlayın veya listeden seçin"
               />
             </Alan>
+            {duzenlenenGider && (
+              <Alan etiket="Şifreniz (onay için zorunlu)">
+                <input required type="password" value={form.sifre} onChange={(e) => setForm((f) => ({ ...f, sifre: e.target.value }))} style={girdiStili} placeholder="Giriş şifreniz" />
+              </Alan>
+            )}
             <div style={{ alignSelf: 'end' }}>
               <Buton type="submit">{duzenlenenGider ? 'Değişiklikleri kaydet' : 'Kaydet'}</Buton>
             </div>
