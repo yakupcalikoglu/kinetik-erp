@@ -7,17 +7,29 @@ from sqlalchemy import select, func
 from app.db.session import get_db
 from app.core.deps import aktif_sirket_id_getir, izin_gerektir, aktif_kullanici_getir
 from app.models.auth import Kullanici
+import json
 from app.models.diger import (
     Personel, PersonelOdeme, SabitGider,
     Borc, BorcOdeme, BorcTip, ProformaFatura, ProformaDetay, Fatura, FaturaDetay,
 )
+from app.models.denetim import DuzenlemeKaydi
+from app.core.security import sifre_dogrula
 from app.schemas.diger import (
     PersonelOlusturIstegi, PersonelYanit, PersonelOdemeOlusturIstegi, PersonelOdemeYanit, OdeIstegi,
-    SabitGiderOlusturIstegi, SabitGiderYanit,
+    SabitGiderOlusturIstegi, SabitGiderYanit, SabitGiderDuzenleIstegi,
     BorcOlusturIstegi, BorcYanit, BorcOdemeOlusturIstegi, BorcOdemeYanit, BorcBakiyeYanit,
     ProformaOlusturIstegi, ProformaYanit, FaturayaCevirYaniti, FaturaYanit, NotGuncelleIstegi,
 )
 from app.services.para_hareketi import para_hareketi_olustur
+
+
+def _degisiklikleri_kaydet(db: Session, sirket_id: int, kullanici_id: int, tablo_adi: str, kayit_id: int, degisiklikler: dict) -> None:
+    if not degisiklikler:
+        return
+    db.add(DuzenlemeKaydi(
+        sirket_id=sirket_id, kullanici_id=kullanici_id, tablo_adi=tablo_adi,
+        kayit_id=kayit_id, degisiklikler=json.dumps(degisiklikler, ensure_ascii=False, default=str),
+    ))
 
 router = APIRouter(tags=["Personel, Giderler, Borç, Fatura"])
 
@@ -128,23 +140,41 @@ def sabit_giderleri_listele(
 @router.put("/sabit-giderler/{gider_id}", response_model=SabitGiderYanit,
             dependencies=[Depends(izin_gerektir("GIDER_DUZENLE"))])
 def sabit_gider_duzenle(
-    gider_id: int, istek: SabitGiderOlusturIstegi,
-    sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
+    gider_id: int, istek: SabitGiderDuzenleIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    kullanici: Kullanici = Depends(aktif_kullanici_getir),
+    db: Session = Depends(get_db),
 ):
-    """Odenmemis bir gider kaydini duzeltir (yanlis girilen tutar/kategori/tarih icin)."""
+    """
+    Odenmemis bir gider kaydini duzeltir (yanlis girilen tutar/kategori/tarih
+    icin). Sifre onayi zorunludur; degisiklikler denetim_kayitlari'na islenir.
+    """
+    if not sifre_dogrula(istek.sifre, kullanici.sifre_hash):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Şifre yanlış, düzenleme yapılamadı.")
+
     gider = db.get(SabitGider, gider_id)
     if gider is None or gider.sirket_id != sirket_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Gider kaydı bulunamadı.")
     if gider.odendi_mi:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ödenmiş bir gider kaydı düzenlenemez; önce ödemeyi geri alın.")
 
-    gider.kategori = istek.kategori
-    gider.donem = istek.donem
-    gider.tutar = istek.tutar
-    gider.para_birimi = istek.para_birimi
-    gider.kur = istek.kur
-    gider.tutar_try = istek.tutar * istek.kur
-    gider.aciklama = istek.aciklama
+    yeni_tutar_try = istek.tutar * istek.kur
+    alan_adlari = {"kategori": "Kategori", "donem": "Dönem", "tutar": "Tutar", "para_birimi": "Para Birimi", "kur": "Kur", "tutar_try": "TL Karşılığı", "aciklama": "Açıklama"}
+    yeni_degerler = {
+        "kategori": istek.kategori, "donem": istek.donem, "tutar": istek.tutar,
+        "para_birimi": istek.para_birimi, "kur": istek.kur, "tutar_try": yeni_tutar_try, "aciklama": istek.aciklama,
+    }
+    degisiklikler = {}
+    for alan, etiket in alan_adlari.items():
+        eski = getattr(gider, alan)
+        yeni = yeni_degerler[alan]
+        eski_metin = eski.value if hasattr(eski, "value") else eski
+        yeni_metin = yeni.value if hasattr(yeni, "value") else yeni
+        if str(eski_metin) != str(yeni_metin):
+            degisiklikler[etiket] = {"eski": eski_metin, "yeni": yeni_metin}
+        setattr(gider, alan, yeni)
+
+    _degisiklikleri_kaydet(db, sirket_id, kullanici.id, "sabit_giderler", gider.id, degisiklikler)
 
     db.commit()
     db.refresh(gider)
