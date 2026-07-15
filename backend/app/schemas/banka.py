@@ -47,6 +47,19 @@ class BankaHareketiOlusturIstegi(BaseModel):
     tutar_try_karsiligi: Decimal | None = None  # Hesap TRY disi ise TL karsiligi
 
 
+class BankaHareketiDuzenleIstegi(BaseModel):
+    sifre: str  # kullanicinin kendi giris sifresi - degisiklik onayi icin zorunlu
+    banka_hesap_id: int
+    tarih: date
+    tip: BankaHareketTip
+    tutar: Decimal
+    aciklama: str | None = None
+    karsi_hesap_id: int | None = None
+    kullanilan_kur: Decimal | None = None
+    cari_id: int | None = None
+    tutar_try_karsiligi: Decimal | None = None
+
+
 class BankaHareketiYanit(BaseModel):
     id: int
     banka_hesap_id: int
