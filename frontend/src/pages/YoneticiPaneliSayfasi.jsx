@@ -442,8 +442,78 @@ const YONETICI_SEKMELERI = [
   { deger: 'sirket', etiket: 'Şirket Bilgileri' },
   { deger: 'kullanicilar', etiket: 'Kullanıcılar' },
   { deger: 'roller', etiket: 'Rol / İzinler' },
+  { deger: 'denetim', etiket: 'Düzenleme Geçmişi' },
   { deger: 'tehlikeli', etiket: 'Tehlikeli İşlemler' },
 ];
+
+const TABLO_ADI_METIN = {
+  banka_hareketleri: 'Banka Hareketi',
+  kasa_hareketleri: 'Ana Kasa Hareketi',
+};
+
+function DuzenlemeGecmisiSekmesi() {
+  const [liste, setListe] = useState([]);
+  const [hata, setHata] = useState(null);
+  const [yukleniyor, setYukleniyor] = useState(true);
+
+  useEffect(() => {
+    api.get('/admin/duzenleme-gecmisi')
+      .then((r) => setListe(r.data))
+      .catch((e) => setHata(hataMesajiCikar(e)))
+      .finally(() => setYukleniyor(false));
+  }, []);
+
+  function degisiklikleriGoster(metin) {
+    if (!metin) return '—';
+    try {
+      const obj = JSON.parse(metin);
+      return Object.entries(obj).map(([alan, deger]) => (
+        `${alan}: "${deger.eski ?? '—'}" → "${deger.yeni ?? '—'}"`
+      )).join('; ');
+    } catch {
+      return metin;
+    }
+  }
+
+  return (
+    <div>
+      <div style={{ fontSize: 13, color: 'var(--metin-ikincil)', marginBottom: 12 }}>
+        Şifre onayı gerektiren tüm düzenleme işlemlerinin kaydı — kim, ne zaman, hangi kaydı, hangi alanları değiştirdi.
+      </div>
+      <HataMesaji>{hata}</HataMesaji>
+      <Kart style={{ padding: 0 }}>
+        {yukleniyor ? (
+          <div style={{ padding: 20, color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
+        ) : liste.length === 0 ? (
+          <BosDurum baslik="Henüz şifre onaylı bir düzenleme yapılmamış" />
+        ) : (
+          <table>
+            <thead>
+              <tr style={{ background: 'var(--zemin)' }}>
+                {['Tarih', 'Kullanıcı', 'Tablo', 'Kayıt No', 'Değişiklikler'].map((b) => (
+                  <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {liste.map((k) => (
+                <tr key={k.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                  <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)', whiteSpace: 'nowrap' }}>
+                    {k.tarih ? new Date(k.tarih).toLocaleString('tr-TR') : '—'}
+                  </td>
+                  <td style={{ padding: '10px 16px', fontWeight: 500 }}>{k.kullanici_adi}</td>
+                  <td style={{ padding: '10px 16px' }}><Etiket ton="notr">{TABLO_ADI_METIN[k.tablo_adi] || k.tablo_adi}</Etiket></td>
+                  <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>#{k.kayit_id}</td>
+                  <td style={{ padding: '10px 16px', fontSize: 12.5, color: 'var(--metin-ikincil)' }}>{degisiklikleriGoster(k.degisiklikler)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Kart>
+    </div>
+  );
+}
 
 function AciklamalariYenidenUretKarti() {
   const [calisiyor, setCalisiyor] = useState(false);
@@ -566,6 +636,7 @@ export default function YoneticiPaneliSayfasi() {
       {sekme === 'sirket' && <SirketBilgileriSekmesi />}
       {sekme === 'kullanicilar' && <KullanicilarSekmesi />}
       {sekme === 'roller' && <RolIzinleriSekmesi />}
+      {sekme === 'denetim' && <DuzenlemeGecmisiSekmesi />}
       {sekme === 'tehlikeli' && <TehlikeliIslemlerSekmesi />}
     </div>
   );
