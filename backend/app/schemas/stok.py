@@ -71,6 +71,12 @@ class StokSeriNoDuzenleIstegi(BaseModel):
     stok_karti_id: int
 
 
+class StokSeriNoDuzenleSifreliIstegi(BaseModel):
+    sifre: str  # kullanicinin kendi giris sifresi - degisiklik onayi icin zorunlu
+    seri_no: str
+    stok_karti_id: int
+
+
 class StokDurumGuncelleIstegi(BaseModel):
     durum: StokDurum
     musteri_cari_id: int | None = None
@@ -79,6 +85,18 @@ class StokDurumGuncelleIstegi(BaseModel):
 
 
 class MaliyetKalemiEkleIstegi(BaseModel):
+    tip: MaliyetTip
+    aciklama: str | None = None
+    tedarikci_cari_id: int | None = None
+    para_birimi: ParaBirimi
+    tutar: Decimal
+    kur: Decimal = Decimal("1")
+    belge_no: str | None = None
+    tarih: date
+
+
+class MaliyetKalemiDuzenleIstegi(BaseModel):
+    sifre: str  # kullanicinin kendi giris sifresi - degisiklik onayi icin zorunlu
     tip: MaliyetTip
     aciklama: str | None = None
     tedarikci_cari_id: int | None = None
