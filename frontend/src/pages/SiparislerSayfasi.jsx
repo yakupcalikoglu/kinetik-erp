@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { api, hataMesajiCikar } from '../api/client';
 import { Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat, eylemChipStili } from '../components/Ortak';
 import BelgeSablonu from '../components/BelgeSablonu';
+import AramaliSecici from '../components/AramaliSecici';
 
 const API_TABAN_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -198,6 +199,10 @@ export default function SiparislerSayfasi() {
   const [durumDegistirAcikId, setDurumDegistirAcikId] = useState(null);
   const [icerikAcikId, setIcerikAcikId] = useState(null);
   const [belgeNotlari, setBelgeNotlari] = useState({}); // siparisId -> gecici not metni (sadece bu oturum icin)
+  const [filtreTedarikciId, setFiltreTedarikciId] = useState('');
+  const [filtreBaslangic, setFiltreBaslangic] = useState('');
+  const [filtreBitis, setFiltreBitis] = useState('');
+  const [filtreDurum, setFiltreDurum] = useState('');
   const [bilgiMesaji, setBilgiMesaji] = useState(
     location.state?.yeniSiparisNo
       ? location.state.guncellendiMi
@@ -287,6 +292,14 @@ export default function SiparislerSayfasi() {
     }
   }
 
+  const gosterilecekSiparisler = siparisler.filter((s) => {
+    if (filtreTedarikciId && String(s.tedarikci_cari_id) !== String(filtreTedarikciId)) return false;
+    if (filtreDurum && s.durum !== filtreDurum) return false;
+    if (filtreBaslangic && s.siparis_tarihi < filtreBaslangic) return false;
+    if (filtreBitis && s.siparis_tarihi > filtreBitis) return false;
+    return true;
+  });
+
   return (
     <div>
       <SayfaBasligi
@@ -301,10 +314,36 @@ export default function SiparislerSayfasi() {
         </div>
       )}
 
+      <Kart style={{ marginBottom: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10 }}>
+          <Alan etiket="Tedarikçiye göre filtrele">
+            <AramaliSecici secenekler={cariler} deger={filtreTedarikciId} onDegistir={setFiltreTedarikciId} etiketFn={(c) => c.unvan} bosMetin="Tümü / yazarak arayın..." />
+          </Alan>
+          <Alan etiket="Duruma göre filtrele">
+            <select value={filtreDurum} onChange={(e) => setFiltreDurum(e.target.value)} style={girdiStili}>
+              <option value="">Tümü</option>
+              <option value="TASLAK">Taslak</option>
+              <option value="ONAYLANDI">Onaylandı</option>
+              <option value="YOLDA">Yolda</option>
+              <option value="GUMRUKTE">Gümrükte</option>
+              <option value="TESLIM_ALINDI">Teslim Alındı</option>
+              <option value="TAMAMLANDI">Tamamlandı</option>
+              <option value="IPTAL">İptal</option>
+            </select>
+          </Alan>
+          <Alan etiket="Tarih başlangıcı">
+            <input type="date" value={filtreBaslangic} onChange={(e) => setFiltreBaslangic(e.target.value)} style={girdiStili} />
+          </Alan>
+          <Alan etiket="Tarih bitişi">
+            <input type="date" value={filtreBitis} onChange={(e) => setFiltreBitis(e.target.value)} style={girdiStili} />
+          </Alan>
+        </div>
+      </Kart>
+
       <Kart style={{ padding: 0 }}>
         {yukleniyor ? (
           <div style={{ padding: 20, color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
-        ) : siparisler.length === 0 ? (
+        ) : gosterilecekSiparisler.length === 0 ? (
           <BosDurum baslik="Henüz sipariş yok" aciklama="Yukarıdan yeni bir sipariş oluşturun." />
         ) : (
           <table style={{ tableLayout: 'fixed', width: '100%' }}>
@@ -324,7 +363,7 @@ export default function SiparislerSayfasi() {
               </tr>
             </thead>
             <tbody>
-              {siparisler.map((s) => {
+              {gosterilecekSiparisler.map((s) => {
                 const toplam = (s.urunler || []).reduce((acc, u) => acc + u.miktar * Number(u.birim_fiyat), 0);
                 const sonDurumda = SON_DURUMLAR.includes(s.durum);
                 return (
