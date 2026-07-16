@@ -287,12 +287,95 @@ function OdemeFormu({ tutar: tutarProp, paraBirimi = 'TRY', aksiyonMetni = 'Öde
 const CEK_DURUM_TON = { PORTFOYDE: 'amber', CIRO_EDILDI: 'notr', TAHSIL_EDILDI: 'yesil', ODENDI: 'yesil', KARSILIKSIZ: 'kirmizi', IPTAL: 'kirmizi' };
 const CEK_DURUM_METIN = { PORTFOYDE: 'Portföyde', CIRO_EDILDI: 'Ciro Edildi', TAHSIL_EDILDI: 'Tahsil Edildi', ODENDI: 'Ödendi', KARSILIKSIZ: 'Karşılıksız', IPTAL: 'İptal' };
 
+function CekDuzenleFormu({ cek, cariler, onKaydedildi, onVazgec }) {
+  const [form, setForm] = useState({
+    tip: cek.tip, cek_no: cek.cek_no || '', banka_adi: cek.banka_adi || '',
+    cari_id: cek.cari_id ? String(cek.cari_id) : '', tutar: cek.tutar, para_birimi: cek.para_birimi,
+    vade_tarihi: cek.vade_tarihi, alinma_verilme_tarihi: cek.alinma_verilme_tarihi, notlar: cek.notlar || '', sifre: '',
+  });
+  const [hata, setHata] = useState(null);
+  const [kaydediliyor, setKaydediliyor] = useState(false);
+
+  async function kaydet(e) {
+    e.preventDefault();
+    setHata(null);
+    setKaydediliyor(true);
+    try {
+      await api.put(`/cekler/${cek.id}`, {
+        ...form, cari_id: form.cari_id ? Number(form.cari_id) : null, tutar: Number(form.tutar),
+      });
+      onKaydedildi();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setKaydediliyor(false);
+    }
+  }
+
+  return (
+    <tr>
+      <td colSpan={8} style={{ padding: '0 16px 12px' }}>
+        <div style={{ padding: 14, background: 'var(--zemin)', borderRadius: 8 }}>
+          <form onSubmit={kaydet}>
+            <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 10 }}>Çeki düzenle</div>
+            <HataMesaji>{hata}</HataMesaji>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+              <Alan etiket="Tip">
+                <select value={form.tip} onChange={(e) => setForm((f) => ({ ...f, tip: e.target.value }))} style={girdiStili}>
+                  <option value="ALINAN">Alınan</option>
+                  <option value="VERILEN">Verilen</option>
+                </select>
+              </Alan>
+              <Alan etiket="Çek no">
+                <input value={form.cek_no} onChange={(e) => setForm((f) => ({ ...f, cek_no: e.target.value }))} style={girdiStili} />
+              </Alan>
+              <Alan etiket="Banka">
+                <input value={form.banka_adi} onChange={(e) => setForm((f) => ({ ...f, banka_adi: e.target.value }))} style={girdiStili} />
+              </Alan>
+              <Alan etiket="Cari">
+                <select value={form.cari_id} onChange={(e) => setForm((f) => ({ ...f, cari_id: e.target.value }))} style={girdiStili}>
+                  <option value="">Yok</option>
+                  {cariler.map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
+                </select>
+              </Alan>
+              <Alan etiket="Tutar">
+                <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
+              </Alan>
+              <Alan etiket="Para birimi">
+                <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={girdiStili}>
+                  <option value="TRY">TRY</option>
+                  <option value="USD">USD</option>
+                  <option value="EUR">EUR</option>
+                </select>
+              </Alan>
+              <Alan etiket="Vade tarihi">
+                <input required type="date" value={form.vade_tarihi} onChange={(e) => setForm((f) => ({ ...f, vade_tarihi: e.target.value }))} style={girdiStili} />
+              </Alan>
+              <Alan etiket="Alınma/verilme tarihi">
+                <input required type="date" value={form.alinma_verilme_tarihi} onChange={(e) => setForm((f) => ({ ...f, alinma_verilme_tarihi: e.target.value }))} style={girdiStili} />
+              </Alan>
+              <Alan etiket="Şifreniz (onay için zorunlu)">
+                <input required type="password" value={form.sifre} onChange={(e) => setForm((f) => ({ ...f, sifre: e.target.value }))} style={girdiStili} placeholder="Giriş şifreniz" />
+              </Alan>
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Kaydediliyor...' : 'Değişiklikleri kaydet'}</Buton>
+              <Buton type="button" variant="ikincil" onClick={onVazgec}>Vazgeç</Buton>
+            </div>
+          </form>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 function CekSekmesi() {
   const [cekler, setCekler] = useState([]);
   const [formAcik, setFormAcik] = useState(false);
   const [form, setForm] = useState({ tip: 'ALINAN', cek_no: '', banka_adi: '', cari_id: '', tutar: '', para_birimi: 'TRY', vade_tarihi: '', alinma_verilme_tarihi: '' });
   const [hata, setHata] = useState(null);
   const [odemeAcikCekId, setOdemeAcikCekId] = useState(null);
+  const [duzenlenenCekId, setDuzenlenenCekId] = useState(null);
   const cariHaritasi = useCariHaritasi();
   const cariler = useCariler();
 
@@ -420,6 +503,12 @@ function CekSekmesi() {
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                         {c.durum === 'PORTFOYDE' && (
                           <>
+                            <button
+                              onClick={() => setDuzenlenenCekId((mevcut) => (mevcut === c.id ? null : c.id))}
+                              style={eylemChipStili('notr')}
+                            >
+                              {duzenlenenCekId === c.id ? 'Kapat' : 'Düzenle'}
+                            </button>
                             <button onClick={() => ciroEt(c.id)} style={eylemChipStili('lacivert')}>Ciro et</button>
                             <button
                               onClick={() => setOdemeAcikCekId((mevcut) => (mevcut === c.id ? null : c.id))}
@@ -436,6 +525,14 @@ function CekSekmesi() {
                       </div>
                     </td>
                   </tr>
+                  {duzenlenenCekId === c.id && (
+                    <CekDuzenleFormu
+                      cek={c}
+                      cariler={cariler}
+                      onKaydedildi={() => { setDuzenlenenCekId(null); yukle(); }}
+                      onVazgec={() => setDuzenlenenCekId(null)}
+                    />
+                  )}
                   {odemeAcikCekId === c.id && (
                     <tr>
                       <td colSpan={8} style={{ padding: '0 16px 12px' }}>
