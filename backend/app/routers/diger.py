@@ -16,8 +16,10 @@ from app.models.denetim import DuzenlemeKaydi
 from app.core.security import sifre_dogrula
 from app.schemas.diger import (
     PersonelOlusturIstegi, PersonelYanit, PersonelOdemeOlusturIstegi, PersonelOdemeYanit, OdeIstegi,
+    PersonelDuzenleIstegi,
     SabitGiderOlusturIstegi, SabitGiderYanit, SabitGiderDuzenleIstegi,
     BorcOlusturIstegi, BorcYanit, BorcOdemeOlusturIstegi, BorcOdemeYanit, BorcBakiyeYanit,
+    BorcDuzenleIstegi,
     ProformaOlusturIstegi, ProformaYanit, FaturayaCevirYaniti, FaturaYanit, NotGuncelleIstegi,
 )
 from app.services.para_hareketi import para_hareketi_olustur
@@ -58,6 +60,41 @@ def personel_olustur(istek: PersonelOlusturIstegi, sirket_id: int = Depends(akti
 def personel_listele(sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
     sorgu = select(Personel).where(Personel.sirket_id == sirket_id, Personel.aktif.is_(True))
     return list(db.execute(sorgu).scalars())
+
+
+@router.put("/personel/{personel_id}", response_model=PersonelYanit, dependencies=[Depends(izin_gerektir("PERSONEL_DUZENLE"))])
+def personel_duzenle(
+    personel_id: int, istek: PersonelDuzenleIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    kullanici: Kullanici = Depends(aktif_kullanici_getir),
+    db: Session = Depends(get_db),
+):
+    """Bir personelin bilgilerini duzenler. Sifre onayi zorunludur; degisiklikler denetim_kayitlari'na islenir."""
+    if not sifre_dogrula(istek.sifre, kullanici.sifre_hash):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Şifre yanlış, düzenleme yapılamadı.")
+
+    personel = db.get(Personel, personel_id)
+    if personel is None or personel.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Personel bulunamadı.")
+
+    alan_adlari = {"ad_soyad": "Ad Soyad", "pozisyon": "Pozisyon", "aylik_maas": "Aylık Maaş", "ise_baslama_tarihi": "İşe Başlama Tarihi"}
+    yeni_degerler = {
+        "ad_soyad": istek.ad_soyad, "pozisyon": istek.pozisyon,
+        "aylik_maas": istek.aylik_maas, "ise_baslama_tarihi": istek.ise_baslama_tarihi,
+    }
+    degisiklikler = {}
+    for alan, etiket in alan_adlari.items():
+        eski = getattr(personel, alan)
+        yeni = yeni_degerler[alan]
+        if str(eski) != str(yeni):
+            degisiklikler[etiket] = {"eski": eski, "yeni": yeni}
+        setattr(personel, alan, yeni)
+
+    _degisiklikleri_kaydet(db, sirket_id, kullanici.id, "personel", personel.id, degisiklikler)
+
+    db.commit()
+    db.refresh(personel)
+    return personel
 
 
 @router.post("/personel-odemeleri", response_model=PersonelOdemeYanit,
@@ -227,6 +264,52 @@ def borclari_listele(
     if tip:
         sorgu = sorgu.where(Borc.tip == tip)
     return list(db.execute(sorgu).scalars())
+
+
+@router.put("/borclar/{borc_id}", response_model=BorcYanit, dependencies=[Depends(izin_gerektir("BORC_DUZENLE"))])
+def borc_duzenle(
+    borc_id: int, istek: BorcDuzenleIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    kullanici: Kullanici = Depends(aktif_kullanici_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Bir borc kaydini duzenler. Sifre onayi zorunludur; degisiklikler
+    denetim_kayitlari'na islenir. Odemesi baslamis bir borc icin dikkatli
+    kullanilmali - tutar/para birimi degisikligi gecmis odemelerle
+    tutarliligi bozabilir.
+    """
+    if not sifre_dogrula(istek.sifre, kullanici.sifre_hash):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Şifre yanlış, düzenleme yapılamadı.")
+
+    borc = db.get(Borc, borc_id)
+    if borc is None or borc.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Borç kaydı bulunamadı.")
+
+    alan_adlari = {
+        "tip": "Tip", "cari_id": "Cari", "tutar": "Tutar", "para_birimi": "Para Birimi",
+        "faiz_orani": "Faiz Oranı", "alinma_tarihi": "Alınma Tarihi", "vade_tarihi": "Vade Tarihi", "notlar": "Notlar",
+    }
+    yeni_degerler = {
+        "tip": istek.tip, "cari_id": istek.cari_id, "tutar": istek.tutar, "para_birimi": istek.para_birimi,
+        "faiz_orani": istek.faiz_orani, "alinma_tarihi": istek.alinma_tarihi,
+        "vade_tarihi": istek.vade_tarihi, "notlar": istek.notlar,
+    }
+    degisiklikler = {}
+    for alan, etiket in alan_adlari.items():
+        eski = getattr(borc, alan)
+        yeni = yeni_degerler[alan]
+        eski_metin = eski.value if hasattr(eski, "value") else eski
+        yeni_metin = yeni.value if hasattr(yeni, "value") else yeni
+        if str(eski_metin) != str(yeni_metin):
+            degisiklikler[etiket] = {"eski": eski_metin, "yeni": yeni_metin}
+        setattr(borc, alan, yeni)
+
+    _degisiklikleri_kaydet(db, sirket_id, kullanici.id, "borclar", borc.id, degisiklikler)
+
+    db.commit()
+    db.refresh(borc)
+    return borc
 
 
 @router.post("/borclar/{borc_id}/odeme", response_model=BorcOdemeYanit,
