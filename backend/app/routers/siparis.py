@@ -1,3 +1,4 @@
+import json
 from decimal import Decimal
 from datetime import date as date_cls
 from fastapi import APIRouter, Depends, HTTPException, status, Query
@@ -8,6 +9,8 @@ from sqlalchemy import select, func
 from app.db.session import get_db
 from app.core.deps import aktif_sirket_id_getir, izin_gerektir, aktif_kullanici_getir
 from app.models.auth import Sirket, Kullanici
+from app.models.denetim import DuzenlemeKaydi
+from app.core.security import sifre_dogrula
 from app.models.stok import (Siparis, SiparisDetay, StokSeriNo, StokDurum,
                               SiparisDurum, StokKarti, StokMaliyetKalemi, MaliyetTip, SiparisOdeme)
 from app.models.cari import CariHesap
@@ -18,6 +21,15 @@ from app.services import siparis_pdf
 from app.services.para_hareketi import para_hareketi_olustur
 
 router = APIRouter(prefix="/siparisler", tags=["Sipariş"])
+
+
+def _degisiklikleri_kaydet(db: Session, sirket_id: int, kullanici_id: int, tablo_adi: str, kayit_id: int, degisiklikler: dict) -> None:
+    if not degisiklikler:
+        return
+    db.add(DuzenlemeKaydi(
+        sirket_id=sirket_id, kullanici_id=kullanici_id, tablo_adi=tablo_adi,
+        kayit_id=kayit_id, degisiklikler=json.dumps(degisiklikler, ensure_ascii=False, default=str),
+    ))
 
 
 def _siparis_getir_veya_404(db: Session, siparis_id: int, sirket_id: int) -> Siparis:
@@ -131,14 +143,19 @@ def siparis_guncelle(
     siparis_id: int,
     istek: SiparisGuncelleIstegi,
     sirket_id: int = Depends(aktif_sirket_id_getir),
+    kullanici: Kullanici = Depends(aktif_kullanici_getir),
     db: Session = Depends(get_db),
 ):
     """
-    Bir siparisin tum bilgilerini ve urun satirlarini gunceller.
+    Bir siparisin tum bilgilerini ve urun satirlarini gunceller. Sifre
+    onayi zorunludur; degisiklikler denetim_kayitlari'na islenir.
     Sadece TASLAK durumundaki siparisler duzenlenebilir; onaylanmis/
     teslim alinmis siparislerde stok kayitlari zaten olusmus olabilir,
     bu yuzden veri tutarliligini korumak icin duzenleme kapatilir.
     """
+    if not sifre_dogrula(istek.sifre, kullanici.sifre_hash):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Şifre yanlış, düzenleme yapılamadı.")
+
     siparis = _siparis_getir_veya_404(db, siparis_id, sirket_id)
 
     if siparis.durum != SiparisDurum.TASLAK:
@@ -156,6 +173,37 @@ def siparis_guncelle(
 
     _tedarikci_dogrula(db, istek.tedarikci_cari_id, sirket_id)
     _urunleri_dogrula(db, istek.urunler, sirket_id)
+
+    alan_adlari = {
+        "siparis_no": "Sipariş No", "tedarikci_cari_id": "Tedarikçi", "kaynak": "Kaynak",
+        "siparis_tarihi": "Sipariş Tarihi", "tahmini_teslim_tarihi": "Tahmini Teslim Tarihi",
+        "para_birimi": "Para Birimi", "cikis_limani": "Çıkış Limanı", "varis_limani": "Varış Limanı",
+        "notlar": "Notlar",
+    }
+    yeni_degerler = {
+        "siparis_no": istek.siparis_no, "tedarikci_cari_id": istek.tedarikci_cari_id, "kaynak": istek.kaynak,
+        "siparis_tarihi": istek.siparis_tarihi, "tahmini_teslim_tarihi": istek.tahmini_teslim_tarihi,
+        "para_birimi": istek.para_birimi, "cikis_limani": istek.cikis_limani,
+        "varis_limani": istek.varis_limani, "notlar": istek.notlar,
+    }
+    degisiklikler = {}
+    for alan, etiket in alan_adlari.items():
+        eski = getattr(siparis, alan)
+        yeni = yeni_degerler[alan]
+        eski_metin = eski.value if hasattr(eski, "value") else eski
+        yeni_metin = yeni.value if hasattr(yeni, "value") else yeni
+        if str(eski_metin) != str(yeni_metin):
+            degisiklikler[etiket] = {"eski": eski_metin, "yeni": yeni_metin}
+
+    eski_urunler_ozet = ", ".join(
+        f"{u.miktar}x #{u.stok_karti_id}@{u.birim_fiyat}"
+        for u in db.execute(select(SiparisDetay).where(SiparisDetay.siparis_id == siparis.id)).scalars()
+    )
+    yeni_urunler_ozet = ", ".join(f"{u.miktar}x #{u.stok_karti_id}@{u.birim_fiyat}" for u in istek.urunler)
+    if eski_urunler_ozet != yeni_urunler_ozet:
+        degisiklikler["Ürünler"] = {"eski": eski_urunler_ozet, "yeni": yeni_urunler_ozet}
+
+    _degisiklikleri_kaydet(db, sirket_id, kullanici.id, "siparisler", siparis.id, degisiklikler)
 
     siparis.siparis_no = istek.siparis_no
     siparis.tedarikci_cari_id = istek.tedarikci_cari_id
@@ -319,10 +367,6 @@ def siparis_teslim_al(
                 f"siparis_detay_id={urun.siparis_detay_id} bu siparişe ait değil."
             )
 
-        # onemli: detay.birim_fiyat siparisin PARA BIRIMINDE (orn. USD) girilmis
-        # olabilir - stok_seri_no.satinalma_maliyeti_try HER ZAMAN TL bekler.
-        # Bu yuzden kur ile carpilarak TL karsiligina cevriliyor (TRY siparislerde
-        # kur=1 varsayilan oldugu icin deger degismez).
         satinalma_maliyeti_try = detay.birim_fiyat * istek.kur
 
         yeni_stok = StokSeriNo(
@@ -343,9 +387,6 @@ def siparis_teslim_al(
         db.flush()
         olusturulan_idler.append(yeni_stok.id)
 
-        # Satinalma maliyetini de (nakliye/gumruk gibi) bir maliyet kalemi
-        # olarak kaydediyoruz - boylece Stok sayfasindaki maliyet detayi
-        # tablosunda satinalma da hem doviz hem TL karsiligiyla gorunur.
         db.add(StokMaliyetKalemi(
             stok_seri_no_id=yeni_stok.id,
             tip=MaliyetTip.SATINALMA,
@@ -420,11 +461,7 @@ def siparis_pdf_indir(
     )
 
 
-
 # ============================================================== SİPARİŞ ÖDEMELERİ
-# Bu bolum, siparisin (tedarikciye) avans/ara/kapama odemelerini takip eder.
-# Stok maliyeti hesabindan BAGIMSIZDIR (teslim-al akisinda ayrica hesaplanir).
-
 @router.post("/{siparis_id}/odemeler", response_model=SiparisOdemeYanit,
              dependencies=[Depends(izin_gerektir("SIPARIS_DUZENLE"))])
 def siparis_odemesi_ekle(
