@@ -17,6 +17,19 @@ class CekOlusturIstegi(BaseModel):
     notlar: str | None = None
 
 
+class CekDuzenleIstegi(BaseModel):
+    sifre: str  # kullanicinin kendi giris sifresi - degisiklik onayi icin zorunlu
+    tip: CekTip
+    cek_no: str | None = None
+    banka_adi: str | None = None
+    cari_id: int | None = None
+    tutar: Decimal
+    para_birimi: ParaBirimi = ParaBirimi.TRY
+    vade_tarihi: date
+    alinma_verilme_tarihi: date
+    notlar: str | None = None
+
+
 class CekYanit(BaseModel):
     id: int
     tip: CekTip
