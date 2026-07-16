@@ -457,6 +457,8 @@ const TABLO_ADI_METIN = {
   cari_hesaplar: 'Cari Hesap',
   siparisler: 'Sipariş',
   cekler: 'Çek',
+  personel: 'Personel',
+  borclar: 'Ortak/Dış Borç',
 };
 
 function DuzenlemeGecmisiSekmesi() {
