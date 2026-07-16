@@ -419,9 +419,14 @@ export default function SiparislerSayfasi() {
                             </button>
                           )}
                           {s.durum === 'IPTAL' && (
-                            <button onClick={() => siparisiSil(s.id, s.siparis_no)} style={eylemChipStili('kirmizi')}>
-                              Sil
-                            </button>
+                            <>
+                              <button onClick={() => durumDegistir(s.id, 'ONAYLANDI')} style={eylemChipStili('yesil')}>
+                                İptali Geri Al
+                              </button>
+                              <button onClick={() => siparisiSil(s.id, s.siparis_no)} style={eylemChipStili('kirmizi')}>
+                                Sil
+                              </button>
+                            </>
                           )}
                           <button
                             onClick={() => setOdemelerAcikSiparisId((mevcut) => (mevcut === s.id ? null : s.id))}
