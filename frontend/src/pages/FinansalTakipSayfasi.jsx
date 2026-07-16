@@ -1501,10 +1501,15 @@ function AkreditifSekmesi() {
 }
 
 // ============================================================== PERSONEL
+function bosPersonelFormu() {
+  return { ad_soyad: '', pozisyon: '', aylik_maas: '', ise_baslama_tarihi: '', sifre: '' };
+}
+
 function PersonelSekmesi() {
   const [liste, setListe] = useState([]);
   const [formAcik, setFormAcik] = useState(false);
-  const [form, setForm] = useState({ ad_soyad: '', pozisyon: '', aylik_maas: '' });
+  const [duzenlenenPersonel, setDuzenlenenPersonel] = useState(null);
+  const [form, setForm] = useState(bosPersonelFormu());
   const [hata, setHata] = useState(null);
   const [seciliPersonel, setSeciliPersonel] = useState(null);
   const [odemeler, setOdemeler] = useState(null);
@@ -1516,12 +1521,33 @@ function PersonelSekmesi() {
   }
   useEffect(yukle, []);
 
+  function duzenlemeyeBasla(p) {
+    setDuzenlenenPersonel(p);
+    setForm({
+      ad_soyad: p.ad_soyad, pozisyon: p.pozisyon || '', aylik_maas: p.aylik_maas != null ? String(p.aylik_maas) : '',
+      ise_baslama_tarihi: p.ise_baslama_tarihi || '', sifre: '',
+    });
+    setFormAcik(true);
+  }
+
+  function formuKapat() {
+    setFormAcik(false);
+    setDuzenlenenPersonel(null);
+    setForm(bosPersonelFormu());
+  }
+
   async function kaydet(e) {
     e.preventDefault();
     setHata(null);
     try {
-      await api.post('/personel', { ...form, aylik_maas: form.aylik_maas ? Number(form.aylik_maas) : null });
-      setFormAcik(false);
+      const govde = { ...form, aylik_maas: form.aylik_maas ? Number(form.aylik_maas) : null, ise_baslama_tarihi: form.ise_baslama_tarihi || null };
+      if (duzenlenenPersonel) {
+        await api.put(`/personel/${duzenlenenPersonel.id}`, govde);
+      } else {
+        delete govde.sifre;
+        await api.post('/personel', govde);
+      }
+      formuKapat();
       yukle();
     } catch (err) { setHata(hataMesajiCikar(err)); }
   }
@@ -1568,12 +1594,15 @@ function PersonelSekmesi() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-        <Buton onClick={() => setFormAcik((a) => !a)}>{formAcik ? 'Kapat' : '+ Yeni personel'}</Buton>
+        <Buton onClick={() => (formAcik ? formuKapat() : setFormAcik(true))}>{formAcik ? 'Kapat' : '+ Yeni personel'}</Buton>
       </div>
       <HataMesaji>{hata}</HataMesaji>
 
       {formAcik && (
         <Kart style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>
+            {duzenlenenPersonel ? 'Personeli düzenle' : 'Yeni personel'}
+          </div>
           <form onSubmit={kaydet} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
             <Alan etiket="Ad Soyad">
               <input required value={form.ad_soyad} onChange={(e) => setForm((f) => ({ ...f, ad_soyad: e.target.value }))} style={girdiStili} />
@@ -1584,7 +1613,15 @@ function PersonelSekmesi() {
             <Alan etiket="Aylık maaş (TL)">
               <input type="number" step="0.01" value={form.aylik_maas} onChange={(e) => setForm((f) => ({ ...f, aylik_maas: e.target.value }))} style={girdiStili} />
             </Alan>
-            <div style={{ alignSelf: 'end' }}><Buton type="submit">Kaydet</Buton></div>
+            <Alan etiket="İşe başlama tarihi">
+              <input type="date" value={form.ise_baslama_tarihi} onChange={(e) => setForm((f) => ({ ...f, ise_baslama_tarihi: e.target.value }))} style={girdiStili} />
+            </Alan>
+            {duzenlenenPersonel && (
+              <Alan etiket="Şifreniz (onay için zorunlu)">
+                <input required type="password" value={form.sifre} onChange={(e) => setForm((f) => ({ ...f, sifre: e.target.value }))} style={girdiStili} placeholder="Giriş şifreniz" />
+              </Alan>
+            )}
+            <div style={{ alignSelf: 'end' }}><Buton type="submit">{duzenlenenPersonel ? 'Değişiklikleri kaydet' : 'Kaydet'}</Buton></div>
           </form>
         </Kart>
       )}
@@ -1599,9 +1636,12 @@ function PersonelSekmesi() {
               <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{p.pozisyon || '—'}</td>
               <td style={{ padding: '10px 16px' }}>{p.aylik_maas != null ? paraFormat(p.aylik_maas) : '—'}</td>
               <td style={{ padding: '10px 16px' }}>
-                <button onClick={() => odemeleriGoster(p.id)} style={eylemChipStili('lacivert')}>
-                  Ödemeler
-                </button>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button onClick={() => duzenlemeyeBasla(p)} style={eylemChipStili('notr')}>Düzenle</button>
+                  <button onClick={() => odemeleriGoster(p.id)} style={eylemChipStili('lacivert')}>
+                    Ödemeler
+                  </button>
+                </div>
               </td>
             </tr>
           )}
@@ -3011,6 +3051,90 @@ function SabitGiderSekmesi() {
 // ============================================================== ORTAK / DIŞ BORÇ
 const BORC_TIP_METIN = { ORTAKTAN_ALINAN: 'Ortaktan Alınan', DISARIDAN_ALINAN: 'Dışarıdan Alınan', ORTAGA_VERILEN: 'Ortağa Verilen' };
 
+function BorcDuzenleFormu({ borc, cariler, onKaydedildi, onVazgec }) {
+  const [form, setForm] = useState({
+    tip: borc.tip, cari_id: String(borc.cari_id), tutar: borc.tutar, para_birimi: borc.para_birimi,
+    faiz_orani: borc.faiz_orani ?? '0', alinma_tarihi: borc.alinma_tarihi, vade_tarihi: borc.vade_tarihi || '',
+    notlar: borc.notlar || '', sifre: '',
+  });
+  const [hata, setHata] = useState(null);
+  const [kaydediliyor, setKaydediliyor] = useState(false);
+
+  async function kaydet(e) {
+    e.preventDefault();
+    setHata(null);
+    setKaydediliyor(true);
+    try {
+      await api.put(`/borclar/${borc.id}`, {
+        ...form, cari_id: Number(form.cari_id), tutar: Number(form.tutar), faiz_orani: Number(form.faiz_orani),
+        vade_tarihi: form.vade_tarihi || null,
+      });
+      onKaydedildi();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setKaydediliyor(false);
+    }
+  }
+
+  return (
+    <tr>
+      <td colSpan={5} style={{ padding: '0 16px 12px' }}>
+        <div style={{ padding: 14, background: 'var(--zemin)', borderRadius: 8 }}>
+          <form onSubmit={kaydet}>
+            <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 10 }}>Borç kaydını düzenle</div>
+            <HataMesaji>{hata}</HataMesaji>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+              <Alan etiket="Tip">
+                <select value={form.tip} onChange={(e) => setForm((f) => ({ ...f, tip: e.target.value }))} style={girdiStili}>
+                  <option value="ORTAKTAN_ALINAN">Ortaktan Alınan</option>
+                  <option value="DISARIDAN_ALINAN">Dışarıdan Alınan</option>
+                  <option value="ORTAGA_VERILEN">Ortağa Verilen</option>
+                </select>
+              </Alan>
+              <Alan etiket="Cari">
+                <select required value={form.cari_id} onChange={(e) => setForm((f) => ({ ...f, cari_id: e.target.value }))} style={girdiStili}>
+                  {cariler.map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
+                </select>
+              </Alan>
+              <Alan etiket="Para birimi">
+                <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={girdiStili}>
+                  <option value="TRY">TRY</option>
+                  <option value="USD">USD</option>
+                  <option value="EUR">EUR</option>
+                  <option value="ALTIN">ALTIN</option>
+                </select>
+              </Alan>
+              <Alan etiket="Tutar">
+                <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
+              </Alan>
+              <Alan etiket="Faiz oranı (%)">
+                <input type="number" step="0.01" value={form.faiz_orani} onChange={(e) => setForm((f) => ({ ...f, faiz_orani: e.target.value }))} style={girdiStili} />
+              </Alan>
+              <Alan etiket="Alınma tarihi">
+                <input required type="date" value={form.alinma_tarihi} onChange={(e) => setForm((f) => ({ ...f, alinma_tarihi: e.target.value }))} style={girdiStili} />
+              </Alan>
+              <Alan etiket="Vade tarihi">
+                <input type="date" value={form.vade_tarihi} onChange={(e) => setForm((f) => ({ ...f, vade_tarihi: e.target.value }))} style={girdiStili} />
+              </Alan>
+              <Alan etiket="Notlar">
+                <input value={form.notlar} onChange={(e) => setForm((f) => ({ ...f, notlar: e.target.value }))} style={girdiStili} />
+              </Alan>
+              <Alan etiket="Şifreniz (onay için zorunlu)">
+                <input required type="password" value={form.sifre} onChange={(e) => setForm((f) => ({ ...f, sifre: e.target.value }))} style={girdiStili} placeholder="Giriş şifreniz" />
+              </Alan>
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Kaydediliyor...' : 'Değişiklikleri kaydet'}</Buton>
+              <Buton type="button" variant="ikincil" onClick={onVazgec}>Vazgeç</Buton>
+            </div>
+          </form>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 function BorcSekmesi() {
   const [liste, setListe] = useState([]);
   const [formAcik, setFormAcik] = useState(false);
@@ -3021,6 +3145,7 @@ function BorcSekmesi() {
   const cariler = useCariler();
   const [odemeAcikId, setOdemeAcikId] = useState(null);
   const [odemeTutari, setOdemeTutari] = useState('');
+  const [duzenlenenBorcId, setDuzenlenenBorcId] = useState(null);
 
   function yukle() {
     api.get('/borclar').then((r) => setListe(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
@@ -3119,14 +3244,30 @@ function BorcSekmesi() {
                         : <button onClick={() => bakiyeyiGetir(b.id)} style={eylemChipStili('lacivert')}>Göster</button>}
                     </td>
                     <td style={{ padding: '10px 16px' }}>
-                      <button
-                        onClick={() => { setOdemeAcikId((mevcut) => (mevcut === b.id ? null : b.id)); setOdemeTutari(''); }}
-                        style={eylemChipStili('lacivert')}
-                      >
-                        {odemeAcikId === b.id ? 'Kapat' : 'Ödeme ekle'}
-                      </button>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button
+                          onClick={() => setDuzenlenenBorcId((mevcut) => (mevcut === b.id ? null : b.id))}
+                          style={eylemChipStili('notr')}
+                        >
+                          {duzenlenenBorcId === b.id ? 'Kapat' : 'Düzenle'}
+                        </button>
+                        <button
+                          onClick={() => { setOdemeAcikId((mevcut) => (mevcut === b.id ? null : b.id)); setOdemeTutari(''); }}
+                          style={eylemChipStili('lacivert')}
+                        >
+                          {odemeAcikId === b.id ? 'Kapat' : 'Ödeme ekle'}
+                        </button>
+                      </div>
                     </td>
                   </tr>
+                  {duzenlenenBorcId === b.id && (
+                    <BorcDuzenleFormu
+                      borc={b}
+                      cariler={cariler}
+                      onKaydedildi={() => { setDuzenlenenBorcId(null); yukle(); }}
+                      onVazgec={() => setDuzenlenenBorcId(null)}
+                    />
+                  )}
                   {odemeAcikId === b.id && (
                     <tr>
                       <td colSpan={5} style={{ padding: '0 16px 10px' }}>
