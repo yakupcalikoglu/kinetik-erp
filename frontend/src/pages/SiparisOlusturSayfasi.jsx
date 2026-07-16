@@ -22,6 +22,7 @@ export default function SiparisOlusturSayfasi() {
     cikis_limani: '',
     varis_limani: '',
     notlar: '',
+    sifre: '',
   });
   const [urunler, setUrunler] = useState([bosUrunSatiri()]);
   const [tedarikciler, setTedarikciler] = useState([]);
@@ -54,6 +55,7 @@ export default function SiparisOlusturSayfasi() {
           cikis_limani: s.cikis_limani || '',
           varis_limani: s.varis_limani || '',
           notlar: s.notlar || '',
+          sifre: '',
         });
         setUrunler(
           (s.urunler || []).map((u) => ({
@@ -124,6 +126,7 @@ export default function SiparisOlusturSayfasi() {
         await api.put(`/siparisler/${siparisId}`, govde);
         navigate('/siparisler', { state: { yeniSiparisNo: govde.siparis_no, guncellendiMi: true } });
       } else {
+        delete govde.sifre;
         const { data } = await api.post('/siparisler', govde);
         navigate('/siparisler', { state: { yeniSiparisNo: data.siparis_no } });
       }
@@ -266,6 +269,12 @@ export default function SiparisOlusturSayfasi() {
           <Alan etiket="Notlar">
             <input value={form.notlar} onChange={(e) => alaniGuncelle('notlar', e.target.value)} style={girdiStili} />
           </Alan>
+          {duzenlemeModu && (
+            <Alan etiket="Şifreniz (onay için zorunlu)">
+              <input required type="password" value={form.sifre} onChange={(e) => alaniGuncelle('sifre', e.target.value)}
+                style={girdiStili} placeholder="Giriş şifreniz" />
+            </Alan>
+          )}
         </Kart>
 
         <div style={{ display: 'flex', gap: 8 }}>
