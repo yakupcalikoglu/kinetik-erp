@@ -4,6 +4,7 @@ import {
   Kart, SayfaBasligi, Buton, Etiket, Alan, girdiStili, BosDurum, HataMesaji, paraFormat, Sekmeler, eylemChipStili,
   OtomatikTamamlamaGirdisi,
 } from '../components/Ortak';
+import AramaliSecici from '../components/AramaliSecici';
 
 // Sekmeler mantiksal 4 gruba ayrildi - hangi sekmenin nerede oldugunu
 // bulmayi kolaylastirmak icin (once tek bir duz liste halindeydi).
@@ -121,6 +122,24 @@ function useCariler() {
     api.get('/cariler').then((r) => setCariler(r.data)).catch(() => {});
   }, []);
   return cariler;
+}
+
+// USD ve EUR icin guncel kuru bir kere ceker - liste tablolarinda dovizli
+// tutarlarin yaklasik TL karsiligini gostermek icin kullanilir.
+function useKurlar() {
+  const [kurlar, setKurlar] = useState({ USD: null, EUR: null });
+  useEffect(() => {
+    api.get('/kur/USD').then((r) => setKurlar((k) => ({ ...k, USD: Number(r.data.kur) }))).catch(() => {});
+    api.get('/kur/EUR').then((r) => setKurlar((k) => ({ ...k, EUR: Number(r.data.kur) }))).catch(() => {});
+  }, []);
+  return kurlar;
+}
+
+function tlKarsiligiGoster(tutar, paraBirimi, kurlar) {
+  if (paraBirimi === 'TRY') return '—';
+  const kur = kurlar[paraBirimi];
+  if (!kur) return '—';
+  return paraFormat(Number(tutar) * kur);
 }
 
 function useUrunSecenekleri() {
@@ -314,7 +333,7 @@ function CekDuzenleFormu({ cek, cariler, onKaydedildi, onVazgec }) {
 
   return (
     <tr>
-      <td colSpan={8} style={{ padding: '0 16px 12px' }}>
+      <td colSpan={9} style={{ padding: '0 16px 12px' }}>
         <div style={{ padding: 14, background: 'var(--zemin)', borderRadius: 8 }}>
           <form onSubmit={kaydet}>
             <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 10 }}>Çeki düzenle</div>
@@ -333,10 +352,7 @@ function CekDuzenleFormu({ cek, cariler, onKaydedildi, onVazgec }) {
                 <input value={form.banka_adi} onChange={(e) => setForm((f) => ({ ...f, banka_adi: e.target.value }))} style={girdiStili} />
               </Alan>
               <Alan etiket="Cari">
-                <select value={form.cari_id} onChange={(e) => setForm((f) => ({ ...f, cari_id: e.target.value }))} style={girdiStili}>
-                  <option value="">Yok</option>
-                  {cariler.map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
-                </select>
+                <AramaliSecici secenekler={cariler} deger={form.cari_id} onDegistir={(v) => setForm((f) => ({ ...f, cari_id: v }))} etiketFn={(c) => c.unvan} bosMetin="Cari yok / yazarak arayın..." />
               </Alan>
               <Alan etiket="Tutar">
                 <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
@@ -378,6 +394,11 @@ function CekSekmesi() {
   const [duzenlenenCekId, setDuzenlenenCekId] = useState(null);
   const cariHaritasi = useCariHaritasi();
   const cariler = useCariler();
+  const kurlar = useKurlar();
+  const [filtreCariId, setFiltreCariId] = useState('');
+  const [filtreDurum, setFiltreDurum] = useState('');
+  const [filtreBaslangic, setFiltreBaslangic] = useState('');
+  const [filtreBitis, setFiltreBitis] = useState('');
 
   function yukle() {
     api.get('/cekler').then((r) => setCekler(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
@@ -428,6 +449,14 @@ function CekSekmesi() {
     } catch (err) { setHata(hataMesajiCikar(err)); }
   }
 
+  const gosterilecekCekler = cekler.filter((c) => {
+    if (filtreCariId && String(c.cari_id) !== String(filtreCariId)) return false;
+    if (filtreDurum && c.durum !== filtreDurum) return false;
+    if (filtreBaslangic && c.vade_tarihi < filtreBaslangic) return false;
+    if (filtreBitis && c.vade_tarihi > filtreBitis) return false;
+    return true;
+  });
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
@@ -451,10 +480,7 @@ function CekSekmesi() {
               <input value={form.banka_adi} onChange={(e) => setForm((f) => ({ ...f, banka_adi: e.target.value }))} style={girdiStili} />
             </Alan>
             <Alan etiket="Cari (opsiyonel)">
-              <select value={form.cari_id} onChange={(e) => setForm((f) => ({ ...f, cari_id: e.target.value }))} style={girdiStili}>
-                <option value="">Seçin...</option>
-                {cariler.map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
-              </select>
+              <AramaliSecici secenekler={cariler} deger={form.cari_id} onDegistir={(v) => setForm((f) => ({ ...f, cari_id: v }))} etiketFn={(c) => c.unvan} />
             </Alan>
             <Alan etiket="Tutar">
               <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
@@ -478,18 +504,42 @@ function CekSekmesi() {
         </Kart>
       )}
 
+      <Kart style={{ marginBottom: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10 }}>
+          <Alan etiket="Cariye göre filtrele">
+            <AramaliSecici secenekler={cariler} deger={filtreCariId} onDegistir={setFiltreCariId} etiketFn={(c) => c.unvan} bosMetin="Tümü / yazarak arayın..." />
+          </Alan>
+          <Alan etiket="Duruma göre filtrele">
+            <select value={filtreDurum} onChange={(e) => setFiltreDurum(e.target.value)} style={girdiStili}>
+              <option value="">Tümü</option>
+              <option value="PORTFOYDE">Portföyde</option>
+              <option value="CIRO_EDILDI">Ciro Edildi</option>
+              <option value="TAHSIL_EDILDI">Tahsil Edildi</option>
+              <option value="ODENDI">Ödendi</option>
+              <option value="KARSILIKSIZ">Karşılıksız</option>
+            </select>
+          </Alan>
+          <Alan etiket="Vade başlangıcı">
+            <input type="date" value={filtreBaslangic} onChange={(e) => setFiltreBaslangic(e.target.value)} style={girdiStili} />
+          </Alan>
+          <Alan etiket="Vade bitişi">
+            <input type="date" value={filtreBitis} onChange={(e) => setFiltreBitis(e.target.value)} style={girdiStili} />
+          </Alan>
+        </div>
+      </Kart>
+
       <Kart style={{ padding: 0 }}>
-        {cekler.length === 0 ? <BosDurum baslik="Kayıt bulunamadı" /> : (
+        {gosterilecekCekler.length === 0 ? <BosDurum baslik="Kayıt bulunamadı" /> : (
           <table>
             <thead>
               <tr style={{ background: 'var(--zemin)' }}>
-                {['Çek No', 'Tip', 'Banka', 'Cari', 'Tutar', 'Vade', 'Durum', 'İşlem'].map((b) => (
+                {['Çek No', 'Tip', 'Banka', 'Cari', 'Tutar', 'TL Karşılığı', 'Vade', 'Durum', 'İşlem'].map((b) => (
                   <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {cekler.map((c) => (
+              {gosterilecekCekler.map((c) => (
                 <Fragment key={c.id}>
                   <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
                     <td style={{ padding: '10px 16px' }}>{c.cek_no || '—'}</td>
@@ -497,6 +547,7 @@ function CekSekmesi() {
                     <td style={{ padding: '10px 16px' }}>{c.banka_adi || '—'}</td>
                     <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{cariGoster(c.cari_id, cariHaritasi)}</td>
                     <td style={{ padding: '10px 16px' }}>{paraFormat(c.tutar, c.para_birimi)}</td>
+                    <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{tlKarsiligiGoster(c.tutar, c.para_birimi, kurlar)}</td>
                     <td style={{ padding: '10px 16px' }}>{c.vade_tarihi}</td>
                     <td style={{ padding: '10px 16px' }}><Etiket ton={CEK_DURUM_TON[c.durum]}>{CEK_DURUM_METIN[c.durum]}</Etiket></td>
                     <td style={{ padding: '10px 16px' }}>
@@ -535,7 +586,7 @@ function CekSekmesi() {
                   )}
                   {odemeAcikCekId === c.id && (
                     <tr>
-                      <td colSpan={8} style={{ padding: '0 16px 12px' }}>
+                      <td colSpan={9} style={{ padding: '0 16px 12px' }}>
                         <OdemeFormu
                           tutar={c.tutar}
                           paraBirimi={c.para_birimi}
@@ -1797,10 +1848,7 @@ function BakimSekmesi() {
               </select>
             </Alan>
             <Alan etiket="İlgili cari (opsiyonel)">
-              <select value={form.ilgili_cari_id} onChange={(e) => setForm((f) => ({ ...f, ilgili_cari_id: e.target.value }))} style={girdiStili}>
-                <option value="">Seçin...</option>
-                {cariler.map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
-              </select>
+              <AramaliSecici secenekler={cariler} deger={form.ilgili_cari_id} onDegistir={(v) => setForm((f) => ({ ...f, ilgili_cari_id: v }))} etiketFn={(c) => c.unvan} />
             </Alan>
             <Alan etiket="Tarih">
               <input required type="date" value={form.tarih} onChange={(e) => setForm((f) => ({ ...f, tarih: e.target.value }))} style={girdiStili} />
@@ -1903,6 +1951,8 @@ function LeasingSekmesi() {
   const [liste, setListe] = useState([]);
   const cariler = useCariler();
   const urunTanimlari = useUrunTanimlari();
+  const kurlar = useKurlar();
+  const [filtreCariId, setFiltreCariId] = useState('');
   const [hata, setHata] = useState(null);
   const [seciliPlan, setSeciliPlan] = useState(null);
   const [formAcik, setFormAcik] = useState(false);
@@ -2000,10 +2050,7 @@ function LeasingSekmesi() {
                 <input required value={form.sozlesme_no} onChange={(e) => setForm((f) => ({ ...f, sozlesme_no: e.target.value }))} style={girdiStili} />
               </Alan>
               <Alan etiket="Leasing şirketi (cari)">
-                <select required value={form.leasing_firmasi_cari_id} onChange={(e) => setForm((f) => ({ ...f, leasing_firmasi_cari_id: e.target.value }))} style={girdiStili}>
-                  <option value="">Seçin...</option>
-                  {cariler.map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
-                </select>
+                <AramaliSecici secenekler={cariler} deger={form.leasing_firmasi_cari_id} onDegistir={(v) => setForm((f) => ({ ...f, leasing_firmasi_cari_id: v }))} etiketFn={(c) => c.unvan} />
               </Alan>
               <Alan etiket="Para birimi">
                 <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={girdiStili}>
@@ -2071,10 +2118,16 @@ function LeasingSekmesi() {
         </Kart>
       )}
 
+      <Kart style={{ marginBottom: 12 }}>
+        <Alan etiket="Leasing firmasına göre filtrele">
+          <AramaliSecici secenekler={cariler} deger={filtreCariId} onDegistir={setFiltreCariId} etiketFn={(c) => c.unvan} bosMetin="Tümü / yazarak arayın..." />
+        </Alan>
+      </Kart>
+
       <Kart style={{ padding: 0, marginBottom: 16 }}>
         <BasitTablo
-          basliklar={['Sözleşme No', 'Leasing Firması', 'Ürünler', 'Toplam Tutar', 'Taksit Sayısı', 'İşlem']}
-          satirlar={liste}
+          basliklar={['Sözleşme No', 'Leasing Firması', 'Ürünler', 'Toplam Tutar', 'TL Karşılığı', 'Taksit Sayısı', 'İşlem']}
+          satirlar={filtreCariId ? liste.filter((l) => String(l.leasing_firmasi_cari_id) === String(filtreCariId)) : liste}
           render={(l) => (
             <tr key={l.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
               <td style={{ padding: '10px 16px', fontWeight: 500 }}>{l.sozlesme_no || `#${l.id}`}</td>
@@ -2083,6 +2136,7 @@ function LeasingSekmesi() {
                 {(l.kalemler || []).map((k) => `${k.miktar}x ${k.urun_adi || '#' + k.stok_karti_id}`).join(', ') || '—'}
               </td>
               <td style={{ padding: '10px 16px' }}>{paraFormat(l.toplam_tutar, l.para_birimi)}</td>
+              <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{tlKarsiligiGoster(l.toplam_tutar, l.para_birimi, kurlar)}</td>
               <td style={{ padding: '10px 16px' }}>{l.taksit_sayisi}</td>
               <td style={{ padding: '10px 16px' }}>
                 <div style={{ display: 'flex', gap: 6 }}>
@@ -2168,6 +2222,8 @@ function bosKiralamaFormu() {
 }
 
 function KiralamaSekmesi() {
+  const kurlar = useKurlar();
+  const [filtreCariId, setFiltreCariId] = useState('');
   const [liste, setListe] = useState([]);
   const [formAcik, setFormAcik] = useState(false);
   const [duzenlenenSozlesme, setDuzenlenenSozlesme] = useState(null);
@@ -2301,10 +2357,7 @@ function KiralamaSekmesi() {
           <form onSubmit={kaydet}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 16 }}>
               <Alan etiket="Kiracı">
-                <select required value={form.kiraci_cari_id} onChange={(e) => setForm((f) => ({ ...f, kiraci_cari_id: e.target.value }))} style={girdiStili}>
-                  <option value="">Seçin...</option>
-                  {cariler.map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
-                </select>
+                <AramaliSecici secenekler={cariler} deger={form.kiraci_cari_id} onDegistir={(v) => setForm((f) => ({ ...f, kiraci_cari_id: v }))} etiketFn={(c) => c.unvan} />
               </Alan>
               <Alan etiket="Başlangıç tarihi">
                 <input required type="date" value={form.baslangic_tarihi} onChange={(e) => setForm((f) => ({ ...f, baslangic_tarihi: e.target.value }))} style={girdiStili} />
@@ -2378,10 +2431,16 @@ function KiralamaSekmesi() {
         </Kart>
       )}
 
+      <Kart style={{ marginBottom: 12 }}>
+        <Alan etiket="Kiracıya göre filtrele">
+          <AramaliSecici secenekler={cariler} deger={filtreCariId} onDegistir={setFiltreCariId} etiketFn={(c) => c.unvan} bosMetin="Tümü / yazarak arayın..." />
+        </Alan>
+      </Kart>
+
       <Kart style={{ padding: 0, marginBottom: 16 }}>
         <BasitTablo
-          basliklar={['Ürünler', 'Kiracı', 'Aylık Kira', 'Durum', '']}
-          satirlar={liste}
+          basliklar={['Ürünler', 'Kiracı', 'Aylık Kira', 'TL Karşılığı', 'Durum', '']}
+          satirlar={filtreCariId ? liste.filter((k) => String(k.kiraci_cari_id) === String(filtreCariId)) : liste}
           render={(k) => (
             <tr key={k.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
               <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>
@@ -2389,6 +2448,7 @@ function KiralamaSekmesi() {
               </td>
               <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{k.kiraci_unvan || cariGoster(k.kiraci_cari_id, cariHaritasi)}</td>
               <td style={{ padding: '10px 16px' }}>{paraFormat(k.aylik_kira_tutari, k.para_birimi)}</td>
+              <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{tlKarsiligiGoster(k.aylik_kira_tutari, k.para_birimi, kurlar)}</td>
               <td style={{ padding: '10px 16px' }}><Etiket ton={k.durum === 'AKTIF' ? 'yesil' : 'notr'}>{k.durum}</Etiket></td>
               <td style={{ padding: '10px 16px' }}>
                 <button onClick={() => duzenlemeyeBasla(k)} style={eylemChipStili('lacivert')}>Düzenle</button>
@@ -2576,10 +2636,7 @@ function TaksitSekmesi() {
           <form onSubmit={kaydet}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 16 }}>
               <Alan etiket="Müşteri">
-                <select required value={form.musteri_cari_id} onChange={(e) => setForm((f) => ({ ...f, musteri_cari_id: e.target.value }))} style={girdiStili}>
-                  <option value="">Seçin...</option>
-                  {cariler.map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
-                </select>
+                <AramaliSecici secenekler={cariler} deger={form.musteri_cari_id} onDegistir={(v) => setForm((f) => ({ ...f, musteri_cari_id: v }))} etiketFn={(c) => c.unvan} />
               </Alan>
               <Alan etiket="Peşinat (TL)">
                 <input type="number" step="0.01" value={form.pesinat} onChange={(e) => setForm((f) => ({ ...f, pesinat: e.target.value }))} style={girdiStili} />
@@ -2970,8 +3027,14 @@ function SabitGiderSekmesi() {
         </Kart>
       )}
 
+      <Kart style={{ marginBottom: 12 }}>
+        <Alan etiket="Cariye göre filtrele">
+          <AramaliSecici secenekler={cariler} deger={filtreCariId} onDegistir={setFiltreCariId} etiketFn={(c) => c.unvan} bosMetin="Tümü / yazarak arayın..." />
+        </Alan>
+      </Kart>
+
       <Kart style={{ padding: 0 }}>
-        {liste.length === 0 ? <BosDurum baslik="Kayıt bulunamadı" /> : (
+        {gosterilecekListe.length === 0 ? <BosDurum baslik="Kayıt bulunamadı" /> : (
           <table>
             <thead>
               <tr style={{ background: 'var(--zemin)' }}>
@@ -3079,7 +3142,7 @@ function BorcDuzenleFormu({ borc, cariler, onKaydedildi, onVazgec }) {
 
   return (
     <tr>
-      <td colSpan={5} style={{ padding: '0 16px 12px' }}>
+      <td colSpan={6} style={{ padding: '0 16px 12px' }}>
         <div style={{ padding: 14, background: 'var(--zemin)', borderRadius: 8 }}>
           <form onSubmit={kaydet}>
             <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 10 }}>Borç kaydını düzenle</div>
@@ -3093,9 +3156,7 @@ function BorcDuzenleFormu({ borc, cariler, onKaydedildi, onVazgec }) {
                 </select>
               </Alan>
               <Alan etiket="Cari">
-                <select required value={form.cari_id} onChange={(e) => setForm((f) => ({ ...f, cari_id: e.target.value }))} style={girdiStili}>
-                  {cariler.map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
-                </select>
+                <AramaliSecici secenekler={cariler} deger={form.cari_id} onDegistir={(v) => setForm((f) => ({ ...f, cari_id: v }))} etiketFn={(c) => c.unvan} />
               </Alan>
               <Alan etiket="Para birimi">
                 <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={girdiStili}>
@@ -3136,6 +3197,8 @@ function BorcDuzenleFormu({ borc, cariler, onKaydedildi, onVazgec }) {
 }
 
 function BorcSekmesi() {
+  const kurlar = useKurlar();
+  const [filtreCariId, setFiltreCariId] = useState('');
   const [liste, setListe] = useState([]);
   const [formAcik, setFormAcik] = useState(false);
   const [form, setForm] = useState({ tip: 'ORTAKTAN_ALINAN', cari_id: '', tutar: '', para_birimi: 'TRY', alinma_tarihi: new Date().toISOString().slice(0, 10) });
@@ -3179,6 +3242,8 @@ function BorcSekmesi() {
     bakiyeyiGetir(borc.id);
   }
 
+  const gosterilecekListe = filtreCariId ? liste.filter((b) => String(b.cari_id) === String(filtreCariId)) : liste;
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
@@ -3197,10 +3262,7 @@ function BorcSekmesi() {
               </select>
             </Alan>
             <Alan etiket="Cari">
-              <select required value={form.cari_id} onChange={(e) => setForm((f) => ({ ...f, cari_id: e.target.value }))} style={girdiStili}>
-                <option value="">Seçin...</option>
-                {cariler.map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
-              </select>
+              <AramaliSecici secenekler={cariler} deger={form.cari_id} onDegistir={(v) => setForm((f) => ({ ...f, cari_id: v }))} etiketFn={(c) => c.unvan} />
             </Alan>
             <Alan etiket="Para birimi">
               <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={girdiStili}>
@@ -3222,23 +3284,30 @@ function BorcSekmesi() {
         </Kart>
       )}
 
+      <Kart style={{ marginBottom: 12 }}>
+        <Alan etiket="Cariye göre filtrele">
+          <AramaliSecici secenekler={cariler} deger={filtreCariId} onDegistir={setFiltreCariId} etiketFn={(c) => c.unvan} bosMetin="Tümü / yazarak arayın..." />
+        </Alan>
+      </Kart>
+
       <Kart style={{ padding: 0 }}>
-        {liste.length === 0 ? <BosDurum baslik="Kayıt bulunamadı" /> : (
+        {gosterilecekListe.length === 0 ? <BosDurum baslik="Kayıt bulunamadı" /> : (
           <table>
             <thead>
               <tr style={{ background: 'var(--zemin)' }}>
-                {['Tip', 'Cari', 'Toplam Borç', 'Kalan Bakiye', ''].map((b) => (
+                {['Tip', 'Cari', 'Toplam Borç', 'TL Karşılığı', 'Kalan Bakiye', ''].map((b) => (
                   <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {liste.map((b) => (
+              {gosterilecekListe.map((b) => (
                 <Fragment key={b.id}>
                   <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
                     <td style={{ padding: '10px 16px' }}>{BORC_TIP_METIN[b.tip]}</td>
                     <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{cariGoster(b.cari_id, cariHaritasi)}</td>
                     <td style={{ padding: '10px 16px' }}>{paraFormat(b.tutar, b.para_birimi)}</td>
+                    <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{tlKarsiligiGoster(b.tutar, b.para_birimi, kurlar)}</td>
                     <td style={{ padding: '10px 16px', fontWeight: 500 }}>
                       {bakiyeler[b.id] ? paraFormat(bakiyeler[b.id].kalan_bakiye, b.para_birimi)
                         : <button onClick={() => bakiyeyiGetir(b.id)} style={eylemChipStili('lacivert')}>Göster</button>}
