@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, hataMesajiCikar } from '../api/client';
 import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji } from '../components/Ortak';
+import AramaliSecici from '../components/AramaliSecici';
 
 function bosUrunSatiri() {
   return { stok_karti_id: '', miktar: 1, birim_fiyat: '', para_birimi: 'USD', birim_agirlik_kg: '', aciklama: '' };
@@ -163,13 +164,13 @@ export default function SiparisOlusturSayfasi() {
                 placeholder="SP-2026-00150" style={girdiStili} />
             </Alan>
             <Alan etiket="Tedarikçi">
-              <select required value={form.tedarikci_cari_id}
-                onChange={(e) => alaniGuncelle('tedarikci_cari_id', e.target.value)} style={girdiStili}>
-                <option value="">Seçiniz...</option>
-                {tedarikciler.map((t) => (
-                  <option key={t.id} value={t.id}>{t.unvan}</option>
-                ))}
-              </select>
+              <AramaliSecici
+                secenekler={tedarikciler}
+                deger={form.tedarikci_cari_id}
+                onDegistir={(v) => alaniGuncelle('tedarikci_cari_id', v)}
+                etiketFn={(t) => t.unvan}
+                bosMetin="Tedarikçi adı yazarak arayın..."
+              />
             </Alan>
             <Alan etiket="Kaynak">
               <select value={form.kaynak} onChange={(e) => alaniGuncelle('kaynak', e.target.value)} style={girdiStili}>
@@ -223,13 +224,15 @@ export default function SiparisOlusturSayfasi() {
               {urunler.map((u, i) => (
                 <tr key={i} style={{ borderTop: '1px solid var(--kenarlik)' }}>
                   <td style={{ padding: 8 }}>
-                    <select required value={u.stok_karti_id} onChange={(e) => urunGuncelle(i, 'stok_karti_id', e.target.value)}
-                      style={{ ...girdiStili, width: 220 }}>
-                      <option value="">Seçiniz...</option>
-                      {stokKartlari.map((sk) => (
-                        <option key={sk.id} value={sk.id}>{stokKartiEtiketi(sk)}</option>
-                      ))}
-                    </select>
+                    <div style={{ width: 260 }}>
+                      <AramaliSecici
+                        secenekler={stokKartlari}
+                        deger={u.stok_karti_id}
+                        onDegistir={(v) => urunGuncelle(i, 'stok_karti_id', v)}
+                        etiketFn={stokKartiEtiketi}
+                        bosMetin="Ürün adı yazarak arayın..."
+                      />
+                    </div>
                   </td>
                   <td style={{ padding: 8 }}>
                     <input type="number" min="1" value={u.miktar} onChange={(e) => urunGuncelle(i, 'miktar', e.target.value)}
