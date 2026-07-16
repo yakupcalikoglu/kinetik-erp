@@ -12,6 +12,14 @@ class PersonelOlusturIstegi(BaseModel):
     ise_baslama_tarihi: date | None = None
 
 
+class PersonelDuzenleIstegi(BaseModel):
+    sifre: str  # kullanicinin kendi giris sifresi - degisiklik onayi icin zorunlu
+    ad_soyad: str
+    pozisyon: str | None = None
+    aylik_maas: Decimal | None = None
+    ise_baslama_tarihi: date | None = None
+
+
 class PersonelYanit(BaseModel):
     id: int
     ad_soyad: str
@@ -102,6 +110,18 @@ class GiderSipariseDagitYaniti(BaseModel):
 
 # ------------------------------------------------------------- Ortak/Dış Borç
 class BorcOlusturIstegi(BaseModel):
+    tip: BorcTip
+    cari_id: int
+    tutar: Decimal
+    para_birimi: ParaBirimi
+    faiz_orani: Decimal = Decimal("0")
+    alinma_tarihi: date
+    vade_tarihi: date | None = None
+    notlar: str | None = None
+
+
+class BorcDuzenleIstegi(BaseModel):
+    sifre: str  # kullanicinin kendi giris sifresi - degisiklik onayi icin zorunlu
     tip: BorcTip
     cari_id: int
     tutar: Decimal
