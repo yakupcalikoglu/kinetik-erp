@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { api, hataMesajiCikar } from '../api/client';
 import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, BosDurum, Etiket, paraFormat, eylemChipStili, Sekmeler } from '../components/Ortak';
 import BelgeSablonu from '../components/BelgeSablonu';
+import AramaliSecici from '../components/AramaliSecici';
 
 const API_TABAN_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -778,10 +779,7 @@ export default function ProformaFaturaSayfasi() {
                   placeholder="PRF-2026-001" style={girdiStili} />
               </Alan>
               <Alan etiket="Cari">
-                <select required value={form.cari_id} onChange={(e) => setForm((f) => ({ ...f, cari_id: e.target.value }))} style={girdiStili}>
-                  <option value="">Seçin...</option>
-                  {cariler.map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
-                </select>
+                <AramaliSecici secenekler={cariler} deger={form.cari_id} onDegistir={(v) => setForm((f) => ({ ...f, cari_id: v }))} etiketFn={(c) => c.unvan} />
               </Alan>
               <Alan etiket="Tarih">
                 <input required type="date" value={form.tarih} onChange={(e) => setForm((f) => ({ ...f, tarih: e.target.value }))} style={girdiStili} />
