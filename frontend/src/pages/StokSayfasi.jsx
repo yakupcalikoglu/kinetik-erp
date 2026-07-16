@@ -1,6 +1,7 @@
 import { useEffect, useState, Fragment } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import AramaliSecici from '../components/AramaliSecici';
 import { api, hataMesajiCikar } from '../api/client';
 import { excelIndir } from '../utils/disaAktarma';
 
@@ -459,6 +460,7 @@ export default function StokSayfasi() {
   const [siparisler, setSiparisler] = useState([]);
   const [durumFiltre, setDurumFiltre] = useState('');
   const [urunFiltre, setUrunFiltre] = useState('');
+  const [siparisFiltre, setSiparisFiltre] = useState('');
   const [yukleniyor, setYukleniyor] = useState(true);
   const [hata, setHata] = useState(null);
   const [maliyetGosterilecekUrun, setMaliyetGosterilecekUrun] = useState(null);
@@ -573,6 +575,7 @@ export default function StokSayfasi() {
     const params = {};
     if (durumFiltre) params.durum = durumFiltre;
     if (urunFiltre) params.stok_karti_id = urunFiltre;
+    if (siparisFiltre) params.siparis_id = siparisFiltre;
     api.get('/stok-seri-no', { params })
       .then((res) => setUrunler(res.data))
       .catch((err) => setHata(hataMesajiCikar(err)))
@@ -592,7 +595,7 @@ export default function StokSayfasi() {
 
   useEffect(() => {
     urunleriYukle();
-  }, [durumFiltre, urunFiltre]); // eslint-disable-line
+  }, [durumFiltre, urunFiltre, siparisFiltre]); // eslint-disable-line
 
   function urunAdiGoster(stokKartiId) {
     const k = stokKartlari.find((x) => x.id === stokKartiId);
@@ -787,8 +790,22 @@ export default function StokSayfasi() {
               ))}
             </select>
           </Alan>
+          <div style={{ minWidth: 220 }}>
+            <Alan etiket="Siparişe göre filtrele">
+              <AramaliSecici
+                secenekler={siparisler}
+                deger={siparisFiltre}
+                onDegistir={setSiparisFiltre}
+                etiketFn={(s) => s.siparis_no}
+                bosMetin="Tümü / sipariş no yazarak arayın..."
+              />
+            </Alan>
+          </div>
           {durumFiltre && (
             <Buton variant="ikincil" onClick={() => setDurumFiltre('')}>Durum filtresini temizle ({DURUM_METIN[durumFiltre]})</Buton>
+          )}
+          {siparisFiltre && (
+            <Buton variant="ikincil" onClick={() => setSiparisFiltre('')}>Sipariş filtresini temizle</Buton>
           )}
         </div>
 
