@@ -456,6 +456,7 @@ const TABLO_ADI_METIN = {
   stok_maliyet_kalemleri: 'Stok Maliyet Kalemi',
   cari_hesaplar: 'Cari Hesap',
   siparisler: 'Sipariş',
+  cekler: 'Çek',
 };
 
 function DuzenlemeGecmisiSekmesi() {
