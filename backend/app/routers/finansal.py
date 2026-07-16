@@ -20,7 +20,7 @@ import json
 from app.models.denetim import DuzenlemeKaydi
 from app.core.security import sifre_dogrula
 from app.schemas.finansal import (
-    CekOlusturIstegi, CekYanit, CekDurumGuncelleIstegi, CekGecmisYanit,
+    CekOlusturIstegi, CekDuzenleIstegi, CekYanit, CekDurumGuncelleIstegi, CekGecmisYanit,
     LeasingOlusturIstegi, LeasingYanit, LeasingOdemeYanit, OdemeTahsilIstegi,
     TaksitliSatisOlusturIstegi, TaksitliSatisYanit, TaksitDetayYanit, TaksitTahsilIstegi,
     TaksitOdemeSonucu,
@@ -95,6 +95,57 @@ def cek_olustur(
     cari_h = _cari_haritasi(db, sirket_id)
     yeni.cari_unvan = cari_h.get(yeni.cari_id)
     return yeni
+
+
+@router.put("/cekler/{cek_id}", response_model=CekYanit, dependencies=[Depends(izin_gerektir("CEK_DUZENLE"))])
+def cek_duzenle(
+    cek_id: int, istek: CekDuzenleIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    kullanici: Kullanici = Depends(aktif_kullanici_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Yanlis girilmis bir cekin bilgilerini duzeltir (cek no, tutar, vade
+    tarihi vb.). Sifre onayi zorunludur; degisiklikler denetim_kayitlari'na
+    islenir. Zaten tahsil/ciro edilmis bir cek duzenlenemez - once
+    durumu geri alinmalidir.
+    """
+    if not sifre_dogrula(istek.sifre, kullanici.sifre_hash):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Şifre yanlış, düzenleme yapılamadı.")
+
+    cek = db.get(Cek, cek_id)
+    if cek is None or cek.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Çek bulunamadı.")
+    if cek.durum != CekDurum.PORTFOYDE:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Sadece portföyde olan bir çek düzenlenebilir.")
+
+    alan_adlari = {
+        "tip": "Tip", "cek_no": "Çek No", "banka_adi": "Banka", "cari_id": "Cari",
+        "tutar": "Tutar", "para_birimi": "Para Birimi", "vade_tarihi": "Vade Tarihi",
+        "alinma_verilme_tarihi": "Alınma/Verilme Tarihi", "notlar": "Notlar",
+    }
+    yeni_degerler = {
+        "tip": istek.tip, "cek_no": istek.cek_no, "banka_adi": istek.banka_adi, "cari_id": istek.cari_id,
+        "tutar": istek.tutar, "para_birimi": istek.para_birimi, "vade_tarihi": istek.vade_tarihi,
+        "alinma_verilme_tarihi": istek.alinma_verilme_tarihi, "notlar": istek.notlar,
+    }
+    degisiklikler = {}
+    for alan, etiket in alan_adlari.items():
+        eski = getattr(cek, alan)
+        yeni = yeni_degerler[alan]
+        eski_metin = eski.value if hasattr(eski, "value") else eski
+        yeni_metin = yeni.value if hasattr(yeni, "value") else yeni
+        if str(eski_metin) != str(yeni_metin):
+            degisiklikler[etiket] = {"eski": eski_metin, "yeni": yeni_metin}
+        setattr(cek, alan, yeni)
+
+    _degisiklikleri_kaydet(db, sirket_id, kullanici.id, "cekler", cek.id, degisiklikler)
+
+    db.commit()
+    db.refresh(cek)
+    cari_h = _cari_haritasi(db, sirket_id)
+    cek.cari_unvan = cari_h.get(cek.cari_id)
+    return cek
 
 
 @router.get("/cekler", response_model=list[CekYanit], dependencies=[Depends(izin_gerektir("CEK_GORUNTULE"))])
