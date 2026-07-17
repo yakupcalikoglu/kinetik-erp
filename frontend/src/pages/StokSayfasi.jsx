@@ -2,6 +2,45 @@ import { useEffect, useState, Fragment } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import AramaliSecici from '../components/AramaliSecici';
+
+function useSiralama() {
+  const [alan, setAlan] = useState(null);
+  const [yon, setYon] = useState('asc');
+  function tikla(yeniAlan) {
+    if (alan === yeniAlan) setYon((y) => (y === 'asc' ? 'desc' : 'asc'));
+    else { setAlan(yeniAlan); setYon('asc'); }
+  }
+  function sirala(liste, degerFn) {
+    if (!alan) return liste;
+    return [...liste].sort((a, b) => {
+      const av = degerFn(a, alan);
+      const bv = degerFn(b, alan);
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      if (typeof av === 'string') {
+        return yon === 'asc' ? av.localeCompare(bv, 'tr') : bv.localeCompare(av, 'tr');
+      }
+      return yon === 'asc' ? av - bv : bv - av;
+    });
+  }
+  return { alan, yon, tikla, sirala };
+}
+
+function SiraliBaslik({ children, alanAdi, siralama, style }) {
+  const aktif = siralama.alan === alanAdi;
+  return (
+    <th
+      onClick={() => siralama.tikla(alanAdi)}
+      style={{
+        textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)',
+        fontWeight: 500, cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', ...style,
+      }}
+    >
+      {children} {aktif ? (siralama.yon === 'asc' ? '▲' : '▼') : ''}
+    </th>
+  );
+}
 import { api, hataMesajiCikar } from '../api/client';
 import { excelIndir } from '../utils/disaAktarma';
 
@@ -481,6 +520,7 @@ export default function StokSayfasi() {
   const [seciliIdler, setSeciliIdler] = useState([]);
   const [topluDurum, setTopluDurum] = useState('DEPODA');
   const [topluHata, setTopluHata] = useState(null);
+  const siralama = useSiralama();
   const [topluIslemDevamEdiyor, setTopluIslemDevamEdiyor] = useState(false);
   const [topluMaliyetAcik, setTopluMaliyetAcik] = useState(false);
   const [topluMaliyetForm, setTopluMaliyetForm] = useState({
@@ -837,17 +877,28 @@ export default function StokSayfasi() {
                     onChange={tumunuSecVeyaKaldir}
                   />
                 </th>
-                {['Seri No', 'Ürün', 'Sipariş', 'Durum', 'Toplam Maliyet (TL)', 'Toplam Maliyet (USD)', 'Satış Fiyatı (TL)', 'Satış Fiyatı (USD)', 'Kâr/Zarar', 'İşlem'].map((b) => (
-                  <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
-                ))}
+                <SiraliBaslik alanAdi="seri_no" siralama={siralama}>Seri No</SiraliBaslik>
+                <SiraliBaslik alanAdi="_urun_adi" siralama={siralama}>Ürün</SiraliBaslik>
+                <SiraliBaslik alanAdi="_siparis_no" siralama={siralama}>Sipariş</SiraliBaslik>
+                <SiraliBaslik alanAdi="durum" siralama={siralama}>Durum</SiraliBaslik>
+                <SiraliBaslik alanAdi="toplam_maliyet_try" siralama={siralama}>Toplam Maliyet (TL)</SiraliBaslik>
+                <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>Toplam Maliyet (USD)</th>
+                <SiraliBaslik alanAdi="satis_fiyati_try" siralama={siralama}>Satış Fiyatı (TL)</SiraliBaslik>
+                <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>Satış Fiyatı (USD)</th>
+                <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>Kâr/Zarar</th>
+                <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>İşlem</th>
               </tr>
             </thead>
             <tbody>
-              {gruplananUrunler.map((u, index) => {
+              {siralama.sirala(gruplananUrunler, (item, alan) => {
+                if (alan === '_urun_adi') return urunAdiGoster(item.stok_karti_id);
+                if (alan === '_siparis_no') return siparisNoGoster(item.siparis_id);
+                return item[alan];
+              }).map((u, index) => {
                 const karZarar = u.satis_fiyati_try != null ? u.satis_fiyati_try - u.toplam_maliyet_try : null;
                 const satilabilir = u.durum === 'DEPODA' || u.durum === 'ANTREPODA';
                 const oncekiUrun = gruplananUrunler[index - 1];
-                const grupBasi = index > 0 && oncekiUrun && oncekiUrun.siparis_id !== u.siparis_id;
+                const grupBasi = !siralama.alan && index > 0 && oncekiUrun && oncekiUrun.siparis_id !== u.siparis_id;
                 if (durumDegistirilenId === u.id) {
                   return (
                     <DurumDegistirFormu
