@@ -3027,14 +3027,8 @@ function SabitGiderSekmesi() {
         </Kart>
       )}
 
-      <Kart style={{ marginBottom: 12 }}>
-        <Alan etiket="Cariye göre filtrele">
-          <AramaliSecici secenekler={cariler} deger={filtreCariId} onDegistir={setFiltreCariId} etiketFn={(c) => c.unvan} bosMetin="Tümü / yazarak arayın..." />
-        </Alan>
-      </Kart>
-
       <Kart style={{ padding: 0 }}>
-        {gosterilecekListe.length === 0 ? <BosDurum baslik="Kayıt bulunamadı" /> : (
+        {liste.length === 0 ? <BosDurum baslik="Kayıt bulunamadı" /> : (
           <table>
             <thead>
               <tr style={{ background: 'var(--zemin)' }}>
