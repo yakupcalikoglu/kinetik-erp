@@ -6,6 +6,13 @@ import {
 
 // Herhangi bir listeyi bir sutuna gore tiklanabilir sekilde siralamak icin
 // paylasilan kucuk yardimci - butun sayfalarda ayni sekilde kullanilir.
+function tarihFormat(iso) {
+  if (!iso || typeof iso !== 'string' || !iso.includes('-')) return iso || '—';
+  const [yil, ay, gun] = iso.slice(0, 10).split('-');
+  if (!yil || !ay || !gun) return iso;
+  return `${gun}/${ay}/${yil}`;
+}
+
 function useSiralama() {
   const [alan, setAlan] = useState(null);
   const [yon, setYon] = useState('asc');
@@ -313,7 +320,7 @@ function CariHareketleri({ cari, onKapat }) {
                       background: acikDetayId === h.id ? 'var(--zemin)' : 'transparent',
                     }}
                   >
-                    <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{h.tarih}</td>
+                    <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{tarihFormat(h.tarih)}</td>
                     <td style={{ padding: '10px 16px' }}>{HAREKET_YON_METIN[h.yon]}</td>
                     <td style={{ padding: '10px 16px', fontWeight: 500, color: h.yon === 'GIRIS' ? 'var(--yesil)' : 'var(--kirmizi)' }}>
                       {paraFormat(h.tutar, h.para_birimi)}
