@@ -25,6 +25,7 @@ export default function AnaDuzen() {
   const [yeniSirketFormuAcik, setYeniSirketFormuAcik] = useState(false);
   const [yeniSirketAdi, setYeniSirketAdi] = useState('');
   const [hata, setHata] = useState(null);
+  const [mobilMenuAcik, setMobilMenuAcik] = useState(false);
 
   function cikisIslemi() {
     cikisYap();
@@ -48,7 +49,54 @@ export default function AnaDuzen() {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
+      <style>{`
+        .kinetik-hamburger { display: none; }
+        .kinetik-sidebar-orten { display: none; }
+
+        @media (max-width: 860px) {
+          .kinetik-sidebar {
+            position: fixed;
+            top: 0; left: 0; bottom: 0;
+            z-index: 40;
+            transform: translateX(-100%);
+            transition: transform 0.2s ease;
+          }
+          .kinetik-sidebar.acik {
+            transform: translateX(0);
+          }
+          .kinetik-sidebar-orten.acik {
+            display: block;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.35);
+            z-index: 35;
+          }
+          .kinetik-hamburger {
+            display: flex;
+          }
+          .kinetik-ana-icerik {
+            padding: 14px !important;
+          }
+          .kinetik-baslik-satiri {
+            flex-wrap: wrap;
+          }
+        }
+
+        /* Genis tablolar/gridler kucuk ekranlarda tasmasin diye yatay kaydirma acik
+           tutulur - sayfalar kendi ic yapisini degistirmeden calisir. */
+        @media (max-width: 860px) {
+          main {
+            overflow-x: auto;
+          }
+        }
+      `}</style>
+
+      {mobilMenuAcik && (
+        <div className="kinetik-sidebar-orten acik" onClick={() => setMobilMenuAcik(false)} />
+      )}
+
       <aside
+        className={`kinetik-sidebar${mobilMenuAcik ? ' acik' : ''}`}
         style={{
           width: 220,
           background: 'var(--lacivert-koyu)',
@@ -65,12 +113,13 @@ export default function AnaDuzen() {
           </div>
         </div>
 
-        <nav style={{ flex: 1, padding: '12px 8px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <nav style={{ flex: 1, padding: '12px 8px', display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
           {gorunurModuller.map((m) => (
             <NavLink
               key={m.yol}
               to={m.yol}
               end={m.yol === '/'}
+              onClick={() => setMobilMenuAcik(false)}
               style={({ isActive }) => ({
                 display: 'flex',
                 alignItems: 'center',
@@ -123,46 +172,61 @@ export default function AnaDuzen() {
             flexShrink: 0,
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, width: '100%' }}>
-            {oturum?.sirketler?.length > 1 ? (
-              <select
-                value={oturum.aktifSirketId ?? ''}
-                onChange={(e) => sirketDegistir(Number(e.target.value))}
-                style={{
-                  padding: '6px 10px',
-                  borderRadius: 6,
-                  border: '1px solid var(--kenarlik-koyu)',
-                  background: 'white',
-                }}
-              >
-                {oturum.sirketler.map((s) => (
-                  <option key={s.id} value={s.id}>{s.unvan}</option>
-                ))}
-              </select>
-            ) : (
-              <span style={{ fontSize: 13, color: 'var(--metin-ikincil)' }}>
-                {oturum?.sirketler?.[0]?.unvan}
-              </span>
-            )}
+          <div className="kinetik-baslik-satiri" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, width: '100%' }}>
             <button
-              onClick={() => setYeniSirketFormuAcik((a) => !a)}
+              className="kinetik-hamburger"
+              onClick={() => setMobilMenuAcik((a) => !a)}
+              aria-label="Menüyü aç/kapat"
               style={{
-                padding: '6px 12px', borderRadius: 6, border: '1px solid var(--kenarlik-koyu)',
-                background: 'white', fontSize: 12.5, color: 'var(--metin-ikincil)',
+                alignItems: 'center', justifyContent: 'center', width: 34, height: 34,
+                border: '1px solid var(--kenarlik-koyu)', borderRadius: 6, background: 'white',
+                fontSize: 16, cursor: 'pointer', flexShrink: 0,
               }}
             >
-              + Yeni şirket
+              ☰
             </button>
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, flex: 1, flexWrap: 'wrap' }}>
+              {oturum?.sirketler?.length > 1 ? (
+                <select
+                  value={oturum.aktifSirketId ?? ''}
+                  onChange={(e) => sirketDegistir(Number(e.target.value))}
+                  style={{
+                    padding: '6px 10px',
+                    borderRadius: 6,
+                    border: '1px solid var(--kenarlik-koyu)',
+                    background: 'white',
+                  }}
+                >
+                  {oturum.sirketler.map((s) => (
+                    <option key={s.id} value={s.id}>{s.unvan}</option>
+                  ))}
+                </select>
+              ) : (
+                <span style={{ fontSize: 13, color: 'var(--metin-ikincil)' }}>
+                  {oturum?.sirketler?.[0]?.unvan}
+                </span>
+              )}
+              <button
+                onClick={() => setYeniSirketFormuAcik((a) => !a)}
+                style={{
+                  padding: '6px 12px', borderRadius: 6, border: '1px solid var(--kenarlik-koyu)',
+                  background: 'white', fontSize: 12.5, color: 'var(--metin-ikincil)',
+                }}
+              >
+                + Yeni şirket
+              </button>
+            </div>
           </div>
 
           {yeniSirketFormuAcik && (
-            <form onSubmit={yeniSirketEkle} style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center' }}>
+            <form onSubmit={yeniSirketEkle} style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' }}>
               <input
                 required
                 value={yeniSirketAdi}
                 onChange={(e) => setYeniSirketAdi(e.target.value)}
                 placeholder="Yeni şirket unvanı"
-                style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--kenarlik-koyu)', width: 280 }}
+                style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--kenarlik-koyu)', width: 280, maxWidth: '100%' }}
               />
               <button type="submit" style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid var(--lacivert)', background: 'var(--lacivert)', color: 'white', fontSize: 12.5 }}>
                 Oluştur
@@ -172,7 +236,7 @@ export default function AnaDuzen() {
           )}
         </header>
 
-        <main style={{ flex: 1, padding: 28, overflow: 'auto' }}>
+        <main className="kinetik-ana-icerik" style={{ flex: 1, padding: 28, overflow: 'auto' }}>
           <Outlet />
         </main>
       </div>
