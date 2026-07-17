@@ -2,6 +2,13 @@ import { useEffect, useState, Fragment } from 'react';
 import { api, hataMesajiCikar } from '../api/client';
 import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat, eylemChipStili, OtomatikTamamlamaGirdisi } from '../components/Ortak';
 
+function tarihFormat(iso) {
+  if (!iso || typeof iso !== 'string' || !iso.includes('-')) return iso || '—';
+  const [yil, ay, gun] = iso.slice(0, 10).split('-');
+  if (!yil || !ay || !gun) return iso;
+  return `${gun}/${ay}/${yil}`;
+}
+
 function useSiralama() {
   const [alan, setAlan] = useState(null);
   const [yon, setYon] = useState('asc');
@@ -519,7 +526,7 @@ function VadesiGelenlerPaneli() {
                 {' '}{TUR_METIN[s.tur] || s.tur} — {s.aciklama}
               </div>
               <div style={{ display: 'flex', gap: 12, color: 'var(--metin-ikincil)' }}>
-                <span>{s.tarih}</span>
+                <span>{tarihFormat(s.tarih)}</span>
                 <span style={{ fontWeight: 600, color: 'var(--metin-birincil)' }}>{paraFormat(s.tutar, s.para_birimi)}</span>
               </div>
             </div>
@@ -669,7 +676,7 @@ export default function KasaSayfasi() {
                         background: acikDetayId === h.id ? 'var(--zemin)' : 'transparent',
                       }}
                     >
-                      <td onClick={() => satiraTikla(h)} style={{ padding: '10px 16px', color: 'var(--metin-ikincil)', cursor: tiklanabilir ? 'pointer' : 'default' }}>{h.tarih}</td>
+                      <td onClick={() => satiraTikla(h)} style={{ padding: '10px 16px', color: 'var(--metin-ikincil)', cursor: tiklanabilir ? 'pointer' : 'default' }}>{tarihFormat(h.tarih)}</td>
                       <td onClick={() => satiraTikla(h)} style={{ padding: '10px 16px', cursor: tiklanabilir ? 'pointer' : 'default' }}>{h.yon === 'GIRIS' ? 'Giriş' : 'Çıkış'}</td>
                       <td onClick={() => satiraTikla(h)} style={{ padding: '10px 16px', fontWeight: 500, color: h.yon === 'GIRIS' ? 'var(--yesil)' : 'var(--kirmizi)', cursor: tiklanabilir ? 'pointer' : 'default' }}>
                         {paraFormat(h.tutar, h.para_birimi)}
