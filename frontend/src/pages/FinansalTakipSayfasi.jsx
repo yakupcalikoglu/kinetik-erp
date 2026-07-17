@@ -457,8 +457,28 @@ function CekSekmesi() {
     return true;
   });
 
+  const bugun = new Date().toISOString().slice(0, 10);
+  const vadesiGecenler = cekler.filter((c) => c.durum === 'PORTFOYDE' && c.vade_tarihi < bugun);
+
   return (
     <div>
+      {vadesiGecenler.length > 0 && (
+        <Kart style={{ marginBottom: 12, background: 'var(--kirmizi-acik, #fde2e2)', border: '1px solid var(--kirmizi)' }}>
+          <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--kirmizi)', marginBottom: 6 }}>
+            ⚠ {vadesiGecenler.length} çekin vadesi geçmiş, henüz {vadesiGecenler.some((c) => c.tip === 'ALINAN') ? 'tahsil/ödeme' : 'ödeme'} edilmemiş:
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {vadesiGecenler.map((c) => (
+              <div key={c.id} style={{ fontSize: 13, display: 'flex', justifyContent: 'space-between' }}>
+                <span>
+                  {c.cek_no || `#${c.id}`} — {c.tip === 'ALINAN' ? 'Alınan' : 'Verilen'} — {cariHaritasi[c.cari_id] || '—'}
+                </span>
+                <span style={{ fontWeight: 600 }}>{c.vade_tarihi} — {paraFormat(c.tutar, c.para_birimi)}</span>
+              </div>
+            ))}
+          </div>
+        </Kart>
+      )}
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
         <Buton onClick={() => setFormAcik((a) => !a)}>{formAcik ? 'Kapat' : '+ Yeni çek'}</Buton>
       </div>
