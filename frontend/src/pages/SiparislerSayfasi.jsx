@@ -6,6 +6,16 @@ import { Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesa
 import BelgeSablonu from '../components/BelgeSablonu';
 import AramaliSecici from '../components/AramaliSecici';
 
+// ISO (yyyy-mm-dd) formatindaki bir tarihi gg/aa/yyyy olarak gosterir.
+// Bos/gecersiz deger icin '-' doner. Sadece GORUNTULEME icin kullanilir,
+// <input type="date"> alanlari (duzenleme) buna dokunmaz.
+function tarihFormat(iso) {
+  if (!iso || typeof iso !== 'string' || !iso.includes('-')) return iso || '—';
+  const [yil, ay, gun] = iso.slice(0, 10).split('-');
+  if (!yil || !ay || !gun) return iso;
+  return `${gun}/${ay}/${yil}`;
+}
+
 function useSiralama() {
   const [alan, setAlan] = useState(null);
   const [yon, setYon] = useState('asc');
@@ -426,7 +436,7 @@ export default function SiparislerSayfasi() {
                         </button>
                       </td>
                       <td style={{ padding: '12px 16px' }}>{s.kaynak === 'ITHALAT' ? 'İthalat' : 'Yurtiçi Alım'}</td>
-                      <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>{s.siparis_tarihi}</td>
+                      <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>{tarihFormat(s.siparis_tarihi)}</td>
                       <td style={{ padding: '12px 16px' }}>
                         <Etiket ton={DURUM_ETIKET[s.durum]}>{DURUM_METIN[s.durum]}</Etiket>
                       </td>
