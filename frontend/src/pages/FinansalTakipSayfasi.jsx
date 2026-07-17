@@ -123,15 +123,31 @@ function GruplananSekmeler({ aktif, onDegistir }) {
   );
 }
 
-function BasitTablo({ basliklar, satirlar, render }) {
+function BasitTablo({ basliklar, satirlar, render, siralama }) {
   if (satirlar.length === 0) return <BosDurum baslik="Kayıt bulunamadı" />;
   return (
     <table>
       <thead>
         <tr style={{ background: 'var(--zemin)' }}>
-          {basliklar.map((b) => (
-            <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
-          ))}
+          {basliklar.map((b) => {
+            // Basliklar hem duz metin (siralanamaz) hem de {etiket, alan} (siralanabilir) olabilir.
+            const etiket = typeof b === 'string' ? b : b.etiket;
+            const alan = typeof b === 'string' ? null : b.alan;
+            const tiklanabilir = !!(siralama && alan);
+            const aktif = tiklanabilir && siralama.alan === alan;
+            return (
+              <th
+                key={etiket}
+                onClick={tiklanabilir ? () => siralama.tikla(alan) : undefined}
+                style={{
+                  textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)',
+                  fontWeight: 500, cursor: tiklanabilir ? 'pointer' : 'default', userSelect: 'none', whiteSpace: 'nowrap',
+                }}
+              >
+                {etiket}{aktif ? ` ${siralama.yon === 'asc' ? '▲' : '▼'}` : ''}
+              </th>
+            );
+          })}
         </tr>
       </thead>
       <tbody>{satirlar.map(render)}</tbody>
@@ -1280,6 +1296,7 @@ function KalemTaksitPaneli({ kalem, akreditif, onKapat }) {
 
 function AkreditifSekmesi() {
   const [liste, setListe] = useState([]);
+  const siralama = useSiralama();
   const [siparisler, setSiparisler] = useState([]);
   const [bankaHesaplari, setBankaHesaplari] = useState([]);
   const [formAcik, setFormAcik] = useState(false);
@@ -1478,8 +1495,22 @@ function AkreditifSekmesi() {
 
       <Kart style={{ padding: 0, marginBottom: 16 }}>
         <BasitTablo
-          basliklar={['Akreditif No', 'Sipariş', 'Banka', 'Tutar', 'Açılış', 'Vade', 'Durum', 'İşlem']}
-          satirlar={liste}
+          basliklar={[
+            { etiket: 'Akreditif No', alan: 'akreditif_no' },
+            { etiket: 'Sipariş', alan: '_siparis' },
+            { etiket: 'Banka', alan: '_banka' },
+            { etiket: 'Tutar', alan: 'tutar' },
+            { etiket: 'Açılış', alan: 'acilis_tarihi' },
+            { etiket: 'Vade', alan: 'vade_tarihi' },
+            { etiket: 'Durum', alan: 'durum' },
+            'İşlem',
+          ]}
+          siralama={siralama}
+          satirlar={siralama.sirala(liste, (item, alan) => {
+            if (alan === '_siparis') return siparisEtiketi(item.siparis_id);
+            if (alan === '_banka') return bankaEtiketi(item.banka_hesap_id);
+            return item[alan];
+          })}
           render={(a) => (
             <tr key={a.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
               <td style={{ padding: '10px 16px', fontWeight: 500 }}>{a.akreditif_no || `#${a.id}`}</td>
@@ -1866,6 +1897,7 @@ function PersonelSekmesi() {
 // ============================================================== BAKIM
 function BakimSekmesi() {
   const [liste, setListe] = useState([]);
+  const siralama = useSiralama();
   const [bankaHesaplari, setBankaHesaplari] = useState([]);
   const harcamaTurleri = useHarcamaTurleri();
   const urunSecenekleri = useUrunSecenekleri();
@@ -1984,8 +2016,20 @@ function BakimSekmesi() {
 
       <Kart style={{ padding: 0 }}>
         <BasitTablo
-          basliklar={['Ürün', 'İlgili Cari', 'Tarih', 'Tip', 'Açıklama', 'Tutar', '']}
-          satirlar={liste}
+          basliklar={[
+            { etiket: 'Ürün', alan: '_urun' },
+            { etiket: 'İlgili Cari', alan: 'ilgili_cari_unvan' },
+            { etiket: 'Tarih', alan: 'tarih' },
+            { etiket: 'Tip', alan: 'tip' },
+            { etiket: 'Açıklama', alan: 'aciklama' },
+            { etiket: 'Tutar', alan: 'tutar' },
+            '',
+          ]}
+          siralama={siralama}
+          satirlar={siralama.sirala(liste, (item, alan) => {
+            if (alan === '_urun') return item.urun_adi || item.urun_seri_no || '';
+            return item[alan];
+          })}
           render={(b) => (
             <tr key={b.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
               <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{b.urun_adi ? `${b.urun_adi} (${b.urun_seri_no})` : (b.urun_seri_no || `#${b.stok_seri_no_id}`)}</td>
