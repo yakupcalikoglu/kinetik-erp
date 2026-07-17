@@ -433,6 +433,63 @@ function KasaHareketiDuzenleFormu({ hareket, onKaydedildi, onVazgec }) {
   );
 }
 
+function VadesiGelenlerPaneli() {
+  const [veri, setVeri] = useState(null);
+  const [hata, setHata] = useState(null);
+
+  useEffect(() => {
+    api.get('/raporlar/yaklasan-vadeler', { params: { gun: 7 } })
+      .then((r) => setVeri(r.data))
+      .catch((e) => setHata(hataMesajiCikar(e)));
+  }, []);
+
+  if (hata || !veri) return null;
+
+  const bugun = new Date().toISOString().slice(0, 10);
+  const tumSatirlar = [
+    ...veri.odemeler.map((s) => ({ ...s, yon: 'ODEME' })),
+    ...veri.tahsilatlar.map((s) => ({ ...s, yon: 'TAHSILAT' })),
+  ].sort((a, b) => a.tarih.localeCompare(b.tarih));
+
+  if (tumSatirlar.length === 0) return null;
+
+  const TUR_METIN = { CEK: 'Çek', LEASING: 'Leasing', AKREDITIF: 'Akreditif', TAKSIT: 'Taksit', KIRA: 'Kira' };
+
+  return (
+    <Kart style={{ marginBottom: 16, border: '1px solid var(--amber, #f0b429)' }}>
+      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 10 }}>
+        ⏰ Önümüzdeki 7 gün içinde vadesi gelen ödeme/tahsilatlar
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {tumSatirlar.map((s, i) => {
+          const bugunMu = s.tarih === bugun;
+          return (
+            <div
+              key={i}
+              style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                padding: '8px 12px', borderRadius: 7,
+                background: bugunMu ? 'var(--kirmizi-acik, #fde2e2)' : 'var(--zemin)',
+                fontSize: 13,
+              }}
+            >
+              <div>
+                {bugunMu && <strong style={{ color: 'var(--kirmizi)', marginRight: 6 }}>BUGÜN</strong>}
+                <Etiket ton={s.yon === 'ODEME' ? 'kirmizi' : 'yesil'}>{s.yon === 'ODEME' ? 'Ödeme' : 'Tahsilat'}</Etiket>
+                {' '}{TUR_METIN[s.tur] || s.tur} — {s.aciklama}
+              </div>
+              <div style={{ display: 'flex', gap: 12, color: 'var(--metin-ikincil)' }}>
+                <span>{s.tarih}</span>
+                <span style={{ fontWeight: 600, color: 'var(--metin-birincil)' }}>{paraFormat(s.tutar, s.para_birimi)}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Kart>
+  );
+}
+
 export default function KasaSayfasi() {
   const cariHaritasi = useCariHaritasi();
   const [kasaBakiye, setKasaBakiye] = useState(null);
@@ -484,6 +541,8 @@ export default function KasaSayfasi() {
     <div>
       <SayfaBasligi baslik="Ana Kasa" aciklama="Nakit giriş/çıkış hareketleri (çoklu para birimi)" />
       <HataMesaji>{hata}</HataMesaji>
+
+      <VadesiGelenlerPaneli />
 
       {kasaBakiye && (
         <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
