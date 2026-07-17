@@ -2,6 +2,45 @@ import { useEffect, useState, Fragment } from 'react';
 import { api, hataMesajiCikar } from '../api/client';
 import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat, eylemChipStili, Sekmeler, OtomatikTamamlamaGirdisi } from '../components/Ortak';
 
+function useSiralama() {
+  const [alan, setAlan] = useState(null);
+  const [yon, setYon] = useState('asc');
+  function tikla(yeniAlan) {
+    if (alan === yeniAlan) setYon((y) => (y === 'asc' ? 'desc' : 'asc'));
+    else { setAlan(yeniAlan); setYon('asc'); }
+  }
+  function sirala(liste, degerFn) {
+    if (!alan) return liste;
+    return [...liste].sort((a, b) => {
+      const av = degerFn(a, alan);
+      const bv = degerFn(b, alan);
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      if (typeof av === 'string') {
+        return yon === 'asc' ? av.localeCompare(bv, 'tr') : bv.localeCompare(av, 'tr');
+      }
+      return yon === 'asc' ? av - bv : bv - av;
+    });
+  }
+  return { alan, yon, tikla, sirala };
+}
+
+function SiraliBaslik({ children, alanAdi, siralama, style }) {
+  const aktif = siralama.alan === alanAdi;
+  return (
+    <th
+      onClick={() => siralama.tikla(alanAdi)}
+      style={{
+        textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)',
+        fontWeight: 500, cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', ...style,
+      }}
+    >
+      {children} {aktif ? (siralama.yon === 'asc' ? '▲' : '▼') : ''}
+    </th>
+  );
+}
+
 function useHarcamaTurleri() {
   const [turler, setTurler] = useState([]);
   useEffect(() => {
@@ -695,6 +734,7 @@ function BankaHareketiDuzenleFormu({ hareket, hesaplar, cariler, onKaydedildi, o
 function HareketlerSekmesi() {
   const cariHaritasi = useCariHaritasi();
   const cariler = useCariler();
+  const siralama = useSiralama();
   const [hesaplar, setHesaplar] = useState([]);
   const [bankaHareketleri, setBankaHareketleri] = useState([]);
   const [hesapFiltre, setHesapFiltre] = useState('');
@@ -796,13 +836,21 @@ function HareketlerSekmesi() {
           <table>
             <thead>
               <tr style={{ background: 'var(--zemin)' }}>
-                {['Tarih', 'Hesap', 'Tür', 'Tutar', 'Cari', 'Açıklama', 'İşlem'].map((b) => (
-                  <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
-                ))}
+                <SiraliBaslik alanAdi="tarih" siralama={siralama}>Tarih</SiraliBaslik>
+                <SiraliBaslik alanAdi="_hesap" siralama={siralama}>Hesap</SiraliBaslik>
+                <SiraliBaslik alanAdi="tip" siralama={siralama}>Tür</SiraliBaslik>
+                <SiraliBaslik alanAdi="tutar" siralama={siralama}>Tutar</SiraliBaslik>
+                <SiraliBaslik alanAdi="_cari" siralama={siralama}>Cari</SiraliBaslik>
+                <SiraliBaslik alanAdi="aciklama" siralama={siralama}>Açıklama</SiraliBaslik>
+                <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>İşlem</th>
               </tr>
             </thead>
             <tbody>
-              {gosterilecekHareketler.map((h) => {
+              {siralama.sirala(gosterilecekHareketler, (item, alan) => {
+                if (alan === '_hesap') return hesapAdiGoster(item.banka_hesap_id);
+                if (alan === '_cari') return item.cari_id ? (cariHaritasi[item.cari_id] || '') : '';
+                return item[alan];
+              }).map((h) => {
                 const tiklanabilir = !!(h.kaynak_tablo && h.kaynak_id);
                 const otomatikGeldi = !!h.kaynak_tablo;
                 if (duzenlenenId === h.id) {
