@@ -708,7 +708,11 @@ function MaliyetDagitimFormu({ akreditif, onKapat, onTamamlandi }) {
                   checked={seciliUrunIdleri.includes(u.stok_seri_no_id)}
                   onChange={() => urunSecimDegistir(u.stok_seri_no_id)}
                 />
-                <span style={{ fontFamily: 'var(--font-mono)' }}>{u.seri_no}</span>
+                <span>
+                  <span style={{ color: 'var(--metin-soluk)' }}>#{u.stok_seri_no_id}</span>{' '}
+                  <span style={{ fontFamily: 'var(--font-mono)' }}>{u.seri_no}</span>
+                  {u.urun_adi && <span style={{ color: 'var(--metin-ikincil)' }}> — {u.urun_adi}</span>}
+                </span>
                 <span style={{ color: 'var(--metin-ikincil)', marginLeft: 'auto' }}>
                   Satınalma: {u.satinalma_maliyeti_try != null ? paraFormat(u.satinalma_maliyeti_try) : '—'}
                   {u.mevcut_diger_maliyet_try ? ` · Mevcut diğer maliyet: ${paraFormat(u.mevcut_diger_maliyet_try)}` : ''}
@@ -1936,7 +1940,7 @@ function useUrunTanimlari() {
 }
 
 function bosLeasingKalemi() {
-  return { stok_karti_id: '', miktar: 1, birim_fiyat: '' };
+  return { stok_karti_id: '', miktar: 1, birim_fiyat: '', stok_seri_no_idleri: [] };
 }
 
 function bosLeasingFormu() {
@@ -1951,6 +1955,7 @@ function LeasingSekmesi() {
   const [liste, setListe] = useState([]);
   const cariler = useCariler();
   const urunTanimlari = useUrunTanimlari();
+  const tumUrunSecenekleri = useUrunSecenekleri();
   const kurlar = useKurlar();
   const [filtreCariId, setFiltreCariId] = useState('');
   const [hata, setHata] = useState(null);
@@ -1976,6 +1981,17 @@ function LeasingSekmesi() {
   function kalemSil(i) {
     setForm((f) => ({ ...f, kalemler: f.kalemler.filter((_, idx) => idx !== i) }));
   }
+  function kalemSeriSecimDegistir(i, seriId) {
+    setForm((f) => ({
+      ...f,
+      kalemler: f.kalemler.map((k, idx) => {
+        if (idx !== i) return k;
+        const mevcut = k.stok_seri_no_idleri || [];
+        const yeni = mevcut.includes(seriId) ? mevcut.filter((x) => x !== seriId) : [...mevcut, seriId];
+        return { ...k, stok_seri_no_idleri: yeni };
+      }),
+    }));
+  }
 
   const formToplamTutar = form.kalemler.reduce((acc, k) => acc + (Number(k.miktar) || 0) * (Number(k.birim_fiyat) || 0), 0);
 
@@ -1995,6 +2011,7 @@ function LeasingSekmesi() {
         baslangic_tarihi: form.baslangic_tarihi,
         kalemler: form.kalemler.map((k) => ({
           stok_karti_id: Number(k.stok_karti_id), miktar: Number(k.miktar), birim_fiyat: Number(k.birim_fiyat),
+          stok_seri_no_idleri: (k.stok_seri_no_idleri || []).map(Number),
         })),
       });
       setFormAcik(false);
@@ -2079,27 +2096,55 @@ function LeasingSekmesi() {
               <tbody>
                 {form.kalemler.map((k, i) => {
                   const satirToplam = (Number(k.miktar) || 0) * (Number(k.birim_fiyat) || 0);
+                  const eslesenUrunler = k.stok_karti_id
+                    ? tumUrunSecenekleri.filter((u) => String(u.stok_karti_id) === String(k.stok_karti_id))
+                    : [];
                   return (
-                    <tr key={i} style={{ borderTop: '1px solid var(--kenarlik)' }}>
-                      <td style={{ padding: 6 }}>
-                        <select required value={k.stok_karti_id} onChange={(e) => kalemGuncelle(i, 'stok_karti_id', e.target.value)} style={girdiStili}>
-                          <option value="">Seçin...</option>
-                          {urunTanimlari.map((u) => <option key={u.id} value={u.id}>{u.marka} {u.model}</option>)}
-                        </select>
-                      </td>
-                      <td style={{ padding: 6 }}>
-                        <input required type="number" min="1" value={k.miktar} onChange={(e) => kalemGuncelle(i, 'miktar', e.target.value)} style={{ ...girdiStili, width: 80 }} />
-                      </td>
-                      <td style={{ padding: 6 }}>
-                        <input required type="number" step="0.01" value={k.birim_fiyat} onChange={(e) => kalemGuncelle(i, 'birim_fiyat', e.target.value)} style={{ ...girdiStili, width: 130 }} />
-                      </td>
-                      <td style={{ padding: 6, fontSize: 13, fontWeight: 500 }}>{paraFormat(satirToplam, form.para_birimi)}</td>
-                      <td style={{ padding: 6 }}>
-                        {form.kalemler.length > 1 && (
-                          <button type="button" onClick={() => kalemSil(i)} style={eylemChipStili('kirmizi')}>Sil</button>
-                        )}
-                      </td>
-                    </tr>
+                    <Fragment key={i}>
+                      <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                        <td style={{ padding: 6 }}>
+                          <select required value={k.stok_karti_id} onChange={(e) => kalemGuncelle(i, 'stok_karti_id', e.target.value)} style={girdiStili}>
+                            <option value="">Seçin...</option>
+                            {urunTanimlari.map((u) => <option key={u.id} value={u.id}>{u.marka} {u.model}</option>)}
+                          </select>
+                        </td>
+                        <td style={{ padding: 6 }}>
+                          <input required type="number" min="1" value={k.miktar} onChange={(e) => kalemGuncelle(i, 'miktar', e.target.value)} style={{ ...girdiStili, width: 80 }} />
+                        </td>
+                        <td style={{ padding: 6 }}>
+                          <input required type="number" step="0.01" value={k.birim_fiyat} onChange={(e) => kalemGuncelle(i, 'birim_fiyat', e.target.value)} style={{ ...girdiStili, width: 130 }} />
+                        </td>
+                        <td style={{ padding: 6, fontSize: 13, fontWeight: 500 }}>{paraFormat(satirToplam, form.para_birimi)}</td>
+                        <td style={{ padding: 6 }}>
+                          {form.kalemler.length > 1 && (
+                            <button type="button" onClick={() => kalemSil(i)} style={eylemChipStili('kirmizi')}>Sil</button>
+                          )}
+                        </td>
+                      </tr>
+                      {k.stok_karti_id && (
+                        <tr>
+                          <td colSpan={5} style={{ padding: '4px 6px 10px', background: 'var(--zemin)' }}>
+                            <div style={{ fontSize: 11.5, color: 'var(--metin-ikincil)', marginBottom: 4 }}>
+                              Seri numaraları (opsiyonel — hangi spesifik ürün(ler) bu kaleme dahil, {(k.stok_seri_no_idleri || []).length}/{k.miktar} seçili):
+                            </div>
+                            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                              {eslesenUrunler.length === 0 ? (
+                                <span style={{ fontSize: 12, color: 'var(--metin-soluk)' }}>Bu üründen uygun stok bulunamadı.</span>
+                              ) : eslesenUrunler.map((u) => (
+                                <label key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={(k.stok_seri_no_idleri || []).includes(u.id)}
+                                    onChange={() => kalemSeriSecimDegistir(i, u.id)}
+                                  />
+                                  {u.etiket}
+                                </label>
+                              ))}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   );
                 })}
               </tbody>
@@ -2133,7 +2178,9 @@ function LeasingSekmesi() {
               <td style={{ padding: '10px 16px', fontWeight: 500 }}>{l.sozlesme_no || `#${l.id}`}</td>
               <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{l.leasing_firmasi_unvan || `#${l.leasing_firmasi_cari_id}`}</td>
               <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>
-                {(l.kalemler || []).map((k) => `${k.miktar}x ${k.urun_adi || '#' + k.stok_karti_id}`).join(', ') || '—'}
+                {(l.kalemler || []).map((k) => (
+                  `${k.miktar}x ${k.urun_adi || '#' + k.stok_karti_id}${(k.seri_numaralari || []).length > 0 ? ` (${k.seri_numaralari.join(', ')})` : ''}`
+                )).join(' · ') || '—'}
               </td>
               <td style={{ padding: '10px 16px' }}>{paraFormat(l.toplam_tutar, l.para_birimi)}</td>
               <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{tlKarsiligiGoster(l.toplam_tutar, l.para_birimi, kurlar)}</td>
@@ -2210,7 +2257,7 @@ function LeasingSekmesi() {
 
 // ============================================================== KİRALAMA
 function bosKiralamaKalemi() {
-  return { stok_karti_id: '', miktar: 1, birim_fiyat: '' };
+  return { stok_karti_id: '', miktar: 1, birim_fiyat: '', stok_seri_no_idleri: [] };
 }
 
 function bosKiralamaFormu() {
@@ -2232,6 +2279,7 @@ function KiralamaSekmesi() {
   const cariHaritasi = useCariHaritasi();
   const cariler = useCariler();
   const urunTanimlari = useUrunTanimlari();
+  const tumUrunSecenekleri = useUrunSecenekleri();
   const [seciliSozlesme, setSeciliSozlesme] = useState(null);
   const [odemeler, setOdemeler] = useState(null);
   const [odemeForm, setOdemeForm] = useState({ donem_basi: '', donem_sonu: '', tutar: '' });
@@ -2251,6 +2299,17 @@ function KiralamaSekmesi() {
   function kalemSil(i) {
     setForm((f) => ({ ...f, kalemler: f.kalemler.filter((_, idx) => idx !== i) }));
   }
+  function kalemSeriSecimDegistir(i, seriId) {
+    setForm((f) => ({
+      ...f,
+      kalemler: f.kalemler.map((k, idx) => {
+        if (idx !== i) return k;
+        const mevcut = k.stok_seri_no_idleri || [];
+        const yeni = mevcut.includes(seriId) ? mevcut.filter((x) => x !== seriId) : [...mevcut, seriId];
+        return { ...k, stok_seri_no_idleri: yeni };
+      }),
+    }));
+  }
 
   const formAylikToplam = form.kalemler.reduce((acc, k) => acc + (Number(k.miktar) || 0) * (Number(k.birim_fiyat) || 0), 0);
 
@@ -2263,7 +2322,10 @@ function KiralamaSekmesi() {
       para_birimi: sozlesme.para_birimi,
       depozito: sozlesme.depozito || '',
       kalemler: (sozlesme.kalemler || []).length > 0
-        ? sozlesme.kalemler.map((k) => ({ stok_karti_id: String(k.stok_karti_id), miktar: k.miktar, birim_fiyat: k.birim_fiyat }))
+        ? sozlesme.kalemler.map((k) => ({
+            stok_karti_id: String(k.stok_karti_id), miktar: k.miktar, birim_fiyat: k.birim_fiyat,
+            stok_seri_no_idleri: k.stok_seri_no_idleri || [],
+          }))
         : [bosKiralamaKalemi()],
       sifre: '',
     });
@@ -2292,6 +2354,7 @@ function KiralamaSekmesi() {
         depozito: form.depozito ? Number(form.depozito) : 0,
         kalemler: form.kalemler.map((k) => ({
           stok_karti_id: Number(k.stok_karti_id), miktar: Number(k.miktar), birim_fiyat: Number(k.birim_fiyat),
+          stok_seri_no_idleri: (k.stok_seri_no_idleri || []).map(Number),
         })),
       };
       if (duzenlenenSozlesme) {
@@ -2386,27 +2449,55 @@ function KiralamaSekmesi() {
               <tbody>
                 {form.kalemler.map((k, i) => {
                   const satirToplam = (Number(k.miktar) || 0) * (Number(k.birim_fiyat) || 0);
+                  const eslesenUrunler = k.stok_karti_id
+                    ? tumUrunSecenekleri.filter((u) => String(u.stok_karti_id) === String(k.stok_karti_id))
+                    : [];
                   return (
-                    <tr key={i} style={{ borderTop: '1px solid var(--kenarlik)' }}>
-                      <td style={{ padding: 6 }}>
-                        <select required value={k.stok_karti_id} onChange={(e) => kalemGuncelle(i, 'stok_karti_id', e.target.value)} style={girdiStili}>
-                          <option value="">Seçin...</option>
-                          {urunTanimlari.map((u) => <option key={u.id} value={u.id}>{u.marka} {u.model}</option>)}
-                        </select>
-                      </td>
-                      <td style={{ padding: 6 }}>
-                        <input required type="number" min="1" value={k.miktar} onChange={(e) => kalemGuncelle(i, 'miktar', e.target.value)} style={{ ...girdiStili, width: 80 }} />
-                      </td>
-                      <td style={{ padding: 6 }}>
-                        <input required type="number" step="0.01" value={k.birim_fiyat} onChange={(e) => kalemGuncelle(i, 'birim_fiyat', e.target.value)} style={{ ...girdiStili, width: 130 }} />
-                      </td>
-                      <td style={{ padding: 6, fontSize: 13, fontWeight: 500 }}>{paraFormat(satirToplam, form.para_birimi)}</td>
-                      <td style={{ padding: 6 }}>
-                        {form.kalemler.length > 1 && (
-                          <button type="button" onClick={() => kalemSil(i)} style={eylemChipStili('kirmizi')}>Sil</button>
-                        )}
-                      </td>
-                    </tr>
+                    <Fragment key={i}>
+                      <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                        <td style={{ padding: 6 }}>
+                          <select required value={k.stok_karti_id} onChange={(e) => kalemGuncelle(i, 'stok_karti_id', e.target.value)} style={girdiStili}>
+                            <option value="">Seçin...</option>
+                            {urunTanimlari.map((u) => <option key={u.id} value={u.id}>{u.marka} {u.model}</option>)}
+                          </select>
+                        </td>
+                        <td style={{ padding: 6 }}>
+                          <input required type="number" min="1" value={k.miktar} onChange={(e) => kalemGuncelle(i, 'miktar', e.target.value)} style={{ ...girdiStili, width: 80 }} />
+                        </td>
+                        <td style={{ padding: 6 }}>
+                          <input required type="number" step="0.01" value={k.birim_fiyat} onChange={(e) => kalemGuncelle(i, 'birim_fiyat', e.target.value)} style={{ ...girdiStili, width: 130 }} />
+                        </td>
+                        <td style={{ padding: 6, fontSize: 13, fontWeight: 500 }}>{paraFormat(satirToplam, form.para_birimi)}</td>
+                        <td style={{ padding: 6 }}>
+                          {form.kalemler.length > 1 && (
+                            <button type="button" onClick={() => kalemSil(i)} style={eylemChipStili('kirmizi')}>Sil</button>
+                          )}
+                        </td>
+                      </tr>
+                      {k.stok_karti_id && (
+                        <tr>
+                          <td colSpan={5} style={{ padding: '4px 6px 10px', background: 'var(--zemin)' }}>
+                            <div style={{ fontSize: 11.5, color: 'var(--metin-ikincil)', marginBottom: 4 }}>
+                              Seri numaraları (opsiyonel — hangi spesifik ürün(ler) bu kaleme dahil, {(k.stok_seri_no_idleri || []).length}/{k.miktar} seçili):
+                            </div>
+                            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                              {eslesenUrunler.length === 0 ? (
+                                <span style={{ fontSize: 12, color: 'var(--metin-soluk)' }}>Bu üründen uygun stok bulunamadı.</span>
+                              ) : eslesenUrunler.map((u) => (
+                                <label key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={(k.stok_seri_no_idleri || []).includes(u.id)}
+                                    onChange={() => kalemSeriSecimDegistir(i, u.id)}
+                                  />
+                                  {u.etiket}
+                                </label>
+                              ))}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   );
                 })}
               </tbody>
@@ -2444,7 +2535,9 @@ function KiralamaSekmesi() {
           render={(k) => (
             <tr key={k.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
               <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>
-                {(k.kalemler || []).map((kl) => `${kl.miktar}x ${kl.urun_adi || '#' + kl.stok_karti_id}`).join(', ') || '—'}
+                {(k.kalemler || []).map((kl) => (
+                  `${kl.miktar}x ${kl.urun_adi || '#' + kl.stok_karti_id}${(kl.seri_numaralari || []).length > 0 ? ` (${kl.seri_numaralari.join(', ')})` : ''}`
+                )).join(' · ') || '—'}
               </td>
               <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{k.kiraci_unvan || cariGoster(k.kiraci_cari_id, cariHaritasi)}</td>
               <td style={{ padding: '10px 16px' }}>{paraFormat(k.aylik_kira_tutari, k.para_birimi)}</td>
