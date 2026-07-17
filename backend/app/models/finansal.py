@@ -95,6 +95,15 @@ class LeasingSozlesmeKalemi(Base):
     birim_fiyat = Column(Numeric(18, 2), nullable=False)
 
 
+class LeasingKalemUrunu(Base):
+    """Bir leasing kalemine (urun turune) baglanan SPESIFIK seri numarali fiziksel birim(ler)."""
+    __tablename__ = "leasing_kalem_urunleri"
+
+    id = Column(BigInteger, primary_key=True)
+    kalem_id = Column(BigInteger, ForeignKey("leasing_sozlesme_kalemleri.id"), nullable=False)
+    stok_seri_no_id = Column(BigInteger, ForeignKey("stok_seri_no.id"), nullable=False)
+
+
 class LeasingOdeme(Base):
     __tablename__ = "leasing_odeme_plani"
 
@@ -183,6 +192,15 @@ class KiralamaSozlesmeKalemi(Base):
     stok_karti_id = Column(BigInteger, ForeignKey("stok_kartlari.id"), nullable=False)
     miktar = Column(Integer, nullable=False, default=1)
     birim_fiyat = Column(Numeric(18, 2), nullable=False)
+
+
+class KiralamaKalemUrunu(Base):
+    """Bir kiralama kalemine (urun turune) baglanan SPESIFIK seri numarali fiziksel birim(ler)."""
+    __tablename__ = "kiralama_kalem_urunleri"
+
+    id = Column(BigInteger, primary_key=True)
+    kalem_id = Column(BigInteger, ForeignKey("kiralama_sozlesme_kalemleri.id"), nullable=False)
+    stok_seri_no_id = Column(BigInteger, ForeignKey("stok_seri_no.id"), nullable=False)
 
 
 class KiralamaOdeme(Base):
