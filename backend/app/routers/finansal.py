@@ -11,9 +11,9 @@ from app.models.cari import CariHesap
 from app.models.stok import StokSeriNo, StokKarti, StokDurum
 from app.models.finansal import (
     Cek, CekGecmis, CekDurum, CekTip,
-    LeasingSozlesme, LeasingOdeme, LeasingSozlesmeKalemi,
+    LeasingSozlesme, LeasingOdeme, LeasingSozlesmeKalemi, LeasingKalemUrunu,
     TaksitliSatisPlani, TaksitDetay, TaksitliSatisKalemi,
-    KiralamaSozlesme, KiralamaOdeme, KiralamaSozlesmeKalemi,
+    KiralamaSozlesme, KiralamaOdeme, KiralamaSozlesmeKalemi, KiralamaKalemUrunu,
     BakimKaydi, BakimTip,
 )
 import json
@@ -63,6 +63,28 @@ def _urun_bilgisi_ekle(nesne, urun_id, urun_haritasi):
     urun = urun_haritasi.get(urun_id) if urun_id else None
     nesne.urun_seri_no = urun["seri_no"] if urun else None
     nesne.urun_adi = urun["urun_adi"] if urun else None
+
+
+def _kalemler_seri_no_ekle(db: Session, kalem_urunu_model, kalemler: list) -> None:
+    """Verilen kalem listesine (her birinde .id var) seri_numaralari alanini ekler."""
+    kalem_idleri = [k.id for k in kalemler]
+    if not kalem_idleri:
+        return
+    junction_rows = list(db.execute(
+        select(kalem_urunu_model).where(kalem_urunu_model.kalem_id.in_(kalem_idleri))
+    ).scalars())
+    stok_ids = [j.stok_seri_no_id for j in junction_rows]
+    seri_no_haritasi = {
+        u.id: u.seri_no for u in db.execute(select(StokSeriNo).where(StokSeriNo.id.in_(stok_ids))).scalars()
+    } if stok_ids else {}
+    kalem_seri_haritasi = {}
+    kalem_seri_id_haritasi = {}
+    for j in junction_rows:
+        kalem_seri_haritasi.setdefault(j.kalem_id, []).append(seri_no_haritasi.get(j.stok_seri_no_id, f"#{j.stok_seri_no_id}"))
+        kalem_seri_id_haritasi.setdefault(j.kalem_id, []).append(j.stok_seri_no_id)
+    for k in kalemler:
+        k.seri_numaralari = kalem_seri_haritasi.get(k.id, [])
+        k.stok_seri_no_idleri = kalem_seri_id_haritasi.get(k.id, [])
 
 
 def _degisiklikleri_kaydet(db: Session, sirket_id: int, kullanici_id: int, tablo_adi: str, kayit_id: int, degisiklikler: dict) -> None:
@@ -250,7 +272,11 @@ def leasing_olustur(
     db.flush()
 
     for k in istek.kalemler:
-        db.add(LeasingSozlesmeKalemi(leasing_id=yeni.id, stok_karti_id=k.stok_karti_id, miktar=k.miktar, birim_fiyat=k.birim_fiyat))
+        yeni_kalem = LeasingSozlesmeKalemi(leasing_id=yeni.id, stok_karti_id=k.stok_karti_id, miktar=k.miktar, birim_fiyat=k.birim_fiyat)
+        db.add(yeni_kalem)
+        db.flush()
+        for seri_id in k.stok_seri_no_idleri:
+            db.add(LeasingKalemUrunu(kalem_id=yeni_kalem.id, stok_seri_no_id=seri_id))
 
     taksit_tutari = round(toplam_tutar / istek.taksit_sayisi, 2)
     for i in range(1, istek.taksit_sayisi + 1):
@@ -268,6 +294,7 @@ def leasing_olustur(
     yeni.kalemler = list(db.execute(select(LeasingSozlesmeKalemi).where(LeasingSozlesmeKalemi.leasing_id == yeni.id)).scalars())
     for k in yeni.kalemler:
         k.urun_adi = urun_tanimi_h.get(k.stok_karti_id)
+    _kalemler_seri_no_ekle(db, LeasingKalemUrunu, yeni.kalemler)
     return yeni
 
 
@@ -283,6 +310,7 @@ def leasing_listele(sirket_id: int = Depends(aktif_sirket_id_getir), db: Session
         l.kalemler = list(db.execute(select(LeasingSozlesmeKalemi).where(LeasingSozlesmeKalemi.leasing_id == l.id)).scalars())
         for k in l.kalemler:
             k.urun_adi = urun_tanimi_h.get(k.stok_karti_id)
+        _kalemler_seri_no_ekle(db, LeasingKalemUrunu, l.kalemler)
     return sonuclar
 
 
@@ -550,7 +578,11 @@ def kiralama_olustur(
     db.flush()
 
     for k in istek.kalemler:
-        db.add(KiralamaSozlesmeKalemi(sozlesme_id=yeni.id, stok_karti_id=k.stok_karti_id, miktar=k.miktar, birim_fiyat=k.birim_fiyat))
+        yeni_kalem = KiralamaSozlesmeKalemi(sozlesme_id=yeni.id, stok_karti_id=k.stok_karti_id, miktar=k.miktar, birim_fiyat=k.birim_fiyat)
+        db.add(yeni_kalem)
+        db.flush()
+        for seri_id in k.stok_seri_no_idleri:
+            db.add(KiralamaKalemUrunu(kalem_id=yeni_kalem.id, stok_seri_no_id=seri_id))
 
     db.commit()
     db.refresh(yeni)
@@ -560,6 +592,7 @@ def kiralama_olustur(
     yeni.kalemler = list(db.execute(select(KiralamaSozlesmeKalemi).where(KiralamaSozlesmeKalemi.sozlesme_id == yeni.id)).scalars())
     for k in yeni.kalemler:
         k.urun_adi = urun_tanimi_h.get(k.stok_karti_id)
+    _kalemler_seri_no_ekle(db, KiralamaKalemUrunu, yeni.kalemler)
     return yeni
 
 
@@ -619,11 +652,18 @@ def kiralama_sozlesmesi_duzenle(
 
     _degisiklikleri_kaydet(db, sirket_id, kullanici.id, "kiralama_sozlesmeleri", sozlesme.id, degisiklikler)
 
-    for eski in list(db.execute(select(KiralamaSozlesmeKalemi).where(KiralamaSozlesmeKalemi.sozlesme_id == sozlesme_id)).scalars()):
+    eski_kalemler = list(db.execute(select(KiralamaSozlesmeKalemi).where(KiralamaSozlesmeKalemi.sozlesme_id == sozlesme_id)).scalars())
+    for j in list(db.execute(select(KiralamaKalemUrunu).where(KiralamaKalemUrunu.kalem_id.in_([k.id for k in eski_kalemler]))).scalars()):
+        db.delete(j)
+    for eski in eski_kalemler:
         db.delete(eski)
     db.flush()
     for k in istek.kalemler:
-        db.add(KiralamaSozlesmeKalemi(sozlesme_id=sozlesme_id, stok_karti_id=k.stok_karti_id, miktar=k.miktar, birim_fiyat=k.birim_fiyat))
+        yeni_kalem = KiralamaSozlesmeKalemi(sozlesme_id=sozlesme_id, stok_karti_id=k.stok_karti_id, miktar=k.miktar, birim_fiyat=k.birim_fiyat)
+        db.add(yeni_kalem)
+        db.flush()
+        for seri_id in k.stok_seri_no_idleri:
+            db.add(KiralamaKalemUrunu(kalem_id=yeni_kalem.id, stok_seri_no_id=seri_id))
 
     db.commit()
     db.refresh(sozlesme)
@@ -633,6 +673,7 @@ def kiralama_sozlesmesi_duzenle(
     sozlesme.kalemler = list(db.execute(select(KiralamaSozlesmeKalemi).where(KiralamaSozlesmeKalemi.sozlesme_id == sozlesme_id)).scalars())
     for k in sozlesme.kalemler:
         k.urun_adi = urun_tanimi_h.get(k.stok_karti_id)
+    _kalemler_seri_no_ekle(db, KiralamaKalemUrunu, sozlesme.kalemler)
     return sozlesme
 
 
@@ -652,6 +693,7 @@ def kiralamalari_listele(
         k.kalemler = list(db.execute(select(KiralamaSozlesmeKalemi).where(KiralamaSozlesmeKalemi.sozlesme_id == k.id)).scalars())
         for kk in k.kalemler:
             kk.urun_adi = urun_tanimi_h.get(kk.stok_karti_id)
+        _kalemler_seri_no_ekle(db, KiralamaKalemUrunu, k.kalemler)
     return sonuclar
 
 
@@ -819,7 +861,10 @@ def leasing_sil(leasing_id: int, sirket_id: int = Depends(aktif_sirket_id_getir)
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ödenmiş taksiti olan bir sözleşme silinemez.")
     for o in odemeler:
         db.delete(o)
-    for k in list(db.execute(select(LeasingSozlesmeKalemi).where(LeasingSozlesmeKalemi.leasing_id == leasing_id)).scalars()):
+    kalemler = list(db.execute(select(LeasingSozlesmeKalemi).where(LeasingSozlesmeKalemi.leasing_id == leasing_id)).scalars())
+    for j in list(db.execute(select(LeasingKalemUrunu).where(LeasingKalemUrunu.kalem_id.in_([k.id for k in kalemler]))).scalars()):
+        db.delete(j)
+    for k in kalemler:
         db.delete(k)
     db.delete(sozlesme)
     db.commit()
@@ -870,7 +915,10 @@ def kiralama_sil(sozlesme_id: int, sirket_id: int = Depends(aktif_sirket_id_geti
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Tahsil edilmiş dönemi olan bir sözleşme silinemez.")
     for o in odemeler:
         db.delete(o)
-    for k in list(db.execute(select(KiralamaSozlesmeKalemi).where(KiralamaSozlesmeKalemi.sozlesme_id == sozlesme_id)).scalars()):
+    kalemler = list(db.execute(select(KiralamaSozlesmeKalemi).where(KiralamaSozlesmeKalemi.sozlesme_id == sozlesme_id)).scalars())
+    for j in list(db.execute(select(KiralamaKalemUrunu).where(KiralamaKalemUrunu.kalem_id.in_([k.id for k in kalemler]))).scalars()):
+        db.delete(j)
+    for k in kalemler:
         db.delete(k)
     db.delete(sozlesme)
     db.commit()
