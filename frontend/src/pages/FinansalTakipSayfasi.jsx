@@ -6,6 +6,45 @@ import {
 } from '../components/Ortak';
 import AramaliSecici from '../components/AramaliSecici';
 
+function useSiralama() {
+  const [alan, setAlan] = useState(null);
+  const [yon, setYon] = useState('asc');
+  function tikla(yeniAlan) {
+    if (alan === yeniAlan) setYon((y) => (y === 'asc' ? 'desc' : 'asc'));
+    else { setAlan(yeniAlan); setYon('asc'); }
+  }
+  function sirala(liste, degerFn) {
+    if (!alan) return liste;
+    return [...liste].sort((a, b) => {
+      const av = degerFn(a, alan);
+      const bv = degerFn(b, alan);
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      if (typeof av === 'string') {
+        return yon === 'asc' ? av.localeCompare(bv, 'tr') : bv.localeCompare(av, 'tr');
+      }
+      return yon === 'asc' ? av - bv : bv - av;
+    });
+  }
+  return { alan, yon, tikla, sirala };
+}
+
+function SiraliBaslik({ children, alanAdi, siralama, style }) {
+  const aktif = siralama.alan === alanAdi;
+  return (
+    <th
+      onClick={() => siralama.tikla(alanAdi)}
+      style={{
+        textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)',
+        fontWeight: 500, cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', ...style,
+      }}
+    >
+      {children} {aktif ? (siralama.yon === 'asc' ? '▲' : '▼') : ''}
+    </th>
+  );
+}
+
 // Sekmeler mantiksal 4 gruba ayrildi - hangi sekmenin nerede oldugunu
 // bulmayi kolaylastirmak icin (once tek bir duz liste halindeydi).
 const SEKME_GRUPLARI = [
@@ -399,6 +438,7 @@ function CekSekmesi() {
   const [filtreDurum, setFiltreDurum] = useState('');
   const [filtreBaslangic, setFiltreBaslangic] = useState('');
   const [filtreBitis, setFiltreBitis] = useState('');
+  const siralama = useSiralama();
 
   function yukle() {
     api.get('/cekler').then((r) => setCekler(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
@@ -553,13 +593,19 @@ function CekSekmesi() {
           <table>
             <thead>
               <tr style={{ background: 'var(--zemin)' }}>
-                {['Çek No', 'Tip', 'Banka', 'Cari', 'Tutar', 'TL Karşılığı', 'Vade', 'Durum', 'İşlem'].map((b) => (
-                  <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
-                ))}
+                <SiraliBaslik alanAdi="cek_no" siralama={siralama}>Çek No</SiraliBaslik>
+                <SiraliBaslik alanAdi="tip" siralama={siralama}>Tip</SiraliBaslik>
+                <SiraliBaslik alanAdi="banka_adi" siralama={siralama}>Banka</SiraliBaslik>
+                <SiraliBaslik alanAdi="_cari_unvan" siralama={siralama}>Cari</SiraliBaslik>
+                <SiraliBaslik alanAdi="tutar" siralama={siralama}>Tutar</SiraliBaslik>
+                <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>TL Karşılığı</th>
+                <SiraliBaslik alanAdi="vade_tarihi" siralama={siralama}>Vade</SiraliBaslik>
+                <SiraliBaslik alanAdi="durum" siralama={siralama}>Durum</SiraliBaslik>
+                <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>İşlem</th>
               </tr>
             </thead>
             <tbody>
-              {gosterilecekCekler.map((c) => (
+              {siralama.sirala(gosterilecekCekler, (item, alan) => (alan === '_cari_unvan' ? (cariHaritasi[item.cari_id] || '') : item[alan])).map((c) => (
                 <Fragment key={c.id}>
                   <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
                     <td style={{ padding: '10px 16px' }}>{c.cek_no || '—'}</td>
@@ -1582,6 +1628,7 @@ function bosPersonelFormu() {
 
 function PersonelSekmesi() {
   const [liste, setListe] = useState([]);
+  const siralama = useSiralama();
   const [formAcik, setFormAcik] = useState(false);
   const [duzenlenenPersonel, setDuzenlenenPersonel] = useState(null);
   const [form, setForm] = useState(bosPersonelFormu());
@@ -1702,25 +1749,33 @@ function PersonelSekmesi() {
       )}
 
       <Kart style={{ padding: 0, marginBottom: 16 }}>
-        <BasitTablo
-          basliklar={['Ad Soyad', 'Pozisyon', 'Aylık Maaş', '']}
-          satirlar={liste}
-          render={(p) => (
-            <tr key={p.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
-              <td style={{ padding: '10px 16px', fontWeight: 500 }}>{p.ad_soyad}</td>
-              <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{p.pozisyon || '—'}</td>
-              <td style={{ padding: '10px 16px' }}>{p.aylik_maas != null ? paraFormat(p.aylik_maas) : '—'}</td>
-              <td style={{ padding: '10px 16px' }}>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <button onClick={() => duzenlemeyeBasla(p)} style={eylemChipStili('notr')}>Düzenle</button>
-                  <button onClick={() => odemeleriGoster(p.id)} style={eylemChipStili('lacivert')}>
-                    Ödemeler
-                  </button>
-                </div>
-              </td>
+        <table>
+          <thead>
+            <tr style={{ background: 'var(--zemin)' }}>
+              <SiraliBaslik alanAdi="ad_soyad" siralama={siralama}>Ad Soyad</SiraliBaslik>
+              <SiraliBaslik alanAdi="pozisyon" siralama={siralama}>Pozisyon</SiraliBaslik>
+              <SiraliBaslik alanAdi="aylik_maas" siralama={siralama}>Aylık Maaş</SiraliBaslik>
+              <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }} />
             </tr>
-          )}
-        />
+          </thead>
+          <tbody>
+            {siralama.sirala(liste, (item, alan) => item[alan]).map((p) => (
+              <tr key={p.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                <td style={{ padding: '10px 16px', fontWeight: 500 }}>{p.ad_soyad}</td>
+                <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{p.pozisyon || '—'}</td>
+                <td style={{ padding: '10px 16px' }}>{p.aylik_maas != null ? paraFormat(p.aylik_maas) : '—'}</td>
+                <td style={{ padding: '10px 16px' }}>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button onClick={() => duzenlemeyeBasla(p)} style={eylemChipStili('notr')}>Düzenle</button>
+                    <button onClick={() => odemeleriGoster(p.id)} style={eylemChipStili('lacivert')}>
+                      Ödemeler
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </Kart>
 
       {seciliPersonel && (
@@ -1977,6 +2032,7 @@ function LeasingSekmesi() {
   const urunTanimlari = useUrunTanimlari();
   const tumUrunSecenekleri = useUrunSecenekleri();
   const kurlar = useKurlar();
+  const siralama = useSiralama();
   const [filtreCariId, setFiltreCariId] = useState('');
   const [hata, setHata] = useState(null);
   const [seciliPlan, setSeciliPlan] = useState(null);
@@ -2190,32 +2246,46 @@ function LeasingSekmesi() {
       </Kart>
 
       <Kart style={{ padding: 0, marginBottom: 16 }}>
-        <BasitTablo
-          basliklar={['Sözleşme No', 'Leasing Firması', 'Ürünler', 'Toplam Tutar', 'TL Karşılığı', 'Taksit Sayısı', 'İşlem']}
-          satirlar={filtreCariId ? liste.filter((l) => String(l.leasing_firmasi_cari_id) === String(filtreCariId)) : liste}
-          render={(l) => (
-            <tr key={l.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
-              <td style={{ padding: '10px 16px', fontWeight: 500 }}>{l.sozlesme_no || `#${l.id}`}</td>
-              <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{l.leasing_firmasi_unvan || `#${l.leasing_firmasi_cari_id}`}</td>
-              <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>
-                {(l.kalemler || []).map((k) => (
-                  `${k.miktar}x ${k.urun_adi || '#' + k.stok_karti_id}${(k.seri_numaralari || []).length > 0 ? ` (${k.seri_numaralari.join(', ')})` : ''}`
-                )).join(' · ') || '—'}
-              </td>
-              <td style={{ padding: '10px 16px' }}>{paraFormat(l.toplam_tutar, l.para_birimi)}</td>
-              <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{tlKarsiligiGoster(l.toplam_tutar, l.para_birimi, kurlar)}</td>
-              <td style={{ padding: '10px 16px' }}>{l.taksit_sayisi}</td>
-              <td style={{ padding: '10px 16px' }}>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <button onClick={() => planiGoster(l.id)} style={eylemChipStili('lacivert')}>
-                    Ödeme planını gör
-                  </button>
-                  <button onClick={() => sozlesmeSil(l.id)} style={eylemChipStili('kirmizi')}>Sil</button>
-                </div>
-              </td>
+        <table>
+          <thead>
+            <tr style={{ background: 'var(--zemin)' }}>
+              <SiraliBaslik alanAdi="sozlesme_no" siralama={siralama}>Sözleşme No</SiraliBaslik>
+              <SiraliBaslik alanAdi="leasing_firmasi_unvan" siralama={siralama}>Leasing Firması</SiraliBaslik>
+              <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>Ürünler</th>
+              <SiraliBaslik alanAdi="toplam_tutar" siralama={siralama}>Toplam Tutar</SiraliBaslik>
+              <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>TL Karşılığı</th>
+              <SiraliBaslik alanAdi="taksit_sayisi" siralama={siralama}>Taksit Sayısı</SiraliBaslik>
+              <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>İşlem</th>
             </tr>
-          )}
-        />
+          </thead>
+          <tbody>
+            {siralama.sirala(
+              filtreCariId ? liste.filter((l) => String(l.leasing_firmasi_cari_id) === String(filtreCariId)) : liste,
+              (item, alan) => item[alan]
+            ).map((l) => (
+              <tr key={l.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                <td style={{ padding: '10px 16px', fontWeight: 500 }}>{l.sozlesme_no || `#${l.id}`}</td>
+                <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{l.leasing_firmasi_unvan || `#${l.leasing_firmasi_cari_id}`}</td>
+                <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>
+                  {(l.kalemler || []).map((k) => (
+                    `${k.miktar}x ${k.urun_adi || '#' + k.stok_karti_id}${(k.seri_numaralari || []).length > 0 ? ` (${k.seri_numaralari.join(', ')})` : ''}`
+                  )).join(' · ') || '—'}
+                </td>
+                <td style={{ padding: '10px 16px' }}>{paraFormat(l.toplam_tutar, l.para_birimi)}</td>
+                <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{tlKarsiligiGoster(l.toplam_tutar, l.para_birimi, kurlar)}</td>
+                <td style={{ padding: '10px 16px' }}>{l.taksit_sayisi}</td>
+                <td style={{ padding: '10px 16px' }}>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button onClick={() => planiGoster(l.id)} style={eylemChipStili('lacivert')}>
+                      Ödeme planını gör
+                    </button>
+                    <button onClick={() => sozlesmeSil(l.id)} style={eylemChipStili('kirmizi')}>Sil</button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </Kart>
 
       {seciliPlan && (
@@ -2290,6 +2360,7 @@ function bosKiralamaFormu() {
 
 function KiralamaSekmesi() {
   const kurlar = useKurlar();
+  const siralama = useSiralama();
   const [filtreCariId, setFiltreCariId] = useState('');
   const [liste, setListe] = useState([]);
   const [formAcik, setFormAcik] = useState(false);
@@ -2549,29 +2620,42 @@ function KiralamaSekmesi() {
       </Kart>
 
       <Kart style={{ padding: 0, marginBottom: 16 }}>
-        <BasitTablo
-          basliklar={['Ürünler', 'Kiracı', 'Aylık Kira', 'TL Karşılığı', 'Durum', '']}
-          satirlar={filtreCariId ? liste.filter((k) => String(k.kiraci_cari_id) === String(filtreCariId)) : liste}
-          render={(k) => (
-            <tr key={k.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
-              <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>
-                {(k.kalemler || []).map((kl) => (
-                  `${kl.miktar}x ${kl.urun_adi || '#' + kl.stok_karti_id}${(kl.seri_numaralari || []).length > 0 ? ` (${kl.seri_numaralari.join(', ')})` : ''}`
-                )).join(' · ') || '—'}
-              </td>
-              <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{k.kiraci_unvan || cariGoster(k.kiraci_cari_id, cariHaritasi)}</td>
-              <td style={{ padding: '10px 16px' }}>{paraFormat(k.aylik_kira_tutari, k.para_birimi)}</td>
-              <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{tlKarsiligiGoster(k.aylik_kira_tutari, k.para_birimi, kurlar)}</td>
-              <td style={{ padding: '10px 16px' }}><Etiket ton={k.durum === 'AKTIF' ? 'yesil' : 'notr'}>{k.durum}</Etiket></td>
-              <td style={{ padding: '10px 16px' }}>
-                <button onClick={() => duzenlemeyeBasla(k)} style={eylemChipStili('lacivert')}>Düzenle</button>
-                <button onClick={() => odemeleriGoster(k.id)} style={eylemChipStili('lacivert')}>
-                  Ödemeler
-                </button>
-              </td>
+        <table>
+          <thead>
+            <tr style={{ background: 'var(--zemin)' }}>
+              <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>Ürünler</th>
+              <SiraliBaslik alanAdi="kiraci_unvan" siralama={siralama}>Kiracı</SiraliBaslik>
+              <SiraliBaslik alanAdi="aylik_kira_tutari" siralama={siralama}>Aylık Kira</SiraliBaslik>
+              <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>TL Karşılığı</th>
+              <SiraliBaslik alanAdi="durum" siralama={siralama}>Durum</SiraliBaslik>
+              <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }} />
             </tr>
-          )}
-        />
+          </thead>
+          <tbody>
+            {siralama.sirala(
+              filtreCariId ? liste.filter((k) => String(k.kiraci_cari_id) === String(filtreCariId)) : liste,
+              (item, alan) => (alan === 'kiraci_unvan' ? (item.kiraci_unvan || cariGoster(item.kiraci_cari_id, cariHaritasi)) : item[alan])
+            ).map((k) => (
+              <tr key={k.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>
+                  {(k.kalemler || []).map((kl) => (
+                    `${kl.miktar}x ${kl.urun_adi || '#' + kl.stok_karti_id}${(kl.seri_numaralari || []).length > 0 ? ` (${kl.seri_numaralari.join(', ')})` : ''}`
+                  )).join(' · ') || '—'}
+                </td>
+                <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{k.kiraci_unvan || cariGoster(k.kiraci_cari_id, cariHaritasi)}</td>
+                <td style={{ padding: '10px 16px' }}>{paraFormat(k.aylik_kira_tutari, k.para_birimi)}</td>
+                <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{tlKarsiligiGoster(k.aylik_kira_tutari, k.para_birimi, kurlar)}</td>
+                <td style={{ padding: '10px 16px' }}><Etiket ton={k.durum === 'AKTIF' ? 'yesil' : 'notr'}>{k.durum}</Etiket></td>
+                <td style={{ padding: '10px 16px' }}>
+                  <button onClick={() => duzenlemeyeBasla(k)} style={eylemChipStili('lacivert')}>Düzenle</button>
+                  <button onClick={() => odemeleriGoster(k.id)} style={eylemChipStili('lacivert')}>
+                    Ödemeler
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </Kart>
 
       {seciliSozlesme && (
@@ -3006,6 +3090,7 @@ function GiderSipariseDagitPaneli({ gider, onTamam, onVazgec }) {
 
 function SabitGiderSekmesi() {
   const [liste, setListe] = useState([]);
+  const siralama = useSiralama();
   const harcamaTurleri = useHarcamaTurleri();
   const [formAcik, setFormAcik] = useState(false);
   const [duzenlenenGider, setDuzenlenenGider] = useState(null);
@@ -3145,13 +3230,17 @@ function SabitGiderSekmesi() {
           <table>
             <thead>
               <tr style={{ background: 'var(--zemin)' }}>
-                {['Kategori', 'Dönem', 'Tutar', 'TL Karşılığı', 'Açıklama', 'Durum', ''].map((b) => (
-                  <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
-                ))}
+                <SiraliBaslik alanAdi="kategori" siralama={siralama}>Kategori</SiraliBaslik>
+                <SiraliBaslik alanAdi="donem" siralama={siralama}>Dönem</SiraliBaslik>
+                <SiraliBaslik alanAdi="tutar" siralama={siralama}>Tutar</SiraliBaslik>
+                <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>TL Karşılığı</th>
+                <SiraliBaslik alanAdi="aciklama" siralama={siralama}>Açıklama</SiraliBaslik>
+                <SiraliBaslik alanAdi="odendi_mi" siralama={siralama}>Durum</SiraliBaslik>
+                <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }} />
               </tr>
             </thead>
             <tbody>
-              {liste.map((g) => (
+              {siralama.sirala(liste, (item, alan) => item[alan]).map((g) => (
                 <Fragment key={g.id}>
                   <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
                     <td style={{ padding: '10px 16px', fontWeight: 500 }}>{g.kategori || '—'}</td>
@@ -3305,6 +3394,7 @@ function BorcDuzenleFormu({ borc, cariler, onKaydedildi, onVazgec }) {
 
 function BorcSekmesi() {
   const kurlar = useKurlar();
+  const siralama = useSiralama();
   const [filtreCariId, setFiltreCariId] = useState('');
   const [liste, setListe] = useState([]);
   const [formAcik, setFormAcik] = useState(false);
@@ -3402,13 +3492,16 @@ function BorcSekmesi() {
           <table>
             <thead>
               <tr style={{ background: 'var(--zemin)' }}>
-                {['Tip', 'Cari', 'Toplam Borç', 'TL Karşılığı', 'Kalan Bakiye', ''].map((b) => (
-                  <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
-                ))}
+                <SiraliBaslik alanAdi="tip" siralama={siralama}>Tip</SiraliBaslik>
+                <SiraliBaslik alanAdi="_cari_unvan" siralama={siralama}>Cari</SiraliBaslik>
+                <SiraliBaslik alanAdi="tutar" siralama={siralama}>Toplam Borç</SiraliBaslik>
+                <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>TL Karşılığı</th>
+                <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>Kalan Bakiye</th>
+                <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }} />
               </tr>
             </thead>
             <tbody>
-              {gosterilecekListe.map((b) => (
+              {siralama.sirala(gosterilecekListe, (item, alan) => (alan === '_cari_unvan' ? (cariHaritasi[item.cari_id] || '') : item[alan])).map((b) => (
                 <Fragment key={b.id}>
                   <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
                     <td style={{ padding: '10px 16px' }}>{BORC_TIP_METIN[b.tip]}</td>
