@@ -7,6 +7,13 @@ import AramaliSecici from '../components/AramaliSecici';
 
 const API_TABAN_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
+function tarihFormat(iso) {
+  if (!iso || typeof iso !== 'string' || !iso.includes('-')) return iso || '—';
+  const [yil, ay, gun] = iso.slice(0, 10).split('-');
+  if (!yil || !ay || !gun) return iso;
+  return `${gun}/${ay}/${yil}`;
+}
+
 function useSiralama() {
   const [alan, setAlan] = useState(null);
   const [yon, setYon] = useState('asc');
@@ -549,7 +556,7 @@ function GecmisProformalar({ cariler, yenidenYukleTetik, onGoruntule }) {
                 <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
                   <td style={{ padding: '10px 16px', fontWeight: 500 }}>{p.proforma_no}</td>
                   <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{cariUnvani(p.cari_id)}</td>
-                  <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{p.tarih}</td>
+                  <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{tarihFormat(p.tarih)}</td>
                   <td style={{ padding: '10px 16px', fontWeight: 500 }}>{paraFormat(p.genel_toplam, p.para_birimi)}</td>
                   <td style={{ padding: '10px 16px' }}><Etiket ton={DURUM_TON[p.durum]}>{DURUM_METIN[p.durum] || p.durum}</Etiket></td>
                   <td style={{ padding: '10px 16px' }}>
@@ -664,7 +671,7 @@ function GecmisFaturalar({ cariler, yenidenYukleTetik }) {
                 <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
                   <td style={{ padding: '10px 16px', fontWeight: 500 }}>{f.fatura_no}</td>
                   <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{cariUnvani(f.cari_id)}</td>
-                  <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{f.tarih}</td>
+                  <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{tarihFormat(f.tarih)}</td>
                   <td style={{ padding: '10px 16px', fontWeight: 500 }}>{paraFormat(f.genel_toplam, f.para_birimi)}</td>
                   <td style={{ padding: '10px 16px' }}>
                     <div style={{ display: 'flex', gap: 6 }}>
