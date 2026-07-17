@@ -209,7 +209,7 @@ function MaliyetKalemiDuzenleFormu({ kalem, urunId, onKaydedildi, onVazgec }) {
   );
 }
 
-function MaliyetDetayi({ urun, onKapat }) {
+function MaliyetDetayi({ urun, stokKartlari, onKapat }) {
   const [kalemler, setKalemler] = useState([]);
   const [yukleniyor, setYukleniyor] = useState(true);
   const [hata, setHata] = useState(null);
@@ -257,7 +257,13 @@ function MaliyetDetayi({ urun, onKapat }) {
   return (
     <Kart style={{ marginBottom: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-        <div style={{ fontSize: 14.5, fontWeight: 600 }}>Maliyet detayı — Seri No: {urun.seri_no}</div>
+        <div style={{ fontSize: 14.5, fontWeight: 600 }}>
+          Maliyet detayı — {urun.seri_no}
+          {(() => {
+            const kart = stokKartlari?.find((k) => k.id === urun.stok_karti_id);
+            return kart ? ` (${kart.marka} ${kart.model})` : '';
+          })()}
+        </div>
         <Buton variant="ikincil" onClick={onKapat}>Kapat</Buton>
       </div>
       <HataMesaji>{hata}</HataMesaji>
@@ -425,7 +431,13 @@ function UrunDuzenleFormu({ urun, stokKartlari, onKaydedildi, onVazgec }) {
       <td colSpan={9} style={{ padding: 0 }}>
         <div style={{ padding: 16, background: 'var(--zemin)' }}>
           <form onSubmit={kaydet}>
-            <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 10 }}>Ürünü düzenle</div>
+            <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 10 }}>
+              Ürünü düzenle — {urun.seri_no}
+              {(() => {
+                const kart = stokKartlari?.find((k) => k.id === urun.stok_karti_id);
+                return kart ? ` (${kart.marka} ${kart.model})` : '';
+              })()}
+            </div>
             <HataMesaji>{hata}</HataMesaji>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <Alan etiket="Seri no">
@@ -710,6 +722,7 @@ export default function StokSayfasi() {
       {maliyetGosterilecekUrun && (
         <MaliyetDetayi
           urun={maliyetGosterilecekUrun}
+          stokKartlari={stokKartlari}
           onKapat={() => { setMaliyetGosterilecekUrun(null); urunleriYukle(); }}
         />
       )}
