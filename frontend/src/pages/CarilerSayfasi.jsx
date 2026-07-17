@@ -4,6 +4,48 @@ import {
   Kart, SayfaBasligi, Buton, Etiket, Alan, girdiStili, BosDurum, HataMesaji, paraFormat, eylemChipStili,
 } from '../components/Ortak';
 
+// Herhangi bir listeyi bir sutuna gore tiklanabilir sekilde siralamak icin
+// paylasilan kucuk yardimci - butun sayfalarda ayni sekilde kullanilir.
+function useSiralama() {
+  const [alan, setAlan] = useState(null);
+  const [yon, setYon] = useState('asc');
+  function tikla(yeniAlan) {
+    if (alan === yeniAlan) setYon((y) => (y === 'asc' ? 'desc' : 'asc'));
+    else { setAlan(yeniAlan); setYon('asc'); }
+  }
+  function sirala(liste, degerFn) {
+    if (!alan) return liste;
+    return [...liste].sort((a, b) => {
+      const av = degerFn(a, alan);
+      const bv = degerFn(b, alan);
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      if (typeof av === 'string') {
+        return yon === 'asc' ? av.localeCompare(bv, 'tr') : bv.localeCompare(av, 'tr');
+      }
+      return yon === 'asc' ? av - bv : bv - av;
+    });
+  }
+  return { alan, yon, tikla, sirala };
+}
+
+// Tiklanabilir, siralama okunu gosteren <th> basligi.
+function SiraliBaslik({ children, alanAdi, siralama, style }) {
+  const aktif = siralama.alan === alanAdi;
+  return (
+    <th
+      onClick={() => siralama.tikla(alanAdi)}
+      style={{
+        textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)',
+        fontWeight: 500, cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', ...style,
+      }}
+    >
+      {children} {aktif ? (siralama.yon === 'asc' ? '▲' : '▼') : ''}
+    </th>
+  );
+}
+
 const TIP_ETIKET = {
   MUSTERI: { metin: 'Müşteri', ton: 'yesil' },
   TEDARIKCI: { metin: 'Tedarikçi', ton: 'amber' },
@@ -313,6 +355,7 @@ export default function CarilerSayfasi() {
   const [duzenlenenCari, setDuzenlenenCari] = useState(null);
   const [arama, setArama] = useState('');
   const [seciliCari, setSeciliCari] = useState(null);
+  const siralama = useSiralama();
 
   function listeyiYukle() {
     setYukleniyor(true);
@@ -390,15 +433,17 @@ export default function CarilerSayfasi() {
           <table>
             <thead>
               <tr style={{ background: 'var(--zemin)' }}>
-                {['Unvan', 'Tip', 'Vergi No', 'Telefon', 'Bakiye (TL)', 'Bakiye (USD)', 'İşlem'].map((b) => (
-                  <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>
-                    {b}
-                  </th>
-                ))}
+                <SiraliBaslik alanAdi="unvan" siralama={siralama}>Unvan</SiraliBaslik>
+                <SiraliBaslik alanAdi="tip" siralama={siralama}>Tip</SiraliBaslik>
+                <SiraliBaslik alanAdi="vergi_no" siralama={siralama}>Vergi No</SiraliBaslik>
+                <SiraliBaslik alanAdi="telefon" siralama={siralama}>Telefon</SiraliBaslik>
+                <SiraliBaslik alanAdi="bakiye_try" siralama={siralama}>Bakiye (TL)</SiraliBaslik>
+                <SiraliBaslik alanAdi="bakiye_usd" siralama={siralama}>Bakiye (USD)</SiraliBaslik>
+                <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>İşlem</th>
               </tr>
             </thead>
             <tbody>
-              {cariler.map((c) => (
+              {siralama.sirala(cariler, (item, alan) => item[alan]).map((c) => (
                 <tr key={c.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
                   <td style={{ padding: '12px 16px', fontWeight: 500 }}>{c.unvan}</td>
                   <td style={{ padding: '12px 16px' }}>
