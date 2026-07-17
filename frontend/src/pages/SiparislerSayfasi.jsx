@@ -6,6 +6,45 @@ import { Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesa
 import BelgeSablonu from '../components/BelgeSablonu';
 import AramaliSecici from '../components/AramaliSecici';
 
+function useSiralama() {
+  const [alan, setAlan] = useState(null);
+  const [yon, setYon] = useState('asc');
+  function tikla(yeniAlan) {
+    if (alan === yeniAlan) setYon((y) => (y === 'asc' ? 'desc' : 'asc'));
+    else { setAlan(yeniAlan); setYon('asc'); }
+  }
+  function sirala(liste, degerFn) {
+    if (!alan) return liste;
+    return [...liste].sort((a, b) => {
+      const av = degerFn(a, alan);
+      const bv = degerFn(b, alan);
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      if (typeof av === 'string') {
+        return yon === 'asc' ? av.localeCompare(bv, 'tr') : bv.localeCompare(av, 'tr');
+      }
+      return yon === 'asc' ? av - bv : bv - av;
+    });
+  }
+  return { alan, yon, tikla, sirala };
+}
+
+function SiraliBaslik({ children, alanAdi, siralama, style }) {
+  const aktif = siralama.alan === alanAdi;
+  return (
+    <th
+      onClick={() => siralama.tikla(alanAdi)}
+      style={{
+        textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)',
+        fontWeight: 500, cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', ...style,
+      }}
+    >
+      {children} {aktif ? (siralama.yon === 'asc' ? '▲' : '▼') : ''}
+    </th>
+  );
+}
+
 const API_TABAN_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 const DURUM_ETIKET = {
@@ -199,6 +238,7 @@ export default function SiparislerSayfasi() {
   const [durumDegistirAcikId, setDurumDegistirAcikId] = useState(null);
   const [icerikAcikId, setIcerikAcikId] = useState(null);
   const [belgeNotlari, setBelgeNotlari] = useState({}); // siparisId -> gecici not metni (sadece bu oturum icin)
+  const siralama = useSiralama();
   const [filtreTedarikciId, setFiltreTedarikciId] = useState('');
   const [filtreBaslangic, setFiltreBaslangic] = useState('');
   const [filtreBitis, setFiltreBitis] = useState('');
@@ -357,13 +397,19 @@ export default function SiparislerSayfasi() {
             </colgroup>
             <thead>
               <tr style={{ background: 'var(--zemin)' }}>
-                {['Sipariş No', 'Kaynak', 'Tarih', 'Durum', 'Tutar', 'İşlem'].map((b) => (
-                  <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
-                ))}
+                <SiraliBaslik alanAdi="siparis_no" siralama={siralama}>Sipariş No</SiraliBaslik>
+                <SiraliBaslik alanAdi="kaynak" siralama={siralama}>Kaynak</SiraliBaslik>
+                <SiraliBaslik alanAdi="siparis_tarihi" siralama={siralama}>Tarih</SiraliBaslik>
+                <SiraliBaslik alanAdi="durum" siralama={siralama}>Durum</SiraliBaslik>
+                <SiraliBaslik alanAdi="_toplam" siralama={siralama}>Tutar</SiraliBaslik>
+                <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>İşlem</th>
               </tr>
             </thead>
             <tbody>
-              {gosterilecekSiparisler.map((s) => {
+              {siralama.sirala(gosterilecekSiparisler, (item, alan) => {
+                if (alan === '_toplam') return (item.urunler || []).reduce((acc, u) => acc + u.miktar * Number(u.birim_fiyat), 0);
+                return item[alan];
+              }).map((s) => {
                 const toplam = (s.urunler || []).reduce((acc, u) => acc + u.miktar * Number(u.birim_fiyat), 0);
                 const sonDurumda = SON_DURUMLAR.includes(s.durum);
                 return (
