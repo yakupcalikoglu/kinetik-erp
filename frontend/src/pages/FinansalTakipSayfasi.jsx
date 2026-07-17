@@ -6,6 +6,13 @@ import {
 } from '../components/Ortak';
 import AramaliSecici from '../components/AramaliSecici';
 
+function tarihFormat(iso) {
+  if (!iso || typeof iso !== 'string' || !iso.includes('-')) return iso || '—';
+  const [yil, ay, gun] = iso.slice(0, 10).split('-');
+  if (!yil || !ay || !gun) return iso;
+  return `${gun}/${ay}/${yil}`;
+}
+
 function useSiralama() {
   const [alan, setAlan] = useState(null);
   const [yon, setYon] = useState('asc');
@@ -529,7 +536,7 @@ function CekSekmesi() {
                 <span>
                   {c.cek_no || `#${c.id}`} — {c.tip === 'ALINAN' ? 'Alınan' : 'Verilen'} — {cariHaritasi[c.cari_id] || '—'}
                 </span>
-                <span style={{ fontWeight: 600 }}>{c.vade_tarihi} — {paraFormat(c.tutar, c.para_birimi)}</span>
+                <span style={{ fontWeight: 600 }}>{tarihFormat(c.vade_tarihi)} — {paraFormat(c.tutar, c.para_birimi)}</span>
               </div>
             ))}
           </div>
@@ -630,7 +637,7 @@ function CekSekmesi() {
                     <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{cariGoster(c.cari_id, cariHaritasi)}</td>
                     <td style={{ padding: '10px 16px' }}>{paraFormat(c.tutar, c.para_birimi)}</td>
                     <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{tlKarsiligiGoster(c.tutar, c.para_birimi, kurlar)}</td>
-                    <td style={{ padding: '10px 16px' }}>{c.vade_tarihi}</td>
+                    <td style={{ padding: '10px 16px' }}>{tarihFormat(c.vade_tarihi)}</td>
                     <td style={{ padding: '10px 16px' }}><Etiket ton={CEK_DURUM_TON[c.durum]}>{CEK_DURUM_METIN[c.durum]}</Etiket></td>
                     <td style={{ padding: '10px 16px' }}>
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -1252,7 +1259,7 @@ function KalemTaksitPaneli({ kalem, akreditif, onKapat }) {
                     <Fragment key={t.id}>
                       <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
                         <td style={{ padding: '8px 10px' }}>{t.taksit_no}</td>
-                        <td style={{ padding: '8px 10px' }}>{t.vade_tarihi}</td>
+                        <td style={{ padding: '8px 10px' }}>{tarihFormat(t.vade_tarihi)}</td>
                         <td style={{ padding: '8px 10px' }}>{paraFormat(t.tutar, akreditif.para_birimi)}</td>
                         <td style={{ padding: '8px 10px' }}>
                           {t.odendi_mi ? (
@@ -1517,8 +1524,8 @@ function AkreditifSekmesi() {
               <td style={{ padding: '10px 16px' }}>{siparisEtiketi(a.siparis_id)}</td>
               <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{bankaEtiketi(a.banka_hesap_id)}</td>
               <td style={{ padding: '10px 16px' }}>{paraFormat(a.tutar, a.para_birimi)}</td>
-              <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{a.acilis_tarihi}</td>
-              <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{a.vade_tarihi || '—'}</td>
+              <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{tarihFormat(a.acilis_tarihi)}</td>
+              <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{a.vade_tarihi ? tarihFormat(a.vade_tarihi) : '—'}</td>
               <td style={{ padding: '10px 16px' }}><Etiket ton={AKREDITIF_DURUM_TON[a.durum]}>{AKREDITIF_DURUM_METIN[a.durum]}</Etiket></td>
               <td style={{ padding: '10px 16px' }}>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -2034,7 +2041,7 @@ function BakimSekmesi() {
             <tr key={b.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
               <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{b.urun_adi ? `${b.urun_adi} (${b.urun_seri_no})` : (b.urun_seri_no || `#${b.stok_seri_no_id}`)}</td>
               <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{b.ilgili_cari_unvan || '—'}</td>
-              <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{b.tarih}</td>
+              <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{tarihFormat(b.tarih)}</td>
               <td style={{ padding: '10px 16px' }}><Etiket ton={b.tip === 'GELIR' ? 'yesil' : 'kirmizi'}>{b.tip === 'GELIR' ? 'Gelir' : 'Gider'}</Etiket></td>
               <td style={{ padding: '10px 16px' }}>{b.aciklama || '—'}</td>
               <td style={{ padding: '10px 16px', fontWeight: 500 }}>{paraFormat(b.tutar)}</td>
@@ -2350,7 +2357,7 @@ function LeasingSekmesi() {
                 <Fragment key={t.id}>
                   <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
                     <td style={{ padding: '8px 16px' }}>{t.taksit_no}</td>
-                    <td style={{ padding: '8px 16px' }}>{t.vade_tarihi}</td>
+                    <td style={{ padding: '8px 16px' }}>{tarihFormat(t.vade_tarihi)}</td>
                     <td style={{ padding: '8px 16px' }}>{paraFormat(t.tutar, seciliSozlesme?.para_birimi)}</td>
                     <td style={{ padding: '8px 16px' }}><Etiket ton={t.odendi_mi ? 'yesil' : 'amber'}>{t.odendi_mi ? 'Ödendi' : 'Bekliyor'}</Etiket></td>
                     <td style={{ padding: '8px 16px' }}>
@@ -2735,7 +2742,7 @@ function KiralamaSekmesi() {
                   {odemeler.map((o) => (
                     <Fragment key={o.id}>
                       <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
-                        <td style={{ padding: '8px 0' }}>{o.donem_basi} → {o.donem_sonu}</td>
+                        <td style={{ padding: '8px 0' }}>{tarihFormat(o.donem_basi)} → {tarihFormat(o.donem_sonu)}</td>
                         <td style={{ padding: '8px 0' }}>{paraFormat(o.tutar, aktifSozlesme?.para_birimi)}</td>
                         <td style={{ padding: '8px 0' }}><Etiket ton={o.odendi_mi ? 'yesil' : 'amber'}>{o.odendi_mi ? 'Tahsil Edildi' : 'Bekliyor'}</Etiket></td>
                         <td style={{ padding: '8px 0' }}>
@@ -2962,7 +2969,7 @@ function TaksitSekmesi() {
                   <Fragment key={t.id}>
                     <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
                       <td style={{ padding: '8px 16px' }}>{t.taksit_no}</td>
-                      <td style={{ padding: '8px 16px' }}>{t.vade_tarihi}</td>
+                      <td style={{ padding: '8px 16px' }}>{tarihFormat(t.vade_tarihi)}</td>
                       <td style={{ padding: '8px 16px' }}>{paraFormat(t.tutar)}</td>
                       <td style={{ padding: '8px 16px', color: kismenOdendi ? 'var(--kirmizi)' : 'var(--metin-ikincil)' }}>
                         {t.odendi_mi ? '—' : paraFormat(kalanBakiye)}
@@ -3025,7 +3032,7 @@ function TaksitSekmesi() {
               <td style={{ padding: '10px 16px' }}>{t.musteri_unvan || '—'}</td>
               <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{t.urun_seri_no || '—'}</td>
               <td style={{ padding: '10px 16px' }}>{t.taksit_no}</td>
-              <td style={{ padding: '10px 16px', color: 'var(--kirmizi)' }}>{t.vade_tarihi}</td>
+              <td style={{ padding: '10px 16px', color: 'var(--kirmizi)' }}>{tarihFormat(t.vade_tarihi)}</td>
               <td style={{ padding: '10px 16px', fontWeight: 500 }}>{paraFormat(t.tutar)}</td>
             </tr>
           )}
@@ -3288,7 +3295,7 @@ function SabitGiderSekmesi() {
                 <Fragment key={g.id}>
                   <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
                     <td style={{ padding: '10px 16px', fontWeight: 500 }}>{g.kategori || '—'}</td>
-                    <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{g.donem}</td>
+                    <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{tarihFormat(g.donem)}</td>
                     <td style={{ padding: '10px 16px' }}>{paraFormat(g.tutar, g.para_birimi)}</td>
                     <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{g.para_birimi !== 'TRY' ? paraFormat(g.tutar_try) : '—'}</td>
                     <td style={{ padding: '10px 16px' }}>{g.aciklama || '—'}</td>
