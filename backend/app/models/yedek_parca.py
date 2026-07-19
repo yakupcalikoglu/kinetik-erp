@@ -29,7 +29,13 @@ class YedekParca(Base):
 
 
 class YedekParcaHareketi(Base):
-    """Giris (satinalma) veya cikis (kullanim/satis) hareketi. mevcut_miktar bu hareketlerle senkron tutulur."""
+    """
+    Giris (satinalma) veya cikis (kullanim/satis) hareketi. mevcut_miktar bu
+    hareketlerle senkron tutulur. Dovizli girisler icin birim_fiyat_orijinal
+    (girilen tutar, kendi para biriminde) + para_birimi + kur saklanir;
+    birim_fiyat_try bunlardan hesaplanan TL karsiligidir (raporlama/toplam
+    deger hesabinda kullanilir).
+    """
     __tablename__ = "yedek_parca_hareketleri"
 
     id = Column(BigInteger, primary_key=True)
@@ -37,6 +43,9 @@ class YedekParcaHareketi(Base):
     tarih = Column(Date, nullable=False)
     yon = Column(SAEnum(YedekParcaHareketYon, name="yedek_parca_hareket_yon_t"), nullable=False)
     miktar = Column(Numeric(18, 2), nullable=False)
+    birim_fiyat_orijinal = Column(Numeric(18, 2))
+    para_birimi = Column(String(10), nullable=False, default="TRY")
+    kur = Column(Numeric(18, 6), nullable=False, default=1)
     birim_fiyat_try = Column(Numeric(18, 2))
     ilgili_cari_id = Column(BigInteger, ForeignKey("cari_hesaplar.id"))
     aciklama = Column(String(300))
