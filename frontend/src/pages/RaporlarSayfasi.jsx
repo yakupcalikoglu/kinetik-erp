@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Fragment } from 'react';
 import { api, hataMesajiCikar } from '../api/client';
 import {
   Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, BosDurum, paraFormat, Etiket,
@@ -54,6 +54,16 @@ function GenelBakisKarti() {
 }
 
 // ============================================================== YAKLAŞAN VADELER
+function paraBazliToplamGoster(satirlar) {
+  if (!satirlar || satirlar.length === 0) return '—';
+  const gruplar = {};
+  satirlar.forEach((s) => {
+    const pb = s.para_birimi || 'TRY';
+    gruplar[pb] = (gruplar[pb] || 0) + Number(s.tutar);
+  });
+  return Object.entries(gruplar).map(([pb, tutar]) => paraFormat(tutar, pb)).join(' + ');
+}
+
 function YaklasanVadelerKarti() {
   const [gun, setGun] = useState(30);
   const [veri, setVeri] = useState(null);
@@ -98,7 +108,7 @@ function YaklasanVadelerKarti() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
           <div>
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--kirmizi)' }}>
-              Yapılacak ödemeler — Toplam: {veri ? paraFormat(veri.odemeler_toplam) : '—'}
+              Yapılacak ödemeler — Toplam: {veri ? paraBazliToplamGoster(veri.odemeler) : '—'}
             </div>
             {!veri || veri.odemeler.length === 0 ? (
               <BosDurum baslik="Yaklaşan ödeme yok" />
@@ -118,7 +128,7 @@ function YaklasanVadelerKarti() {
           </div>
           <div>
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--yesil)' }}>
-              Yapılacak tahsilatlar — Toplam: {veri ? paraFormat(veri.tahsilatlar_toplam) : '—'}
+              Yapılacak tahsilatlar — Toplam: {veri ? paraBazliToplamGoster(veri.tahsilatlar) : '—'}
             </div>
             {!veri || veri.tahsilatlar.length === 0 ? (
               <BosDurum baslik="Yaklaşan tahsilat yok" />
@@ -143,9 +153,47 @@ function YaklasanVadelerKarti() {
 }
 
 // ============================================================== DEPO ENVANTERİ
+function DepoEnvanteriDetayi({ stokKartiId }) {
+  const [urunler, setUrunler] = useState(null);
+  const [hata, setHata] = useState(null);
+
+  useEffect(() => {
+    api.get('/stok-seri-no', { params: { stok_karti_id: stokKartiId, durum: 'DEPODA' } })
+      .then((r) => setUrunler(r.data))
+      .catch((e) => setHata(hataMesajiCikar(e)));
+  }, [stokKartiId]);
+
+  if (hata) return <div style={{ padding: '8px 16px', color: 'var(--kirmizi)', fontSize: 12.5 }}>{hata}</div>;
+  if (!urunler) return <div style={{ padding: '8px 16px', color: 'var(--metin-soluk)', fontSize: 12.5 }}>Yükleniyor...</div>;
+
+  return (
+    <div style={{ padding: '8px 16px 14px', background: 'var(--zemin)' }}>
+      <table style={{ width: '100%' }}>
+        <thead>
+          <tr>
+            {['Seri No', 'Şasi No', 'Toplam Maliyet'].map((b) => (
+              <th key={b} style={{ textAlign: 'left', padding: '6px 10px', fontSize: 11.5, color: 'var(--metin-ikincil)' }}>{b}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {urunler.map((u) => (
+            <tr key={u.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+              <td style={{ padding: '6px 10px', fontFamily: 'var(--font-mono)' }}>{u.seri_no}</td>
+              <td style={{ padding: '6px 10px', color: 'var(--metin-ikincil)' }}>{u.sasi_no || '—'}</td>
+              <td style={{ padding: '6px 10px' }}>{paraFormat(u.toplam_maliyet_try)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function DepoEnvanteriKarti() {
   const [liste, setListe] = useState(null);
   const [hata, setHata] = useState(null);
+  const [acikId, setAcikId] = useState(null);
 
   useEffect(() => {
     api.get('/raporlar/depo-envanteri').then((r) => setListe(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
@@ -156,6 +204,9 @@ function DepoEnvanteriKarti() {
   return (
     <Kart style={{ marginBottom: 16 }}>
       <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 14 }}>Depo envanteri (ürün türüne göre)</div>
+      <div style={{ fontSize: 12, color: 'var(--metin-ikincil)', marginTop: -10, marginBottom: 14 }}>
+        Bir satıra tıklayınca o ürün türüne ait seri numaralarını görebilirsiniz.
+      </div>
       <HataMesaji>{hata}</HataMesaji>
       {!liste ? (
         <div style={{ color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
@@ -173,11 +224,28 @@ function DepoEnvanteriKarti() {
             </thead>
             <tbody>
               {liste.map((g) => (
-                <tr key={g.stok_karti_id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
-                  <td style={{ padding: '8px 12px' }}>{g.marka} {g.model}</td>
-                  <td style={{ padding: '8px 12px' }}>{g.adet} {g.birim || 'adet'}</td>
-                  <td style={{ padding: '8px 12px', fontWeight: 500 }}>{paraFormat(g.toplam_deger_try)}</td>
-                </tr>
+                <Fragment key={g.stok_karti_id}>
+                  <tr
+                    onClick={() => setAcikId((mevcut) => (mevcut === g.stok_karti_id ? null : g.stok_karti_id))}
+                    style={{ borderTop: '1px solid var(--kenarlik)', cursor: 'pointer', background: acikId === g.stok_karti_id ? 'var(--zemin)' : 'transparent' }}
+                  >
+                    <td style={{ padding: '8px 12px' }}>
+                      {g.marka} {g.model}
+                      <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--lacivert)' }}>
+                        {acikId === g.stok_karti_id ? '▲ detayı gizle' : '▼ detay göster'}
+                      </span>
+                    </td>
+                    <td style={{ padding: '8px 12px' }}>{g.adet} {g.birim || 'adet'}</td>
+                    <td style={{ padding: '8px 12px', fontWeight: 500 }}>{paraFormat(g.toplam_deger_try)}</td>
+                  </tr>
+                  {acikId === g.stok_karti_id && (
+                    <tr>
+                      <td colSpan={3} style={{ padding: 0 }}>
+                        <DepoEnvanteriDetayi stokKartiId={g.stok_karti_id} />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
             </tbody>
           </table>
@@ -532,62 +600,11 @@ function CariRaporu() {
   );
 }
 
-function KarMarjiKarti() {
-  const [veri, setVeri] = useState(null);
-  const [hata, setHata] = useState(null);
-
-  useEffect(() => {
-    api.get('/raporlar/kar-marji-analizi').then((r) => setVeri(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
-  }, []);
-
-  return (
-    <Kart style={{ marginBottom: 16 }}>
-      <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Ürün Bazında Kâr Marjı</div>
-      <div style={{ fontSize: 12.5, color: 'var(--metin-ikincil)', marginBottom: 14 }}>
-        Şimdiye kadar satılmış ürünlerin, ürün tanımına göre gruplanmış toplam kâr/zarar ve marj oranı
-      </div>
-      <HataMesaji>{hata}</HataMesaji>
-      {!veri ? (
-        <div style={{ color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
-      ) : veri.length === 0 ? (
-        <BosDurum baslik="Henüz satılmış ürün yok" />
-      ) : (
-        <table>
-          <thead>
-            <tr style={{ background: 'var(--zemin)' }}>
-              {['Ürün', 'Adet Satıldı', 'Toplam Maliyet', 'Toplam Satış', 'Toplam Kâr', 'Kâr Marjı'].map((b) => (
-                <th key={b} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {veri.map((s) => (
-              <tr key={s.stok_karti_id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
-                <td style={{ padding: '8px 12px', fontWeight: 500 }}>{s.urun_adi}</td>
-                <td style={{ padding: '8px 12px' }}>{s.adet_satildi}</td>
-                <td style={{ padding: '8px 12px' }}>{paraFormat(s.toplam_maliyet_try)}</td>
-                <td style={{ padding: '8px 12px' }}>{paraFormat(s.toplam_satis_try)}</td>
-                <td style={{ padding: '8px 12px', fontWeight: 600, color: s.toplam_kar_try >= 0 ? 'var(--yesil)' : 'var(--kirmizi)' }}>
-                  {paraFormat(s.toplam_kar_try)}
-                </td>
-                <td style={{ padding: '8px 12px' }}>
-                  <Etiket ton={s.ortalama_kar_marji_yuzde >= 0 ? 'yesil' : 'kirmizi'}>%{s.ortalama_kar_marji_yuzde}</Etiket>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </Kart>
-  );
-}
-
 export default function RaporlarSayfasi() {
   return (
     <div>
       <SayfaBasligi baslik="Raporlar" aciklama="Genel bakış, yaklaşan vadeler, envanter, hareket türü, ürün ve cari bazlı raporlar" />
       <GenelBakisKarti />
-      <KarMarjiKarti />
       <YaklasanVadelerKarti />
       <AnaKasaOzetKarti />
       <DepoEnvanteriKarti />
