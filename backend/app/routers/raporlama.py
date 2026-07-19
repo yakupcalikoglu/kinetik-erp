@@ -746,35 +746,17 @@ async def net_durum(
     yedek_parca_degeri_try = sum((p.mevcut_miktar * p.birim_fiyat_try for p in yedek_parcalar), Decimal("0"))
 
     # ------------------------------------------------------------- ALACAKLAR
-    # 5) Cari bakiyeleri - CariHesap.bakiye_try/usd/eur alanlari
-    # para_hareketi_olustur() servisi (Kasa/Banka hareketi acan ortak
-    # fonksiyon) CariHesap/CariHareket'e HIC DOKUNMUYOR - bu yuzden statik
-    # bakiye_try/usd/eur alanlarina degil, GERCEK hareket defteri olan
-    # CariHareket tablosunun toplamina gore hesapliyoruz (ayni /cariler/{id}/
-    # bakiye uc noktasinin kullandigi yontem). Boylece hem daha guvenilir
-    # olur hem de "hic guncellenmeyen bir alanla yanlis rakam gosterme"
-    # riski ortadan kalkar.
-    # SQL tarafinda COALESCE(SUM(x), SUM(y)) kullanmiyoruz cunku bir grupta
-    # BAZI satirlarda tutar_try_karsiligi dolu bazilarinda bos (TRY oldugu
-    # icin NULL) olabilir - bu durumda SUM NULL'lari sessizce atlar ve
-    # kismi/yanlis bir toplam cikar. Bunun yerine ham satirlari cekip
-    # HER SATIR icin ayri ayri (varsa tutar_try_karsiligi, yoksa tutar)
-    # kullanarak Python'da topluyoruz.
-    tum_cari_hareketleri = list(db.execute(
-        select(CariHareket).where(CariHareket.sirket_id == sirket_id)
-    ).scalars())
-    cari_net_haritasi: dict[int, Decimal] = {}
-    for h in tum_cari_hareketleri:
-        tutar = h.tutar_try_karsiligi if h.tutar_try_karsiligi is not None else h.tutar
-        cari_net_haritasi[h.cari_id] = cari_net_haritasi.get(h.cari_id, Decimal("0")) + (tutar if h.yon == "GIRIS" else -tutar)
-
-    cari_alacak_try = Decimal("0")
-    cari_borc_try = Decimal("0")
-    for net in cari_net_haritasi.values():
-        if net > 0:
-            cari_alacak_try += net
-        elif net < 0:
-            cari_borc_try += -net
+    # 5) NOT: Ayri bir "Cari Hesaplardan Alacak/Borc" kalemi KASITLI
+    # OLARAK YOK. Nedeni: CariHareket tablosu sistemde hicbir yerde
+    # doldurulmuyor (para_hareketi_olustur da dahil hicbir servis
+    # CariHareket veya CariHesap.bakiye_try/usd/eur alanlarini
+    # guncellemiyor) - doldursak bile bu "cari ile net nakit akisi"
+    # anlamina gelir, "kalan borc/alacak" ile AYNI sey degildir (orn.
+    # bir tedarikciye yapilan odemeler "borcumuz var" degil "simdiye
+    # kadar odedik" demektir). Her modulun (Siparis, Taksit, Kiralama,
+    # Akreditif, Leasing, Cek, Ortak Borc) KENDI dogru "kalan bakiye"
+    # hesabi zaten asagida ayri ayri yer aliyor; ayrica bir "Cari"
+    # kalemi eklemek yanlis anlasilmaya/cift sayima yol acardi.
 
     # 6) Taksitli satis - henuz tahsil edilmemis taksitlerin toplami (TRY sabit)
     taksitli_taksitler = list(db.execute(
@@ -898,14 +880,12 @@ async def net_durum(
         NetDurumKalemi(kategori="Yedek Parça / Sarf Malzeme", tutar_try=yedek_parca_degeri_try),
     ]
     alacaklar = [
-        NetDurumKalemi(kategori="Cari Hesaplardan Alacak", tutar_try=cari_alacak_try),
         NetDurumKalemi(kategori="Taksitli Satış Alacağı", tutar_try=taksit_alacak_try),
         NetDurumKalemi(kategori="Kiralama Tahsilat Alacağı", tutar_try=kiralama_alacak_try),
         NetDurumKalemi(kategori="Alınan Çekler (Portföyde)", tutar_try=cek_alacak_try),
         NetDurumKalemi(kategori="Ortağa Verilen Borç (Alacak)", tutar_try=ortak_alacak_try),
     ]
     borclar = [
-        NetDurumKalemi(kategori="Cari Hesaplara Borç", tutar_try=cari_borc_try),
         NetDurumKalemi(kategori="Akreditif (Ödenmemiş)", tutar_try=akreditif_borc_try),
         NetDurumKalemi(kategori="Leasing (Ödenmemiş Taksitler)", tutar_try=leasing_borc_try),
         NetDurumKalemi(kategori="Verilen Çekler (Portföyde)", tutar_try=cek_borc_try),
