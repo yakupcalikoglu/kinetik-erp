@@ -1,4 +1,5 @@
 import { useEffect, useState, Fragment } from 'react';
+import * as XLSX from 'xlsx';
 import { api, hataMesajiCikar } from '../api/client';
 import {
   Kart, SayfaBasligi, Buton, Etiket, Alan, girdiStili, BosDurum, HataMesaji, paraFormat, eylemChipStili,
@@ -84,6 +85,166 @@ function KaynakDetayi({ kaynakTablo, kaynakId }) {
         </div>
       ))}
     </div>
+  );
+}
+
+const ALAN_ESLESTIRME = {
+  unvan: ['unvan', 'firma adı', 'firma adi', 'ad soyad', 'adı', 'cari adı', 'cari adi', 'müşteri adı', 'tedarikçi adı', 'ünvan'],
+  tip: ['tip', 'cari tipi', 'tür'],
+  vergi_no: ['vergi no', 'vergi kimlik no', 'vkn', 'tc kimlik no', 'tc no', 'tckn'],
+  vergi_dairesi: ['vergi dairesi'],
+  telefon: ['telefon', 'tel', 'telefon no', 'cep telefonu', 'gsm'],
+  adres: ['adres'],
+  email: ['e-posta', 'email', 'e-mail', 'mail'],
+};
+
+function normallestir(s) {
+  return (s || '').toString().trim().toLocaleLowerCase('tr');
+}
+
+function sutunEslestir(basliklar) {
+  const harita = {};
+  for (const [alan, adaylar] of Object.entries(ALAN_ESLESTIRME)) {
+    const bulunan = basliklar.find((b) => adaylar.includes(normallestir(b)));
+    if (bulunan) harita[alan] = bulunan;
+  }
+  return harita;
+}
+
+function IceAktarPaneli({ onKapat, onTamamlandi }) {
+  const [satirlar, setSatirlar] = useState([]);
+  const [hata, setHata] = useState(null);
+  const [yukleniyor, setYukleniyor] = useState(false);
+  const [sonuc, setSonuc] = useState(null);
+
+  function dosyaSecildi(e) {
+    const dosya = e.target.files?.[0];
+    if (!dosya) return;
+    setHata(null);
+    setSonuc(null);
+    setSatirlar([]);
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const kitap = XLSX.read(evt.target.result, { type: 'array' });
+        const sayfa = kitap.Sheets[kitap.SheetNames[0]];
+        const veri = XLSX.utils.sheet_to_json(sayfa, { defval: '' });
+        if (veri.length === 0) {
+          setHata('Dosyada veri bulunamadı.');
+          return;
+        }
+        const basliklar = Object.keys(veri[0]);
+        const harita = sutunEslestir(basliklar);
+        if (!harita.unvan) {
+          setHata("Unvan/Firma Adı sütunu bulunamadı. Excel dosyasında bu bilgiyi içeren bir sütun olmalı (örn. 'Unvan', 'Firma Adı', 'Cari Adı').");
+          return;
+        }
+        const donusturulmus = veri
+          .map((satir) => ({
+            unvan: String(satir[harita.unvan] || '').trim(),
+            tip: harita.tip ? String(satir[harita.tip] || 'DIGER').toUpperCase() : 'DIGER',
+            vergi_no: harita.vergi_no ? String(satir[harita.vergi_no] || '').trim() : '',
+            vergi_dairesi: harita.vergi_dairesi ? String(satir[harita.vergi_dairesi] || '').trim() : '',
+            telefon: harita.telefon ? String(satir[harita.telefon] || '').trim() : '',
+            adres: harita.adres ? String(satir[harita.adres] || '').trim() : '',
+            email: harita.email ? String(satir[harita.email] || '').trim() : '',
+          }))
+          .filter((s) => s.unvan);
+        setSatirlar(donusturulmus);
+      } catch (err) {
+        setHata('Dosya okunamadı. Geçerli bir Excel (.xlsx/.xls) dosyası olduğundan emin olun.');
+      }
+    };
+    reader.readAsArrayBuffer(dosya);
+  }
+
+  async function iceAktar() {
+    setYukleniyor(true);
+    setHata(null);
+    try {
+      const gecerliTipler = ['MUSTERI', 'TEDARIKCI', 'PERSONEL', 'ORTAK', 'DIGER'];
+      const { data } = await api.post('/cariler/toplu-ice-aktar', {
+        satirlar: satirlar.map((s) => ({
+          tip: gecerliTipler.includes(s.tip) ? s.tip : 'DIGER',
+          unvan: s.unvan,
+          vergi_no: s.vergi_no || null,
+          vergi_dairesi: s.vergi_dairesi || null,
+          telefon: s.telefon || null,
+          adres: s.adres || null,
+          email: s.email || null,
+        })),
+      });
+      setSonuc(data);
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setYukleniyor(false);
+    }
+  }
+
+  return (
+    <Kart style={{ marginBottom: 20 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div style={{ fontSize: 14.5, fontWeight: 600 }}>Excel'den Cari İçe Aktar</div>
+        <Buton variant="ikincil" onClick={onKapat}>Kapat</Buton>
+      </div>
+      <HataMesaji>{hata}</HataMesaji>
+
+      <div style={{ fontSize: 12.5, color: 'var(--metin-ikincil)', marginBottom: 12 }}>
+        Excel dosyanızda (herhangi bir sütun sırasıyla) şunlar bulunmalı: <strong>Unvan</strong> (zorunlu),
+        Tip (Müşteri/Tedarikçi/Personel/Ortak — boşsa "Diğer" yapılır), Vergi No, Vergi Dairesi, Telefon, Adres, E-posta.
+        Akınsoft Wolvox gibi başka bir sistemden Excel'e aktardığınız cari listesini doğrudan yükleyebilirsiniz.
+      </div>
+
+      <input type="file" accept=".xlsx,.xls" onChange={dosyaSecildi} style={{ marginBottom: 16 }} />
+
+      {satirlar.length > 0 && !sonuc && (
+        <>
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>{satirlar.length} satır bulundu — önizleme (ilk 10):</div>
+          <table style={{ marginBottom: 16 }}>
+            <thead>
+              <tr style={{ background: 'var(--zemin)' }}>
+                {['Unvan', 'Tip', 'Vergi No', 'Telefon'].map((b) => (
+                  <th key={b} style={{ textAlign: 'left', padding: '6px 10px', fontSize: 12, color: 'var(--metin-ikincil)' }}>{b}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {satirlar.slice(0, 10).map((s, i) => (
+                <tr key={i} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                  <td style={{ padding: '6px 10px' }}>{s.unvan}</td>
+                  <td style={{ padding: '6px 10px' }}>{s.tip}</td>
+                  <td style={{ padding: '6px 10px' }}>{s.vergi_no || '—'}</td>
+                  <td style={{ padding: '6px 10px' }}>{s.telefon || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <Buton onClick={iceAktar} disabled={yukleniyor}>{yukleniyor ? 'İçe aktarılıyor...' : `${satirlar.length} kaydı içe aktar`}</Buton>
+        </>
+      )}
+
+      {sonuc && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ color: 'var(--yesil)', fontWeight: 600, marginBottom: 8 }}>
+            ✓ {sonuc.basarili_sayisi} kayıt başarıyla eklendi.
+          </div>
+          {sonuc.hatali_satirlar.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ color: 'var(--kirmizi)', fontWeight: 600, marginBottom: 6 }}>
+                ✗ {sonuc.hatali_satirlar.length} satırda hata oluştu:
+              </div>
+              <ul style={{ fontSize: 12.5, color: 'var(--metin-ikincil)' }}>
+                {sonuc.hatali_satirlar.map((h) => (
+                  <li key={h.satir_no}>Satır {h.satir_no} ({h.unvan}): {h.hata}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <Buton onClick={onTamamlandi}>Kapat ve listeyi yenile</Buton>
+        </div>
+      )}
+    </Kart>
   );
 }
 
@@ -362,6 +523,7 @@ export default function CarilerSayfasi() {
   const [duzenlenenCari, setDuzenlenenCari] = useState(null);
   const [arama, setArama] = useState('');
   const [seciliCari, setSeciliCari] = useState(null);
+  const [iceAktarAcik, setIceAktarAcik] = useState(false);
   const siralama = useSiralama();
 
   function listeyiYukle() {
@@ -404,10 +566,24 @@ export default function CarilerSayfasi() {
       <SayfaBasligi
         baslik="Cari hesaplar"
         aciklama="Müşteri, tedarikçi, personel ve ortak kayıtları"
-        eylem={!formAcik && <Buton onClick={yeniCariAc}>+ Yeni cari</Buton>}
+        eylem={!formAcik && (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Buton variant="ikincil" onClick={() => setIceAktarAcik((a) => !a)}>
+              {iceAktarAcik ? 'İçe Aktarmayı Kapat' : "Excel'den İçe Aktar"}
+            </Buton>
+            <Buton onClick={yeniCariAc}>+ Yeni cari</Buton>
+          </div>
+        )}
       />
 
       <HataMesaji>{hata}</HataMesaji>
+
+      {iceAktarAcik && (
+        <IceAktarPaneli
+          onKapat={() => setIceAktarAcik(false)}
+          onTamamlandi={() => { setIceAktarAcik(false); listeyiYukle(); }}
+        />
+      )}
 
       {formAcik && (
         <CariFormu
