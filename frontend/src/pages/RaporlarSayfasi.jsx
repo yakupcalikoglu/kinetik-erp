@@ -152,6 +152,84 @@ function YaklasanVadelerKarti() {
   );
 }
 
+// ============================================================== HARCAMA TÜRLERİ ÖZETİ
+function HarcamaTurleriOzetiKarti() {
+  const [baslangic, setBaslangic] = useState('');
+  const [bitis, setBitis] = useState('');
+  const [liste, setListe] = useState(null);
+  const [hata, setHata] = useState(null);
+  const [yukleniyor, setYukleniyor] = useState(false);
+
+  function sorgula() {
+    setYukleniyor(true);
+    setHata(null);
+    const params = {};
+    if (baslangic) params.baslangic = baslangic;
+    if (bitis) params.bitis = bitis;
+    api.get('/raporlar/harcama-turleri-ozeti', { params })
+      .then((r) => setListe(r.data))
+      .catch((e) => setHata(hataMesajiCikar(e)))
+      .finally(() => setYukleniyor(false));
+  }
+  useEffect(sorgula, []); // eslint-disable-line
+
+  const genelToplam = liste ? liste.reduce((acc, s) => acc + Number(s.toplam_tutar_try), 0) : 0;
+
+  return (
+    <Kart style={{ marginBottom: 16 }}>
+      <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 4 }}>Harcama Türlerine Göre Özet</div>
+      <div style={{ fontSize: 12, color: 'var(--metin-ikincil)', marginBottom: 14 }}>
+        Diğer Giderler'de girilen her harcama türü (Elektrik, Su, Kira, Nakliye vb.) için ayrı toplam
+      </div>
+      <HataMesaji>{hata}</HataMesaji>
+
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginBottom: 16, flexWrap: 'wrap' }}>
+        <Alan etiket="Başlangıç tarihi (dönem)">
+          <input type="date" value={baslangic} onChange={(e) => setBaslangic(e.target.value)} style={girdiStili} />
+        </Alan>
+        <Alan etiket="Bitiş tarihi (dönem)">
+          <input type="date" value={bitis} onChange={(e) => setBitis(e.target.value)} style={girdiStili} />
+        </Alan>
+        <Buton onClick={sorgula} disabled={yukleniyor} style={{ marginBottom: 14 }}>{yukleniyor ? 'Sorgulanıyor...' : 'Sorgula'}</Buton>
+      </div>
+
+      {!liste ? (
+        <div style={{ color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
+      ) : liste.length === 0 ? (
+        <BosDurum baslik="Bu tarih aralığında gider kaydı yok" />
+      ) : (
+        <>
+          <table>
+            <thead>
+              <tr style={{ background: 'var(--zemin)' }}>
+                {['Harcama Türü', 'Kayıt Sayısı', 'Toplam', 'Ödenen', 'Ödenmemiş'].map((b) => (
+                  <th key={b} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 12, color: 'var(--metin-ikincil)' }}>{b}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {liste.map((s) => (
+                <tr key={s.kategori} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                  <td style={{ padding: '8px 12px', fontWeight: 500 }}>{s.kategori}</td>
+                  <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{s.adet}</td>
+                  <td style={{ padding: '8px 12px', fontWeight: 600 }}>{paraFormat(s.toplam_tutar_try)}</td>
+                  <td style={{ padding: '8px 12px', color: 'var(--yesil)' }}>{paraFormat(s.odenen_tutar_try)}</td>
+                  <td style={{ padding: '8px 12px', color: Number(s.odenmemis_tutar_try) > 0 ? 'var(--kirmizi)' : 'var(--metin-ikincil)' }}>
+                    {paraFormat(s.odenmemis_tutar_try)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div style={{ marginTop: 10, fontSize: 13, fontWeight: 600, textAlign: 'right' }}>
+            Genel toplam: {paraFormat(genelToplam)}
+          </div>
+        </>
+      )}
+    </Kart>
+  );
+}
+
 // ============================================================== DEPO ENVANTERİ
 function DepoEnvanteriDetayi({ stokKartiId }) {
   const [urunler, setUrunler] = useState(null);
@@ -605,6 +683,7 @@ export default function RaporlarSayfasi() {
     <div>
       <SayfaBasligi baslik="Raporlar" aciklama="Genel bakış, yaklaşan vadeler, envanter, hareket türü, ürün ve cari bazlı raporlar" />
       <GenelBakisKarti />
+      <HarcamaTurleriOzetiKarti />
       <YaklasanVadelerKarti />
       <AnaKasaOzetKarti />
       <DepoEnvanteriKarti />
