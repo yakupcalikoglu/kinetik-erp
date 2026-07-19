@@ -813,7 +813,10 @@ async def net_durum(
             ortak_borc_try += kalan_try
 
     # --------------------------------------------------------------- BORCLAR
-    # 10) Akreditif - odenmemis kalemler (taksitlendirilmisse taksitlerin odenmemis toplami)
+    # 10) Akreditif - toplam LIMIT (tutar) eksi simdiye kadar fiilen odenen kisim.
+    # Kalem eklenmemis olsa bile acik akreditifin tamami taahhut/borc sayilir -
+    # sadece kalem uzerinden gitmek, henuz kalem girilmemis akreditifleri
+    # bilancodan tamamen dusuruyordu (yanlis olurdu).
     acik_akreditifler = list(db.execute(
         select(Akreditif).where(Akreditif.sirket_id == sirket_id, Akreditif.durum != AkreditifDurum.IPTAL)
     ).scalars())
@@ -822,15 +825,16 @@ async def net_durum(
         kalemler = list(db.execute(select(AkreditifKalemi).where(AkreditifKalemi.akreditif_id == ak.id)).scalars())
         pb = ak.para_birimi if isinstance(ak.para_birimi, str) else ak.para_birimi.value
         kur = await kur_getir(pb)
+        odenen_toplam = Decimal("0")
         for k in kalemler:
             if k.odendi_mi:
+                odenen_toplam += k.tutar
                 continue
             taksitler = list(db.execute(select(AkreditifKalemTaksiti).where(AkreditifKalemTaksiti.kalem_id == k.id)).scalars())
-            if taksitler:
-                tutar = sum((t.tutar for t in taksitler if not t.odendi_mi), Decimal("0"))
-            else:
-                tutar = k.tutar
-            akreditif_borc_try += tutar * kur
+            odenen_toplam += sum((t.tutar for t in taksitler if t.odendi_mi), Decimal("0"))
+        kalan_borc = ak.tutar - odenen_toplam
+        if kalan_borc > 0:
+            akreditif_borc_try += kalan_borc * kur
 
     # 11) Leasing - odenmemis taksitler
     leasing_sozlesmeler = list(db.execute(select(LeasingSozlesme).where(LeasingSozlesme.sirket_id == sirket_id)).scalars())
