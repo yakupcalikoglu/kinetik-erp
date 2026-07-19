@@ -40,6 +40,54 @@ class KarMarjiSatiri(BaseModel):
     ortalama_kar_marji_yuzde: Decimal
 
 
+class HarcamaTuruSatiri(BaseModel):
+    kategori: str
+    adet: int
+    toplam_tutar_try: Decimal
+    odenen_tutar_try: Decimal
+    odenmemis_tutar_try: Decimal
+
+
+@router.get("/harcama-turleri-ozeti", response_model=list[HarcamaTuruSatiri],
+            dependencies=[Depends(izin_gerektir("RAPOR_GORUNTULE"))])
+def harcama_turleri_ozeti(
+    baslangic: date | None = None,
+    bitis: date | None = None,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Diger Giderler'deki (SabitGider) her bir harcama turu/kategori icin
+    (Elektrik, Su, Kira, Nakliye vb. - serbest metin oldugu icin kullanici
+    ne yazdiysa o) toplam, odenen ve odenmemis tutari TL cinsinden ozetler.
+    """
+    sorgu = select(SabitGider).where(SabitGider.sirket_id == sirket_id)
+    if baslangic:
+        sorgu = sorgu.where(SabitGider.donem >= baslangic)
+    if bitis:
+        sorgu = sorgu.where(SabitGider.donem <= bitis)
+    giderler = list(db.execute(sorgu).scalars())
+
+    gruplar: dict[str, dict] = {}
+    for g in giderler:
+        kategori = (g.kategori or "Diğer").strip() or "Diğer"
+        grup = gruplar.setdefault(kategori, {"adet": 0, "toplam": Decimal("0"), "odenen": Decimal("0")})
+        grup["adet"] += 1
+        grup["toplam"] += g.tutar_try
+        if g.odendi_mi:
+            grup["odenen"] += g.tutar_try
+
+    sonuc = [
+        HarcamaTuruSatiri(
+            kategori=kategori, adet=g["adet"], toplam_tutar_try=g["toplam"],
+            odenen_tutar_try=g["odenen"], odenmemis_tutar_try=g["toplam"] - g["odenen"],
+        )
+        for kategori, g in gruplar.items()
+    ]
+    sonuc.sort(key=lambda s: s.toplam_tutar_try, reverse=True)
+    return sonuc
+
+
 @router.get("/kar-marji-analizi", response_model=list[KarMarjiSatiri],
             dependencies=[Depends(izin_gerektir("RAPOR_GORUNTULE"))])
 def kar_marji_analizi(sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
