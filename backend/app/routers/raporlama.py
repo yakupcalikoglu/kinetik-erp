@@ -22,6 +22,64 @@ from app.schemas.raporlama import (
 
 router = APIRouter(prefix="/raporlar", tags=["Raporlama"])
 
+from pydantic import BaseModel
+
+
+class KarMarjiSatiri(BaseModel):
+    stok_karti_id: int
+    urun_adi: str
+    adet_satildi: int
+    toplam_maliyet_try: Decimal
+    toplam_satis_try: Decimal
+    toplam_kar_try: Decimal
+    ortalama_kar_marji_yuzde: Decimal
+
+
+@router.get("/kar-marji-analizi", response_model=list[KarMarjiSatiri],
+            dependencies=[Depends(izin_gerektir("RAPOR_GORUNTULE"))])
+def kar_marji_analizi(sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
+    """
+    Urun tanimi (stok karti) basina, simdiye kadar SATILMIS urunlerin
+    toplam maliyet/satis/kar rakamlarini ve ortalama kar marji yuzdesini
+    hesaplar. En kazancli urun turunden en aza dogru siralanir.
+    """
+    satilan_urunler = list(db.execute(
+        select(StokSeriNo).where(
+            StokSeriNo.sirket_id == sirket_id,
+            StokSeriNo.durum == StokDurum.SATILDI,
+            StokSeriNo.satis_fiyati_try.isnot(None),
+        )
+    ).scalars())
+
+    kart_haritasi = {
+        k.id: k for k in db.execute(select(StokKarti).where(StokKarti.sirket_id == sirket_id)).scalars()
+    }
+
+    gruplar = {}
+    for u in satilan_urunler:
+        toplam_maliyet = (
+            u.satinalma_maliyeti_try + u.nakliye_maliyeti_try + u.gumruk_maliyeti_try +
+            u.antrepo_maliyeti_try + u.millilestirme_maliyeti_try + u.leasing_maliyeti_try + u.diger_maliyet_try
+        )
+        g = gruplar.setdefault(u.stok_karti_id, {"adet": 0, "maliyet": Decimal("0"), "satis": Decimal("0")})
+        g["adet"] += 1
+        g["maliyet"] += toplam_maliyet
+        g["satis"] += u.satis_fiyati_try
+
+    sonuc = []
+    for stok_karti_id, g in gruplar.items():
+        kart = kart_haritasi.get(stok_karti_id)
+        urun_adi = f"{kart.marka} {kart.model}".strip() if kart else f"#{stok_karti_id}"
+        kar = g["satis"] - g["maliyet"]
+        marj = (kar / g["maliyet"] * 100) if g["maliyet"] else Decimal("0")
+        sonuc.append(KarMarjiSatiri(
+            stok_karti_id=stok_karti_id, urun_adi=urun_adi, adet_satildi=g["adet"],
+            toplam_maliyet_try=g["maliyet"], toplam_satis_try=g["satis"],
+            toplam_kar_try=kar, ortalama_kar_marji_yuzde=round(marj, 2),
+        ))
+    sonuc.sort(key=lambda s: s.toplam_kar_try, reverse=True)
+    return sonuc
+
 
 @router.get("/seri-no", response_model=SeriNoRaporYaniti,
             dependencies=[Depends(izin_gerektir("RAPOR_GORUNTULE"))])
