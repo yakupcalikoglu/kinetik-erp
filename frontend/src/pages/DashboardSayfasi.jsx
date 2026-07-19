@@ -6,24 +6,27 @@ import { Kart, SayfaBasligi, HataMesaji, BosDurum, paraFormat, Etiket } from '..
 function TiklanabilirKart({ baslik, onClick, children, vurgu }) {
   const [uzerinde, setUzerinde] = useState(false);
   return (
-    <Kart
+    <div
       onClick={onClick}
-      style={{
-        cursor: 'pointer',
-        boxShadow: uzerinde ? '0 4px 14px rgba(0,0,0,0.08)' : 'var(--golge-sm)',
-        transform: uzerinde ? 'translateY(-1px)' : 'none',
-        transition: 'all 0.15s',
-        border: vurgu ? '1px solid var(--kirmizi)' : '1px solid var(--kenarlik)',
-      }}
       onMouseEnter={() => setUzerinde(true)}
       onMouseLeave={() => setUzerinde(false)}
+      style={{ cursor: 'pointer' }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <div style={{ fontSize: 14.5, fontWeight: 600 }}>{baslik}</div>
-        <span style={{ fontSize: 12, color: 'var(--lacivert)' }}>Aç →</span>
-      </div>
-      {children}
-    </Kart>
+      <Kart
+        style={{
+          boxShadow: uzerinde ? '0 4px 14px rgba(0,0,0,0.08)' : 'var(--golge-sm)',
+          transform: uzerinde ? 'translateY(-1px)' : 'none',
+          transition: 'all 0.15s',
+          border: vurgu ? '1px solid var(--kirmizi)' : '1px solid var(--kenarlik)',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div style={{ fontSize: 14.5, fontWeight: 600 }}>{baslik}</div>
+          <span style={{ fontSize: 12, color: 'var(--lacivert)' }}>Aç →</span>
+        </div>
+        {children}
+      </Kart>
+    </div>
   );
 }
 
