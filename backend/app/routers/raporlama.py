@@ -855,7 +855,28 @@ async def net_durum(
         kur = await kur_getir(c.para_birimi.value if hasattr(c.para_birimi, "value") else c.para_birimi)
         cek_borc_try += c.tutar * kur
 
+    # 13b) Personele tahakkuk etmis, henuz odenmemis maas/avans/prim (TRY sabit)
+    odenmemis_personel_odemeleri = list(db.execute(
+        select(PersonelOdeme)
+        .join(Personel, Personel.id == PersonelOdeme.personel_id)
+        .where(Personel.sirket_id == sirket_id, PersonelOdeme.odendi_mi.is_(False))
+    ).scalars())
+    personel_borc_try = sum((o.tutar for o in odenmemis_personel_odemeleri), Decimal("0"))
+
+    # 13c) Odenmemis diger giderler (dovizli olabilir, tutar_try hazir)
+    odenmemis_giderler = list(db.execute(
+        select(SabitGider).where(SabitGider.sirket_id == sirket_id, SabitGider.odendi_mi.is_(False))
+    ).scalars())
+    diger_gider_borc_try = sum((g.tutar_try for g in odenmemis_giderler), Decimal("0"))
+
     # 13) Tedarikciye olan kalan borc (siparisler)
+    # ONEMLI: Akreditifli bir siparisin odemesi AKREDITIF uzerinden
+    # yapilir (SiparisOdeme uzerinden degil), ve o akreditifin tutari
+    # zaten yukarida (10. adim) "Akreditif (Odenmemis)" kaleminde AYRICA
+    # borc olarak sayiliyor. Bu yuzden bu siparise bagli acik akreditif
+    # varsa, o akreditifin tutarini burada "odenmis" gibi dusuyoruz -
+    # aksi halde AYNI borc iki kere sayilirdi (hem Siparis hem Akreditif
+    # kaleminde).
     siparisler = list(db.execute(
         select(Siparis).where(Siparis.sirket_id == sirket_id, Siparis.durum.notin_(["TASLAK", "IPTAL"]))
     ).scalars())
@@ -866,12 +887,18 @@ async def net_durum(
         odenen = db.execute(
             select(func.coalesce(func.sum(SiparisOdeme.tutar), 0)).where(SiparisOdeme.siparis_id == s.id)
         ).scalar_one()
-        kalan = toplam_tutar - odenen
-        if kalan <= 0:
-            continue
         pb = s.para_birimi if isinstance(s.para_birimi, str) else s.para_birimi.value
         kur = await kur_getir(pb)
-        siparis_borc_try += kalan * kur
+        kalan_try = (toplam_tutar - odenen) * kur
+
+        ilgili_akreditifler = [ak for ak in acik_akreditifler if ak.siparis_id == s.id]
+        for ak in ilgili_akreditifler:
+            ak_pb = ak.para_birimi if isinstance(ak.para_birimi, str) else ak.para_birimi.value
+            ak_kur = await kur_getir(ak_pb)
+            kalan_try -= ak.tutar * ak_kur
+
+        if kalan_try > 0:
+            siparis_borc_try += kalan_try
 
     varliklar = [
         NetDurumKalemi(kategori="Ana Kasa (Nakit)", tutar_try=kasa_bakiye_try),
@@ -891,6 +918,8 @@ async def net_durum(
         NetDurumKalemi(kategori="Verilen Çekler (Portföyde)", tutar_try=cek_borc_try),
         NetDurumKalemi(kategori="Ortaktan/Dışarıdan Alınan Borç", tutar_try=ortak_borc_try),
         NetDurumKalemi(kategori="Tedarikçilere Olan Borç (Sipariş)", tutar_try=siparis_borc_try),
+        NetDurumKalemi(kategori="Personele Ödenmemiş Tahakkuklar", tutar_try=personel_borc_try),
+        NetDurumKalemi(kategori="Ödenmemiş Diğer Giderler", tutar_try=diger_gider_borc_try),
     ]
 
     toplam_varlik = sum((v.tutar_try for v in varliklar), Decimal("0"))
