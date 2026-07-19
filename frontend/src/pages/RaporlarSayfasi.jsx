@@ -532,6 +532,56 @@ function CariRaporu() {
   );
 }
 
+function KarMarjiKarti() {
+  const [veri, setVeri] = useState(null);
+  const [hata, setHata] = useState(null);
+
+  useEffect(() => {
+    api.get('/raporlar/kar-marji-analizi').then((r) => setVeri(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
+  }, []);
+
+  return (
+    <Kart style={{ marginBottom: 16 }}>
+      <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Ürün Bazında Kâr Marjı</div>
+      <div style={{ fontSize: 12.5, color: 'var(--metin-ikincil)', marginBottom: 14 }}>
+        Şimdiye kadar satılmış ürünlerin, ürün tanımına göre gruplanmış toplam kâr/zarar ve marj oranı
+      </div>
+      <HataMesaji>{hata}</HataMesaji>
+      {!veri ? (
+        <div style={{ color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
+      ) : veri.length === 0 ? (
+        <BosDurum baslik="Henüz satılmış ürün yok" />
+      ) : (
+        <table>
+          <thead>
+            <tr style={{ background: 'var(--zemin)' }}>
+              {['Ürün', 'Adet Satıldı', 'Toplam Maliyet', 'Toplam Satış', 'Toplam Kâr', 'Kâr Marjı'].map((b) => (
+                <th key={b} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {veri.map((s) => (
+              <tr key={s.stok_karti_id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                <td style={{ padding: '8px 12px', fontWeight: 500 }}>{s.urun_adi}</td>
+                <td style={{ padding: '8px 12px' }}>{s.adet_satildi}</td>
+                <td style={{ padding: '8px 12px' }}>{paraFormat(s.toplam_maliyet_try)}</td>
+                <td style={{ padding: '8px 12px' }}>{paraFormat(s.toplam_satis_try)}</td>
+                <td style={{ padding: '8px 12px', fontWeight: 600, color: s.toplam_kar_try >= 0 ? 'var(--yesil)' : 'var(--kirmizi)' }}>
+                  {paraFormat(s.toplam_kar_try)}
+                </td>
+                <td style={{ padding: '8px 12px' }}>
+                  <Etiket ton={s.ortalama_kar_marji_yuzde >= 0 ? 'yesil' : 'kirmizi'}>%{s.ortalama_kar_marji_yuzde}</Etiket>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </Kart>
+  );
+}
+
 export default function RaporlarSayfasi() {
   return (
     <div>
