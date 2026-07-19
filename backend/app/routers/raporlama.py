@@ -746,14 +746,31 @@ async def net_durum(
     yedek_parca_degeri_try = sum((p.mevcut_miktar * p.birim_fiyat_try for p in yedek_parcalar), Decimal("0"))
 
     # ------------------------------------------------------------- ALACAKLAR
-    # 5) Cari bakiyeleri - pozitif olanlar (bize borclu olanlar) alacak sayilir
-    cariler_hepsi = list(db.execute(select(CariHesap).where(CariHesap.sirket_id == sirket_id)).scalars())
+    # 5) Cari bakiyeleri - CariHesap.bakiye_try/usd/eur alanlari
+    # para_hareketi_olustur() servisi (Kasa/Banka hareketi acan ortak
+    # fonksiyon) CariHesap/CariHareket'e HIC DOKUNMUYOR - bu yuzden statik
+    # bakiye_try/usd/eur alanlarina degil, GERCEK hareket defteri olan
+    # CariHareket tablosunun toplamina gore hesapliyoruz (ayni /cariler/{id}/
+    # bakiye uc noktasinin kullandigi yontem). Boylece hem daha guvenilir
+    # olur hem de "hic guncellenmeyen bir alanla yanlis rakam gosterme"
+    # riski ortadan kalkar.
+    # SQL tarafinda COALESCE(SUM(x), SUM(y)) kullanmiyoruz cunku bir grupta
+    # BAZI satirlarda tutar_try_karsiligi dolu bazilarinda bos (TRY oldugu
+    # icin NULL) olabilir - bu durumda SUM NULL'lari sessizce atlar ve
+    # kismi/yanlis bir toplam cikar. Bunun yerine ham satirlari cekip
+    # HER SATIR icin ayri ayri (varsa tutar_try_karsiligi, yoksa tutar)
+    # kullanarak Python'da topluyoruz.
+    tum_cari_hareketleri = list(db.execute(
+        select(CariHareket).where(CariHareket.sirket_id == sirket_id)
+    ).scalars())
+    cari_net_haritasi: dict[int, Decimal] = {}
+    for h in tum_cari_hareketleri:
+        tutar = h.tutar_try_karsiligi if h.tutar_try_karsiligi is not None else h.tutar
+        cari_net_haritasi[h.cari_id] = cari_net_haritasi.get(h.cari_id, Decimal("0")) + (tutar if h.yon == "GIRIS" else -tutar)
+
     cari_alacak_try = Decimal("0")
     cari_borc_try = Decimal("0")
-    for c in cariler_hepsi:
-        usd_kur = await kur_getir("USD")
-        eur_kur = await kur_getir("EUR")
-        net = Decimal(c.bakiye_try or 0) + Decimal(c.bakiye_usd or 0) * usd_kur + Decimal(c.bakiye_eur or 0) * eur_kur
+    for net in cari_net_haritasi.values():
         if net > 0:
             cari_alacak_try += net
         elif net < 0:
