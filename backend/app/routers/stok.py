@@ -15,7 +15,8 @@ from app.schemas.stok import (StokKartiOlusturIstegi, StokKartiYanit,
                                StokSeriNoYanit, StokDurumGuncelleIstegi,
                                MaliyetKalemiEkleIstegi, MaliyetKalemiDuzenleIstegi, KarRaporuYanit, StokSatisIstegi,
                                StokMaliyetKalemiYanit, TopluDurumGuncelleIstegi,
-                               StokSeriNoDuzenleIstegi, StokSeriNoDuzenleSifreliIstegi)
+                               StokSeriNoDuzenleIstegi, StokSeriNoDuzenleSifreliIstegi,
+                               StokKartiTopluIceAktarIstegi, StokKartiTopluIceAktarSonucu)
 from app.services.para_hareketi import para_hareketi_olustur
 from app.models.denetim import DuzenlemeKaydi
 from app.core.security import sifre_dogrula
@@ -101,6 +102,32 @@ def stok_karti_sil(
             "Bu stok kartı sipariş veya stok kayıtlarında kullanıldığı için silinemiyor."
         )
     return {"silindi": True}
+
+
+@router.post("/stok-kartlari/toplu-ice-aktar", response_model=StokKartiTopluIceAktarSonucu,
+             dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
+def stok_karti_toplu_ice_aktar(
+    istek: StokKartiTopluIceAktarIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
+):
+    """Excel'den (orn. baska bir sistemden aktarilan) urun tanimi listesini toplu olarak ekler."""
+    basarili = 0
+    hatalar = []
+    for i, satir in enumerate(istek.satirlar, start=1):
+        try:
+            if not (satir.marka or "").strip() and not (satir.model or "").strip():
+                raise ValueError("Marka veya model alanlarından en az biri dolu olmalı.")
+            yeni = StokKarti(
+                sirket_id=sirket_id, marka=satir.marka, model=satir.model,
+                birim=satir.birim or "ADET", mense_ulke=satir.mense_ulke, gtip_kodu=satir.gtip_kodu,
+            )
+            db.add(yeni)
+            db.commit()
+            basarili += 1
+        except Exception as e:
+            db.rollback()
+            hatalar.append({"satir_no": i, "marka": satir.marka, "model": satir.model, "hata": str(e)})
+    return StokKartiTopluIceAktarSonucu(basarili_sayisi=basarili, hatali_satirlar=hatalar)
 
 
 @router.get("/stok-kartlari", response_model=list[StokKartiYanit],
