@@ -40,6 +40,87 @@ function paraBazliToplamGoster(satirlar, alan = 'tutar') {
   return Object.entries(gruplar).map(([pb, tutar]) => paraFormat(tutar, pb)).join(' + ');
 }
 
+// -------------------------------------------------------------- Net Durum (Bilanço)
+function NetDurumKutusu() {
+  const [veri, setVeri] = useState(null);
+  const [hata, setHata] = useState(null);
+  const [detayAcik, setDetayAcik] = useState(false);
+
+  useEffect(() => {
+    api.get('/raporlar/net-durum').then((r) => setVeri(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
+  }, []);
+
+  if (hata) return <Kart style={{ marginBottom: 16 }}><HataMesaji>{hata}</HataMesaji></Kart>;
+
+  const toplamVarlikVeAlacak = veri ? Number(veri.toplam_varlik_try) + Number(veri.toplam_alacak_try) : 0;
+
+  return (
+    <Kart style={{ marginBottom: 16, background: 'var(--lacivert-koyu, #0f2340)', color: 'white' }}>
+      <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 14 }}>💼 Net Durum (Bilanço) — şu anki güncel kurla</div>
+      {!veri ? (
+        <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13 }}>Yükleniyor...</div>
+      ) : (
+        <>
+          <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginBottom: 12 }}>
+            <div>
+              <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.6)' }}>Toplam Varlık + Alacak</div>
+              <div style={{ fontSize: 24, fontWeight: 700 }}>{paraFormat(toplamVarlikVeAlacak)}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.6)' }}>Toplam Borç</div>
+              <div style={{ fontSize: 24, fontWeight: 700, color: '#ff9d9d' }}>{paraFormat(veri.toplam_borc_try)}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.6)' }}>Net Değer</div>
+              <div style={{ fontSize: 24, fontWeight: 700, color: Number(veri.net_deger_try) >= 0 ? '#8ef0b0' : '#ff9d9d' }}>
+                {paraFormat(veri.net_deger_try)}
+              </div>
+            </div>
+          </div>
+          <span
+            onClick={() => setDetayAcik((a) => !a)}
+            style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.85)', cursor: 'pointer', textDecoration: 'underline' }}
+          >
+            {detayAcik ? 'Detayı gizle' : 'Kalem kalem detayı göster'}
+          </span>
+
+          {detayAcik && (
+            <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 20 }}>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, color: 'rgba(255,255,255,0.8)' }}>Varlıklar</div>
+                {veri.varliklar.map((v) => (
+                  <div key={v.kategori} style={{ fontSize: 12.5, display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}>
+                    <span style={{ color: 'rgba(255,255,255,0.7)' }}>{v.kategori}</span>
+                    <span>{paraFormat(v.tutar_try)}</span>
+                  </div>
+                ))}
+              </div>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, color: 'rgba(255,255,255,0.8)' }}>Alacaklar</div>
+                {veri.alacaklar.map((v) => (
+                  <div key={v.kategori} style={{ fontSize: 12.5, display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}>
+                    <span style={{ color: 'rgba(255,255,255,0.7)' }}>{v.kategori}</span>
+                    <span>{paraFormat(v.tutar_try)}</span>
+                  </div>
+                ))}
+              </div>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, color: 'rgba(255,255,255,0.8)' }}>Borçlar</div>
+                {veri.borclar.map((v) => (
+                  <div key={v.kategori} style={{ fontSize: 12.5, display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}>
+                    <span style={{ color: 'rgba(255,255,255,0.7)' }}>{v.kategori}</span>
+                    <span>{paraFormat(v.tutar_try)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </Kart>
+  );
+}
+
 // -------------------------------------------------------------- Ana Kasa
 function AnaKasaKutusu({ navigate }) {
   const [bakiye, setBakiye] = useState(null);
@@ -228,6 +309,7 @@ export default function DashboardSayfasi() {
   return (
     <div>
       <SayfaBasligi baslik="Dashboard" aciklama="Genel durumunuza hızlı bakış — herhangi bir kutuya tıklayarak ilgili ekrana gidebilirsiniz" />
+      <NetDurumKutusu />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
         <AnaKasaKutusu navigate={navigate} />
         <BankalarKutusu navigate={navigate} />
