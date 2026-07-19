@@ -1,12 +1,24 @@
 import { useEffect, useState, Fragment } from 'react';
 import { api, hataMesajiCikar } from '../api/client';
-import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat, eylemChipStili, Sekmeler, OtomatikTamamlamaGirdisi } from '../components/Ortak';
+import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat, eylemChipStili, Sekmeler, OtomatikTamamlamaGirdisi, Etiket } from '../components/Ortak';
 
 function tarihFormat(iso) {
   if (!iso || typeof iso !== 'string' || !iso.includes('-')) return iso || '—';
   const [yil, ay, gun] = iso.slice(0, 10).split('-');
   if (!yil || !ay || !gun) return iso;
   return `${gun}/${ay}/${yil}`;
+}
+
+const KAYNAK_TABLO_METIN = {
+  STOK_SATIS: 'Stok Satışı', SIPARIS_ODEME: 'Sipariş Ödemesi', TAKSITLI_SATIS: 'Taksitli Satış Tahsilatı',
+  CEK: 'Çek', AKREDITIF_KALEMI: 'Akreditif Ödemesi', AKREDITIF_KALEM_TAKSIT: 'Akreditif Taksiti',
+  LEASING_ODEME: 'Leasing Ödemesi', KIRALAMA_ODEME: 'Kiralama Tahsilatı', PERSONEL_ODEME: 'Personel Ödemesi',
+  SABIT_GIDER: 'Diğer Gider', BORC_ODEME: 'Borç Ödemesi', BAKIM_KAYDI: 'Bakım',
+};
+
+function kategoriGoster(kaynakTablo) {
+  if (!kaynakTablo) return 'Serbest';
+  return KAYNAK_TABLO_METIN[kaynakTablo] || kaynakTablo;
 }
 
 function useSiralama() {
@@ -660,7 +672,7 @@ function BankaHareketiDuzenleFormu({ hareket, hesaplar, cariler, onKaydedildi, o
 
   return (
     <tr>
-      <td colSpan={7} style={{ padding: 0 }}>
+      <td colSpan={8} style={{ padding: 0 }}>
         <div style={{ padding: 16, background: 'var(--zemin)' }}>
           <form onSubmit={kaydet}>
             <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 12 }}>Hareketi düzenle</div>
@@ -846,6 +858,7 @@ function HareketlerSekmesi() {
                 <SiraliBaslik alanAdi="tarih" siralama={siralama}>Tarih</SiraliBaslik>
                 <SiraliBaslik alanAdi="_hesap" siralama={siralama}>Hesap</SiraliBaslik>
                 <SiraliBaslik alanAdi="tip" siralama={siralama}>Tür</SiraliBaslik>
+                <SiraliBaslik alanAdi="_kategori" siralama={siralama}>Kategori</SiraliBaslik>
                 <SiraliBaslik alanAdi="tutar" siralama={siralama}>Tutar</SiraliBaslik>
                 <SiraliBaslik alanAdi="_cari" siralama={siralama}>Cari</SiraliBaslik>
                 <SiraliBaslik alanAdi="aciklama" siralama={siralama}>Açıklama</SiraliBaslik>
@@ -856,6 +869,7 @@ function HareketlerSekmesi() {
               {siralama.sirala(gosterilecekHareketler, (item, alan) => {
                 if (alan === '_hesap') return hesapAdiGoster(item.banka_hesap_id);
                 if (alan === '_cari') return item.cari_id ? (cariHaritasi[item.cari_id] || '') : '';
+                if (alan === '_kategori') return kategoriGoster(item.kaynak_tablo);
                 return item[alan];
               }).map((h) => {
                 const tiklanabilir = !!(h.kaynak_tablo && h.kaynak_id);
@@ -883,6 +897,9 @@ function HareketlerSekmesi() {
                       <td onClick={() => satiraTikla(h)} style={{ padding: '10px 16px', color: 'var(--metin-ikincil)', cursor: tiklanabilir ? 'pointer' : 'default' }}>{tarihFormat(h.tarih)}</td>
                       <td onClick={() => satiraTikla(h)} style={{ padding: '10px 16px', cursor: tiklanabilir ? 'pointer' : 'default' }}>{hesapAdiGoster(h.banka_hesap_id)}</td>
                       <td onClick={() => satiraTikla(h)} style={{ padding: '10px 16px', cursor: tiklanabilir ? 'pointer' : 'default' }}>{BANKA_HAREKET_TIP_METIN[h.tip] || h.tip}</td>
+                      <td onClick={() => satiraTikla(h)} style={{ padding: '10px 16px', cursor: tiklanabilir ? 'pointer' : 'default' }}>
+                        <Etiket ton={h.kaynak_tablo ? 'yesil' : 'notr'}>{kategoriGoster(h.kaynak_tablo)}</Etiket>
+                      </td>
                       <td onClick={() => satiraTikla(h)} style={{ padding: '10px 16px', fontWeight: 500, color: Number(h.tutar) >= 0 ? 'var(--yesil)' : 'var(--kirmizi)', cursor: tiklanabilir ? 'pointer' : 'default' }}>
                         {paraFormat(h.tutar, hesapParaBirimi(h.banka_hesap_id))}
                       </td>
@@ -917,7 +934,7 @@ function HareketlerSekmesi() {
                     </tr>
                     {acikDetayId === h.id && (
                       <tr>
-                        <td colSpan={7} style={{ padding: 0 }}>
+                        <td colSpan={8} style={{ padding: 0 }}>
                           <KaynakDetayi kaynakTablo={h.kaynak_tablo} kaynakId={h.kaynak_id} onIslemTamamlandi={() => { setAcikDetayId(null); yukle(); }} />
                         </td>
                       </tr>
