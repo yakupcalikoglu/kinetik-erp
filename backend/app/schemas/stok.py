@@ -285,3 +285,21 @@ class GumrukBeyannamesiYanit(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ---------------------------------------------------------- Toplu İçe Aktarma
+class StokKartiTopluIceAktarSatiri(BaseModel):
+    marka: str | None = None
+    model: str | None = None
+    birim: str = "ADET"
+    mense_ulke: str | None = None
+    gtip_kodu: str | None = None
+
+
+class StokKartiTopluIceAktarIstegi(BaseModel):
+    satirlar: list[StokKartiTopluIceAktarSatiri]
+
+
+class StokKartiTopluIceAktarSonucu(BaseModel):
+    basarili_sayisi: int
+    hatali_satirlar: list[dict]
