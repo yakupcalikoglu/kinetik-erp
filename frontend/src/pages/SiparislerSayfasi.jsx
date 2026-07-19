@@ -72,6 +72,144 @@ const SON_DURUMLAR = ['TAMAMLANDI', 'IPTAL'];
 
 // Siparise (tedarikciye) yapilan avans/ara/kapama odemelerini yonetir.
 // Stok maliyeti hesabindan BAGIMSIZDIR - sadece nakit akisini/kalan bakiyeyi takip eder.
+function GumrukBeyannameleriPaneli({ siparis, cariler, onKapat }) {
+  const [liste, setListe] = useState(null);
+  const [formAcik, setFormAcik] = useState(false);
+  const [form, setForm] = useState({
+    beyanname_no: '', beyanname_tarihi: new Date().toISOString().slice(0, 10),
+    gumruk_musaviri_cari_id: '', tutar: '', para_birimi: 'TRY', kur: '1', notlar: '',
+  });
+  const [hata, setHata] = useState(null);
+  const [kaydediliyor, setKaydediliyor] = useState(false);
+
+  function yukle() {
+    api.get(`/siparisler/${siparis.id}/gumruk-beyannameleri`).then((r) => setListe(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
+  }
+  useEffect(() => { yukle(); }, [siparis.id]); // eslint-disable-line
+
+  useEffect(() => {
+    if (form.para_birimi !== 'TRY') {
+      api.get(`/kur/${form.para_birimi}`).then((r) => setForm((f) => ({ ...f, kur: String(r.data.kur) }))).catch(() => {});
+    }
+  }, [form.para_birimi]);
+
+  async function ekle(e) {
+    e.preventDefault();
+    setHata(null);
+    setKaydediliyor(true);
+    try {
+      await api.post(`/siparisler/${siparis.id}/gumruk-beyannameleri`, {
+        beyanname_no: form.beyanname_no || null,
+        beyanname_tarihi: form.beyanname_tarihi,
+        gumruk_musaviri_cari_id: form.gumruk_musaviri_cari_id ? Number(form.gumruk_musaviri_cari_id) : null,
+        tutar: Number(form.tutar),
+        para_birimi: form.para_birimi,
+        kur: Number(form.kur),
+        notlar: form.notlar || null,
+      });
+      setFormAcik(false);
+      setForm({ beyanname_no: '', beyanname_tarihi: new Date().toISOString().slice(0, 10), gumruk_musaviri_cari_id: '', tutar: '', para_birimi: 'TRY', kur: '1', notlar: '' });
+      yukle();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setKaydediliyor(false);
+    }
+  }
+
+  async function sil(id) {
+    if (!window.confirm('Bu gümrük beyannamesi kaydını silmek istediğinize emin misiniz?')) return;
+    try {
+      await api.delete(`/siparisler/gumruk-beyannameleri/${id}`);
+      yukle();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    }
+  }
+
+  return (
+    <Kart style={{ margin: '8px 16px 16px', background: 'var(--zemin)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ fontWeight: 600, fontSize: 13.5 }}>{siparis.siparis_no} — Gümrük beyannameleri</div>
+        <Buton variant="ikincil" onClick={onKapat}>Kapat</Buton>
+      </div>
+      <HataMesaji>{hata}</HataMesaji>
+
+      <div style={{ marginBottom: 12 }}>
+        <Buton onClick={() => setFormAcik((a) => !a)}>{formAcik ? 'Kapat' : '+ Yeni beyanname ekle'}</Buton>
+      </div>
+
+      {formAcik && (
+        <form onSubmit={ekle} style={{ marginBottom: 16, padding: 12, background: 'white', border: '1px solid var(--kenarlik)', borderRadius: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+            <Alan etiket="Beyanname no">
+              <input value={form.beyanname_no} onChange={(e) => setForm((f) => ({ ...f, beyanname_no: e.target.value }))} style={girdiStili} />
+            </Alan>
+            <Alan etiket="Beyanname tarihi">
+              <input required type="date" value={form.beyanname_tarihi} onChange={(e) => setForm((f) => ({ ...f, beyanname_tarihi: e.target.value }))} style={girdiStili} />
+            </Alan>
+            <Alan etiket="Gümrük müşaviri (cari)">
+              <select value={form.gumruk_musaviri_cari_id} onChange={(e) => setForm((f) => ({ ...f, gumruk_musaviri_cari_id: e.target.value }))} style={girdiStili}>
+                <option value="">Yok</option>
+                {(cariler || []).map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
+              </select>
+            </Alan>
+            <Alan etiket="Para birimi">
+              <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={girdiStili}>
+                <option value="TRY">TRY</option>
+                <option value="USD">USD</option>
+                <option value="EUR">EUR</option>
+              </select>
+            </Alan>
+            <Alan etiket="Tutar">
+              <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
+            </Alan>
+            {form.para_birimi !== 'TRY' && (
+              <Alan etiket={`Kur (${form.para_birimi} → TL)`}>
+                <input type="number" step="0.0001" value={form.kur} onChange={(e) => setForm((f) => ({ ...f, kur: e.target.value }))} style={girdiStili} />
+              </Alan>
+            )}
+            <Alan etiket="Notlar">
+              <input value={form.notlar} onChange={(e) => setForm((f) => ({ ...f, notlar: e.target.value }))} style={girdiStili} />
+            </Alan>
+          </div>
+          <Buton type="submit" disabled={kaydediliyor} style={{ marginTop: 10 }}>{kaydediliyor ? 'Kaydediliyor...' : 'Kaydet'}</Buton>
+        </form>
+      )}
+
+      {liste === null ? (
+        <div style={{ color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
+      ) : liste.length === 0 ? (
+        <BosDurum baslik="Bu siparişe ait gümrük beyannamesi kaydı yok" />
+      ) : (
+        <table style={{ width: '100%', background: 'white' }}>
+          <thead>
+            <tr>
+              {['Beyanname No', 'Tarih', 'Gümrük Müşaviri', 'Tutar', 'Notlar', ''].map((b) => (
+                <th key={b} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 12, color: 'var(--metin-ikincil)' }}>{b}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {liste.map((b) => (
+              <tr key={b.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                <td style={{ padding: '8px 12px' }}>{b.beyanname_no || '—'}</td>
+                <td style={{ padding: '8px 12px' }}>{b.beyanname_tarihi}</td>
+                <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{b.gumruk_musaviri_unvan || '—'}</td>
+                <td style={{ padding: '8px 12px', fontWeight: 500 }}>{paraFormat(b.tutar, b.para_birimi)}</td>
+                <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{b.notlar || '—'}</td>
+                <td style={{ padding: '8px 12px' }}>
+                  <button onClick={() => sil(b.id)} style={eylemChipStili('kirmizi')}>Sil</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </Kart>
+  );
+}
+
 function SiparisOdemeleriPaneli({ siparis, onKapat }) {
   const [bakiye, setBakiye] = useState(null);
   const [odemeler, setOdemeler] = useState(null);
@@ -244,6 +382,7 @@ export default function SiparislerSayfasi() {
   const [yukleniyor, setYukleniyor] = useState(true);
   const [hata, setHata] = useState(null);
   const [odemelerAcikSiparisId, setOdemelerAcikSiparisId] = useState(null);
+  const [gumrukAcikSiparisId, setGumrukAcikSiparisId] = useState(null);
   const [belgeAcik, setBelgeAcik] = useState(null); // { siparisId, nusha } | null
   const [durumDegistirAcikId, setDurumDegistirAcikId] = useState(null);
   const [icerikAcikId, setIcerikAcikId] = useState(null);
@@ -490,6 +629,14 @@ export default function SiparislerSayfasi() {
                           >
                             {odemelerAcikSiparisId === s.id ? 'Ödemeleri Kapat' : 'Ödemeler'}
                           </button>
+                          {s.kaynak === 'ITHALAT' && (
+                            <button
+                              onClick={() => setGumrukAcikSiparisId((mevcut) => (mevcut === s.id ? null : s.id))}
+                              style={eylemChipStili('amber')}
+                            >
+                              {gumrukAcikSiparisId === s.id ? 'Gümrüğü Kapat' : 'Gümrük Beyannamesi'}
+                            </button>
+                          )}
                           <button
                             onClick={() => setBelgeAcik((mevcut) => (mevcut?.siparisId === s.id && mevcut?.nusha === 'ic' ? null : { siparisId: s.id, nusha: 'ic' }))}
                             style={eylemChipStili('notr')}
@@ -518,6 +665,13 @@ export default function SiparislerSayfasi() {
                       <tr>
                         <td colSpan={6} style={{ padding: 0 }}>
                           <SiparisOdemeleriPaneli siparis={s} onKapat={() => setOdemelerAcikSiparisId(null)} />
+                        </td>
+                      </tr>
+                    )}
+                    {gumrukAcikSiparisId === s.id && (
+                      <tr>
+                        <td colSpan={6} style={{ padding: 0 }}>
+                          <GumrukBeyannameleriPaneli siparis={s} cariler={cariler} onKapat={() => setGumrukAcikSiparisId(null)} />
                         </td>
                       </tr>
                     )}
