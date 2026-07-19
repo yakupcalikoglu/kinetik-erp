@@ -12,6 +12,7 @@ import SiparisOlusturSayfasi from './pages/SiparisOlusturSayfasi';
 import SiparisTeslimAlSayfasi from './pages/SiparisTeslimAlSayfasi';
 import BankaSayfasi from './pages/BankaSayfasi';
 import KasaSayfasi from './pages/KasaSayfasi';
+import DashboardSayfasi from './pages/DashboardSayfasi';
 import RaporlarSayfasi from './pages/RaporlarSayfasi';
 import FinansalTakipSayfasi from './pages/FinansalTakipSayfasi';
 import ProformaFaturaSayfasi from './pages/ProformaFaturaSayfasi';
@@ -44,13 +45,11 @@ function App() {
               </KorumaliRota>
             }
           >
-            {/* "/" (Genel Bakis) ve "/kasa" (Ana Kasa) ARTIK AYNI SAYFA -
-                onceden iki farkli dosyaydi (GenelBakisSayfasi.jsx ile
-                KasaSayfasi.jsx), bu da kafa karistirici, birbirinden
-                bagimsiz iki kopya haline gelmisti. Tek bir bilesen
-                kullanilarak birlestirildi; /kasa yolu da eski linkler
-                kirilmasin diye ayni bilesene yonlendirilmeye devam ediyor. */}
-            <Route index element={<YetkiliSayfa gerekliIzin="KASA_GORUNTULE"><KasaSayfasi /></YetkiliSayfa>} />
+            {/* "/" artik genel Dashboard - Ana Kasa, Bankalar, Stok, Kiralik
+                Urunler ve Odeme/Alacak ozetlerini tek ekranda gosterir, her
+                kutu ilgili detay sayfasina goturur. Ana Kasa'nin kendisi
+                "/kasa" yolunda ayri bir sayfa olarak durmaya devam ediyor. */}
+            <Route index element={<DashboardSayfasi />} />
             <Route path="cariler" element={<YetkiliSayfa gerekliIzin="CARI_GORUNTULE"><CarilerSayfasi /></YetkiliSayfa>} />
             <Route path="stok" element={<YetkiliSayfa gerekliIzin="STOK_GORUNTULE"><StokSayfasi /></YetkiliSayfa>} />
             <Route path="siparisler" element={<SiparislerSayfasi />} />
