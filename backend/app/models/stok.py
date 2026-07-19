@@ -196,3 +196,25 @@ class SiparisOdeme(Base):
     tutar = Column(Numeric(18, 2), nullable=False)  # siparisin kendi para biriminde (orn. USD)
     notlar = Column(String(300))
     olusturma_tarihi = Column(DateTime, server_default=func.now())
+
+
+class GumrukBeyannamesi(Base):
+    """
+    Bir ithalat siparisine ait gumruk beyannamesi kaydi (beyanname no,
+    tarihi, gumruk musaviri cari'si ve odenen tutar). Bir siparise birden
+    fazla beyanname acilabilir (kismi teslimatlarda oldugu gibi).
+    """
+    __tablename__ = "gumruk_beyannameleri"
+
+    id = Column(BigInteger, primary_key=True)
+    sirket_id = Column(BigInteger, ForeignKey("sirketler.id"), nullable=False)
+    siparis_id = Column(BigInteger, ForeignKey("siparisler.id"), nullable=False)
+    beyanname_no = Column(String(100))
+    beyanname_tarihi = Column(Date, nullable=False)
+    gumruk_musaviri_cari_id = Column(BigInteger, ForeignKey("cari_hesaplar.id"))
+    tutar = Column(Numeric(18, 2), nullable=False)
+    para_birimi = Column(String(10), nullable=False, default="TRY")
+    kur = Column(Numeric(18, 6), nullable=False, default=1)
+    tutar_try = Column(Numeric(18, 2), nullable=False)
+    notlar = Column(String(500))
+    olusturma_tarihi = Column(DateTime, server_default=func.now())
