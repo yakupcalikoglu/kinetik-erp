@@ -197,12 +197,24 @@ def banka_hareketi_olustur(
                 "Döviz alım/satım işlemi için kullanilan_kur zorunludur."
             )
 
+    # ONEMLI: HESAPLAR_ARASI_TRANSFER / DOVIZ_ALIM / DOVIZ_SATIM icin,
+    # kullanicinin "tutar" alanina dogru isareti (+/-) elle girmesine
+    # GUVENMIYORUZ artik - bu, kullanicinin yanlislikla hem kaynak hem
+    # karsi hesaba ayni isaretli (orn. ikisi de negatif) tutar girmesine
+    # yol acan bir hataydi. Bunun yerine: girilen tutarin MUTLAK DEGERI
+    # alinir, kaynak hesaptan HER ZAMAN cikar (negatif islenir), karsi
+    # hesaba HER ZAMAN (kur ile carpilmis) pozitif olarak islenir.
+    if istek.tip in _CIFT_TARAFLI_TIPLER:
+        kaynak_tutar = -abs(istek.tutar)
+    else:
+        kaynak_tutar = istek.tutar
+
     ana_hareket = BankaHareketi(
         sirket_id=sirket_id,
         banka_hesap_id=istek.banka_hesap_id,
         tarih=istek.tarih,
         tip=istek.tip,
-        tutar=istek.tutar,
+        tutar=kaynak_tutar,
         aciklama=istek.aciklama,
         karsi_hesap_id=istek.karsi_hesap_id,
         kullanilan_kur=istek.kullanilan_kur,
@@ -214,7 +226,7 @@ def banka_hareketi_olustur(
 
     if istek.tip in _CIFT_TARAFLI_TIPLER and istek.karsi_hesap_id is not None:
         carpan = istek.kullanilan_kur if istek.kullanilan_kur else 1
-        karsi_tutar = -istek.tutar * carpan
+        karsi_tutar = abs(istek.tutar) * carpan
         karsi_hareket = BankaHareketi(
             sirket_id=sirket_id,
             banka_hesap_id=istek.karsi_hesap_id,
