@@ -257,3 +257,31 @@ class SiparisBakiyeYanit(BaseModel):
     toplam_siparis_tutari: Decimal
     toplam_odenen: Decimal
     kalan_bakiye: Decimal
+
+
+# ------------------------------------------------------ Gümrük Beyannamesi
+class GumrukBeyannamesiOlusturIstegi(BaseModel):
+    beyanname_no: str | None = None
+    beyanname_tarihi: date
+    gumruk_musaviri_cari_id: int | None = None
+    tutar: Decimal
+    para_birimi: str = "TRY"
+    kur: Decimal = Decimal("1")
+    notlar: str | None = None
+
+
+class GumrukBeyannamesiYanit(BaseModel):
+    id: int
+    siparis_id: int
+    beyanname_no: str | None
+    beyanname_tarihi: date
+    gumruk_musaviri_cari_id: int | None
+    gumruk_musaviri_unvan: str | None = None
+    tutar: Decimal
+    para_birimi: str
+    kur: Decimal
+    tutar_try: Decimal
+    notlar: str | None
+
+    class Config:
+        from_attributes = True
