@@ -123,13 +123,19 @@ def yedek_parca_hareketi_ekle(
             f"Yetersiz stok. Mevcut: {kayit.mevcut_miktar} {kayit.birim}"
         )
 
-    yeni = YedekParcaHareketi(yedek_parca_id=parca_id, **istek.model_dump())
+    birim_fiyat_try = (istek.birim_fiyat_orijinal * istek.kur) if istek.birim_fiyat_orijinal is not None else None
+
+    yeni = YedekParcaHareketi(
+        yedek_parca_id=parca_id, tarih=istek.tarih, yon=istek.yon, miktar=istek.miktar,
+        birim_fiyat_orijinal=istek.birim_fiyat_orijinal, para_birimi=istek.para_birimi, kur=istek.kur,
+        birim_fiyat_try=birim_fiyat_try, ilgili_cari_id=istek.ilgili_cari_id, aciklama=istek.aciklama,
+    )
     db.add(yeni)
 
     if istek.yon == YedekParcaHareketYon.GIRIS:
         kayit.mevcut_miktar = kayit.mevcut_miktar + istek.miktar
-        if istek.birim_fiyat_try:
-            kayit.birim_fiyat_try = istek.birim_fiyat_try
+        if birim_fiyat_try:
+            kayit.birim_fiyat_try = birim_fiyat_try  # guncel referans fiyat her zaman TL olarak tutulur
     else:
         kayit.mevcut_miktar = kayit.mevcut_miktar - istek.miktar
 
