@@ -78,3 +78,23 @@ class CariBakiyeYanit(BaseModel):
     toplam_giris: Decimal
     toplam_cikis: Decimal
     net_bakiye: Decimal
+
+
+# ---------------------------------------------------------- Toplu İçe Aktarma
+class CariTopluIceAktarSatiri(BaseModel):
+    tip: str = "DIGER"
+    unvan: str
+    vergi_no: str | None = None
+    vergi_dairesi: str | None = None
+    adres: str | None = None
+    telefon: str | None = None
+    email: str | None = None
+
+
+class CariTopluIceAktarIstegi(BaseModel):
+    satirlar: list[CariTopluIceAktarSatiri]
+
+
+class CariTopluIceAktarSonucu(BaseModel):
+    basarili_sayisi: int
+    hatali_satirlar: list[dict]
