@@ -1,0 +1,104 @@
+function DepoEnvanteriDetayi({ stokKartiId }) {
+  const [urunler, setUrunler] = useState(null);
+  const [hata, setHata] = useState(null);
+
+  useEffect(() => {
+    api.get('/stok-seri-no', { params: { stok_karti_id: stokKartiId, durum: 'DEPODA' } })
+      .then((r) => setUrunler(r.data))
+      .catch((e) => setHata(hataMesajiCikar(e)));
+  }, [stokKartiId]);
+
+  if (hata) return <div style={{ padding: '8px 16px', color: 'var(--kirmizi)', fontSize: 12.5 }}>{hata}</div>;
+  if (!urunler) return <div style={{ padding: '8px 16px', color: 'var(--metin-soluk)', fontSize: 12.5 }}>Yükleniyor...</div>;
+
+  return (
+    <div style={{ padding: '8px 16px 14px', background: 'var(--zemin)' }}>
+      <table style={{ width: '100%' }}>
+        <thead>
+          <tr>
+            {['Seri No', 'Şasi No', 'Toplam Maliyet'].map((b) => (
+              <th key={b} style={{ textAlign: 'left', padding: '6px 10px', fontSize: 11.5, color: 'var(--metin-ikincil)' }}>{b}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {urunler.map((u) => (
+            <tr key={u.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+              <td style={{ padding: '6px 10px', fontFamily: 'var(--font-mono)' }}>{u.seri_no}</td>
+              <td style={{ padding: '6px 10px', color: 'var(--metin-ikincil)' }}>{u.sasi_no || '—'}</td>
+              <td style={{ padding: '6px 10px' }}>{paraFormat(u.toplam_maliyet_try)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function DepoEnvanteriKarti() {
+  const [liste, setListe] = useState(null);
+  const [hata, setHata] = useState(null);
+  const [acikId, setAcikId] = useState(null);
+
+  useEffect(() => {
+    api.get('/raporlar/depo-envanteri').then((r) => setListe(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
+  }, []);
+
+  const genelToplam = liste ? liste.reduce((acc, g) => acc + Number(g.toplam_deger_try), 0) : 0;
+
+  return (
+    <Kart style={{ marginBottom: 16 }}>
+      <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 14 }}>Depo envanteri (ürün türüne göre)</div>
+      <div style={{ fontSize: 12, color: 'var(--metin-ikincil)', marginTop: -10, marginBottom: 14 }}>
+        Bir satıra tıklayınca o ürün türüne ait seri numaralarını görebilirsiniz.
+      </div>
+      <HataMesaji>{hata}</HataMesaji>
+      {!liste ? (
+        <div style={{ color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
+      ) : liste.length === 0 ? (
+        <BosDurum baslik="Depoda ürün yok" />
+      ) : (
+        <>
+          <table>
+            <thead>
+              <tr style={{ background: 'var(--zemin)' }}>
+                {['Ürün', 'Adet', 'Toplam Değer (TL)'].map((b) => (
+                  <th key={b} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 12, color: 'var(--metin-ikincil)' }}>{b}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {liste.map((g) => (
+                <Fragment key={g.stok_karti_id}>
+                  <tr
+                    onClick={() => setAcikId((mevcut) => (mevcut === g.stok_karti_id ? null : g.stok_karti_id))}
+                    style={{ borderTop: '1px solid var(--kenarlik)', cursor: 'pointer', background: acikId === g.stok_karti_id ? 'var(--zemin)' : 'transparent' }}
+                  >
+                    <td style={{ padding: '8px 12px' }}>
+                      {g.marka} {g.model}
+                      <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--lacivert)' }}>
+                        {acikId === g.stok_karti_id ? '▲ detayı gizle' : '▼ detay göster'}
+                      </span>
+                    </td>
+                    <td style={{ padding: '8px 12px' }}>{g.adet} {g.birim || 'adet'}</td>
+                    <td style={{ padding: '8px 12px', fontWeight: 500 }}>{paraFormat(g.toplam_deger_try)}</td>
+                  </tr>
+                  {acikId === g.stok_karti_id && (
+                    <tr>
+                      <td colSpan={3} style={{ padding: 0 }}>
+                        <DepoEnvanteriDetayi stokKartiId={g.stok_karti_id} />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              ))}
+            </tbody>
+          </table>
+          <div style={{ marginTop: 10, fontSize: 13, fontWeight: 600, textAlign: 'right' }}>
+            Genel toplam: {paraFormat(genelToplam)}
+          </div>
+        </>
+      )}
+    </Kart>
+  );
+}
