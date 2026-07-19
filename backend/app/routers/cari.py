@@ -14,6 +14,7 @@ from app.core.security import sifre_dogrula
 from app.schemas.cari import (
     VergiNoSorguIstegi, VergiNoSorguYaniti, CariOlusturIstegi,
     CariGuncelleIstegi, CariYanit, CariHareketYanit, CariBakiyeYanit,
+    CariTopluIceAktarIstegi, CariTopluIceAktarSonucu,
 )
 from app.services import uyumsoft_mock
 
@@ -68,6 +69,45 @@ def cari_olustur(
     db.commit()
     db.refresh(yeni)
     return yeni
+
+
+@router.post("/toplu-ice-aktar", response_model=CariTopluIceAktarSonucu,
+             dependencies=[Depends(izin_gerektir("CARI_DUZENLE"))])
+def cari_toplu_ice_aktar(
+    istek: CariTopluIceAktarIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
+):
+    """
+    Excel'den (orn. Akinsoft Wolvox gibi baska bir sistemden aktarilan)
+    cari listesini toplu olarak ekler. Her satir AYRI AYRI commit edilir -
+    boylece bir satirda hata olsa bile diger satirlar etkilenmez, sadece
+    hatali olanlar 'hatali_satirlar' listesinde geri bildirilir.
+    """
+    basarili = 0
+    hatalar = []
+    gecerli_tipler = {"MUSTERI", "TEDARIKCI", "PERSONEL", "ORTAK", "DIGER"}
+
+    for i, satir in enumerate(istek.satirlar, start=1):
+        try:
+            if not satir.unvan or not satir.unvan.strip():
+                raise ValueError("Unvan boş olamaz.")
+            tip = (satir.tip or "DIGER").strip().upper()
+            if tip not in gecerli_tipler:
+                tip = "DIGER"
+            yeni = CariHesap(
+                sirket_id=sirket_id, tip=tip, unvan=satir.unvan.strip(),
+                vergi_no=satir.vergi_no, vergi_dairesi=satir.vergi_dairesi,
+                adres=satir.adres, telefon=satir.telefon, email=satir.email,
+                otomatik_dolduruldu=False,
+            )
+            db.add(yeni)
+            db.commit()
+            basarili += 1
+        except Exception as e:
+            db.rollback()
+            hatalar.append({"satir_no": i, "unvan": satir.unvan, "hata": str(e)})
+
+    return CariTopluIceAktarSonucu(basarili_sayisi=basarili, hatali_satirlar=hatalar)
 
 
 @router.get("/{cari_id}", response_model=CariYanit,
