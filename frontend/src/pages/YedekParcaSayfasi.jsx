@@ -66,7 +66,7 @@ function HareketlerPaneli({ parca, cariler, onKapat, onDegisti }) {
   const [formAcik, setFormAcik] = useState(false);
   const [form, setForm] = useState({
     tarih: new Date().toISOString().slice(0, 10), yon: 'GIRIS', miktar: '',
-    birim_fiyat_try: '', ilgili_cari_id: '', aciklama: '',
+    birim_fiyat: '', para_birimi: 'TRY', kur: '1', ilgili_cari_id: '', aciklama: '',
   });
   const [hata, setHata] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
@@ -76,6 +76,14 @@ function HareketlerPaneli({ parca, cariler, onKapat, onDegisti }) {
   }
   useEffect(() => { yukle(); }, [parca.id]); // eslint-disable-line
 
+  useEffect(() => {
+    if (form.para_birimi !== 'TRY') {
+      api.get(`/kur/${form.para_birimi}`).then((r) => setForm((f) => ({ ...f, kur: String(r.data.kur) }))).catch(() => {});
+    }
+  }, [form.para_birimi]);
+
+  const tlKarsiligi = form.birim_fiyat && form.miktar ? Number(form.birim_fiyat) * Number(form.kur || 1) * Number(form.miktar) : null;
+
   async function ekle(e) {
     e.preventDefault();
     setHata(null);
@@ -83,12 +91,13 @@ function HareketlerPaneli({ parca, cariler, onKapat, onDegisti }) {
     try {
       await api.post(`/yedek-parcalar/${parca.id}/hareketler`, {
         tarih: form.tarih, yon: form.yon, miktar: Number(form.miktar),
-        birim_fiyat_try: form.birim_fiyat_try ? Number(form.birim_fiyat_try) : null,
+        birim_fiyat_orijinal: form.birim_fiyat ? Number(form.birim_fiyat) : null,
+        para_birimi: form.para_birimi, kur: Number(form.kur || 1),
         ilgili_cari_id: form.ilgili_cari_id ? Number(form.ilgili_cari_id) : null,
         aciklama: form.aciklama || null,
       });
       setFormAcik(false);
-      setForm({ tarih: new Date().toISOString().slice(0, 10), yon: 'GIRIS', miktar: '', birim_fiyat_try: '', ilgili_cari_id: '', aciklama: '' });
+      setForm({ tarih: new Date().toISOString().slice(0, 10), yon: 'GIRIS', miktar: '', birim_fiyat: '', para_birimi: 'TRY', kur: '1', ilgili_cari_id: '', aciklama: '' });
       yukle();
       onDegisti();
     } catch (err) {
@@ -137,9 +146,28 @@ function HareketlerPaneli({ parca, cariler, onKapat, onDegisti }) {
               <input required type="number" step="0.01" value={form.miktar} onChange={(e) => setForm((f) => ({ ...f, miktar: e.target.value }))} style={girdiStili} />
             </Alan>
             {form.yon === 'GIRIS' && (
-              <Alan etiket="Birim fiyat (TL, opsiyonel — güncel fiyatı günceller)">
-                <input type="number" step="0.01" value={form.birim_fiyat_try} onChange={(e) => setForm((f) => ({ ...f, birim_fiyat_try: e.target.value }))} style={girdiStili} />
-              </Alan>
+              <>
+                <Alan etiket="Birim fiyat (opsiyonel — güncel fiyatı günceller)">
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <input type="number" step="0.01" value={form.birim_fiyat} onChange={(e) => setForm((f) => ({ ...f, birim_fiyat: e.target.value }))} style={{ ...girdiStili, flex: 1 }} />
+                    <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={{ ...girdiStili, width: 80 }}>
+                      <option value="TRY">TL</option>
+                      <option value="USD">USD</option>
+                      <option value="EUR">EUR</option>
+                    </select>
+                  </div>
+                </Alan>
+                {form.para_birimi !== 'TRY' && (
+                  <Alan etiket={`Kur (${form.para_birimi} → TL) — otomatik, değiştirilebilir`}>
+                    <input type="number" step="0.0001" value={form.kur} onChange={(e) => setForm((f) => ({ ...f, kur: e.target.value }))} style={girdiStili} />
+                  </Alan>
+                )}
+                {tlKarsiligi != null && form.para_birimi !== 'TRY' && (
+                  <div style={{ fontSize: 12, color: 'var(--metin-ikincil)', alignSelf: 'end', paddingBottom: 8 }}>
+                    Toplam ≈ {paraFormat(tlKarsiligi)}
+                  </div>
+                )}
+              </>
             )}
             <Alan etiket="İlgili cari (opsiyonel)">
               <AramaliSecici secenekler={cariler} deger={form.ilgili_cari_id} onDegistir={(v) => setForm((f) => ({ ...f, ilgili_cari_id: v }))} etiketFn={(c) => c.unvan} />
@@ -160,7 +188,7 @@ function HareketlerPaneli({ parca, cariler, onKapat, onDegisti }) {
         <table style={{ width: '100%', background: 'white' }}>
           <thead>
             <tr>
-              {['Tarih', 'Yön', 'Miktar', 'Birim Fiyat', 'Cari', 'Açıklama', ''].map((b) => (
+              {['Tarih', 'Yön', 'Miktar', 'Birim Fiyat', 'TL Karşılığı', 'Cari', 'Açıklama', ''].map((b) => (
                 <th key={b} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 12, color: 'var(--metin-ikincil)' }}>{b}</th>
               ))}
             </tr>
@@ -173,7 +201,12 @@ function HareketlerPaneli({ parca, cariler, onKapat, onDegisti }) {
                   <Etiket ton={h.yon === 'GIRIS' ? 'yesil' : 'kirmizi'}>{h.yon === 'GIRIS' ? 'Giriş' : 'Çıkış'}</Etiket>
                 </td>
                 <td style={{ padding: '8px 12px', fontWeight: 500 }}>{h.miktar} {parca.birim}</td>
-                <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{h.birim_fiyat_try != null ? paraFormat(h.birim_fiyat_try) : '—'}</td>
+                <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>
+                  {h.birim_fiyat_orijinal != null ? paraFormat(h.birim_fiyat_orijinal, h.para_birimi) : '—'}
+                </td>
+                <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>
+                  {h.para_birimi !== 'TRY' && h.birim_fiyat_try != null ? paraFormat(h.birim_fiyat_try) : (h.para_birimi === 'TRY' ? '—' : '—')}
+                </td>
                 <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{h.ilgili_cari_unvan || '—'}</td>
                 <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{h.aciklama || '—'}</td>
                 <td style={{ padding: '8px 12px' }}>
