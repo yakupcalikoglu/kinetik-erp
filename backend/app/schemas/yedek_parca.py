@@ -38,7 +38,9 @@ class YedekParcaHareketOlusturIstegi(BaseModel):
     tarih: date
     yon: YedekParcaHareketYon
     miktar: Decimal
-    birim_fiyat_try: Decimal | None = None  # GIRIS icin verilirse guncel birim fiyatini gunceller
+    birim_fiyat_orijinal: Decimal | None = None  # girilen tutar, kendi para biriminde
+    para_birimi: str = "TRY"
+    kur: Decimal = Decimal("1")
     ilgili_cari_id: int | None = None
     aciklama: str | None = None
 
@@ -49,6 +51,9 @@ class YedekParcaHareketYanit(BaseModel):
     tarih: date
     yon: YedekParcaHareketYon
     miktar: Decimal
+    birim_fiyat_orijinal: Decimal | None
+    para_birimi: str
+    kur: Decimal
     birim_fiyat_try: Decimal | None
     ilgili_cari_id: int | None
     ilgili_cari_unvan: str | None = None
