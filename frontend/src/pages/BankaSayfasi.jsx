@@ -525,9 +525,9 @@ function YeniBankaHareketiFormu({ hesaplar, onKaydedildi, onVazgec }) {
             <Alan etiket="Tarih">
               <input required type="date" value={form.tarih} onChange={(e) => setForm((f) => ({ ...f, tarih: e.target.value }))} style={girdiStili} />
             </Alan>
-            <Alan etiket={ciftTarafli ? 'Tutar (kaynaktan çıkan, negatif girin)' : 'Tutar'}>
+            <Alan etiket={ciftTarafli ? 'Tutar (kaynak hesaptan çıkacak miktar, pozitif girin)' : 'Tutar'}>
               <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))}
-                placeholder={ciftTarafli ? 'Örn: -10000' : ''} style={girdiStili} />
+                placeholder={ciftTarafli ? 'Örn: 10000' : ''} style={girdiStili} />
             </Alan>
             {ciftTarafli && (
               <>
