@@ -4,7 +4,8 @@ import { useAuth } from '../context/AuthContext';
 import { api, hataMesajiCikar } from '../api/client';
 
 const MODULLER = [
-  { yol: '/', ad: 'Ana Kasa', simge: '▤', gerekliIzin: 'KASA_GORUNTULE' },
+  { yol: '/', ad: 'Dashboard', simge: '⌂' },
+  { yol: '/kasa', ad: 'Ana Kasa', simge: '▤', gerekliIzin: 'KASA_GORUNTULE' },
   { yol: '/cariler', ad: 'Cari', simge: '◑', gerekliIzin: 'CARI_GORUNTULE' },
   { yol: '/stok', ad: 'Stok', simge: '◫', gerekliIzin: 'STOK_GORUNTULE' },
   { yol: '/siparisler', ad: 'Siparişler', simge: '⇄' },
