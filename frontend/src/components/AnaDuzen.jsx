@@ -15,6 +15,7 @@ const MODULLER = [
   { yol: '/raporlar', ad: 'Raporlar', simge: '◔' },
   { yol: '/satis-yap', ad: 'Satış Yap', simge: '💰', gerekliIzin: 'STOK_DUZENLE' },
   { yol: '/urun-tanimlari', ad: 'Ürün Tanımları', simge: '📦', gerekliIzin: 'STOK_GORUNTULE' },
+  { yol: '/yedek-parcalar', ad: 'Yedek Parça / Sarf', simge: '🔧', gerekliIzin: 'STOK_GORUNTULE' },
   { yol: '/harcama-turleri', ad: 'Harcama Türleri', simge: '☰' },
   { yol: '/yonetici-paneli', ad: 'Yönetici Paneli', simge: '⚙', gerekliIzin: 'KULLANICI_YONET' },
 ];
