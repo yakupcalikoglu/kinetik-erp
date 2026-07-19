@@ -45,6 +45,7 @@ app.include_router(virman.router)
 app.include_router(harcama_turu.router)
 app.include_router(kaynak_detay.router)
 app.include_router(kaynak_detay.bekleyen_router)
+app.include_router(yedek_parca.router)
 
 
 @app.get("/")
