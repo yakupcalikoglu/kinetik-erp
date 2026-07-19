@@ -6,14 +6,19 @@ from sqlalchemy import select, func
 
 from app.db.session import get_db
 from app.core.deps import aktif_sirket_id_getir, izin_gerektir
-from app.models.stok import StokSeriNo, StokKarti, StokDurum
+from app.models.stok import StokSeriNo, StokKarti, StokDurum, Siparis, SiparisOdeme, SiparisDetay
 from app.models.cari import CariHesap, CariHareket
-from app.models.banka import KasaHareketi
+from app.models.banka import KasaHareketi, BankaHesabi, BankaHareketi
 from app.models.finansal import (
-    Cek, CekDurum, TaksitDetay, TaksitliSatisPlani,
+    Cek, CekDurum, CekTip, TaksitDetay, TaksitliSatisPlani,
     KiralamaOdeme, KiralamaSozlesme, BakimKaydi, BakimTip,
+    LeasingOdeme, LeasingSozlesme,
 )
-from app.models.diger import PersonelOdeme, Personel, SabitGider, BorcOdeme, Borc
+from app.models.akreditif import Akreditif, AkreditifKalemi, AkreditifDurum
+from app.models.akreditif_taksit import AkreditifKalemTaksiti
+from app.models.diger import PersonelOdeme, Personel, SabitGider, BorcOdeme, Borc, BorcTip
+from app.models.yedek_parca import YedekParca
+from app.services.kur_servisi import guncel_kur_getir
 from app.schemas.raporlama import (
     SeriNoRaporYaniti, HareketTuruRaporYaniti, HareketTuruSatiri,
     AnaKasaOzetYaniti, GenelBakisYaniti, YaklasanVadeSatiri, YaklasanVadelerYaniti,
@@ -665,3 +670,234 @@ def aktif_kiralamalar(
         )
         for sozlesme, seri, kart, cari in kayitlar
     ]
+
+
+class NetDurumKalemi(BaseModel):
+    kategori: str
+    tutar_try: Decimal
+
+
+class NetDurumYaniti(BaseModel):
+    varliklar: list[NetDurumKalemi]
+    alacaklar: list[NetDurumKalemi]
+    borclar: list[NetDurumKalemi]
+    toplam_varlik_try: Decimal
+    toplam_alacak_try: Decimal
+    toplam_borc_try: Decimal
+    net_deger_try: Decimal
+
+
+@router.get("/net-durum", response_model=NetDurumYaniti,
+            dependencies=[Depends(izin_gerektir("RAPOR_GORUNTULE"))])
+async def net_durum(
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Sirketin genel mali durumunun (bilanco benzeri) ozeti: nakit + stok
+    (VARLIK), musteri/cek/taksit/kiralama alacaklari (ALACAK), akreditif/
+    leasing/cek/ortak-dis borc/tedarikci (BORC) kalemlerini TL karsiligi
+    olarak toplar. Dovizli kalemler icin GUNCEL kur kullanilir (gecmis
+    kur degil) - bu yuzden rakam gunden gune kur hareketine gore
+    degisebilir, sadece 'su an' icin yaklasik bir gostergedir.
+    """
+    kur_cache: dict[str, Decimal] = {}
+
+    async def kur_getir(pb: str) -> Decimal:
+        if pb == "TRY":
+            return Decimal("1")
+        if pb not in kur_cache:
+            k = await guncel_kur_getir(pb)
+            kur_cache[pb] = Decimal(str(k)) if k else Decimal("0")
+        return kur_cache[pb]
+
+    # ------------------------------------------------------------- VARLIKLAR
+    # 1) Ana Kasa (nakit)
+    kasa_hareketleri = list(db.execute(select(KasaHareketi).where(KasaHareketi.sirket_id == sirket_id)).scalars())
+    kasa_bakiye_try = Decimal("0")
+    for h in kasa_hareketleri:
+        tutar_try = h.tutar_try_karsiligi if h.tutar_try_karsiligi is not None else h.tutar
+        kasa_bakiye_try += tutar_try if h.yon == "GIRIS" else -tutar_try
+
+    # 2) Banka (guncel kurla TL karsiligi)
+    banka_sorgu = (
+        select(BankaHesabi.para_birimi, func.coalesce(func.sum(BankaHareketi.tutar), 0).label("bakiye"))
+        .outerjoin(BankaHareketi, BankaHareketi.banka_hesap_id == BankaHesabi.id)
+        .where(BankaHesabi.sirket_id == sirket_id)
+        .group_by(BankaHesabi.id, BankaHesabi.para_birimi)
+    )
+    banka_bakiye_try = Decimal("0")
+    for r in db.execute(banka_sorgu).all():
+        kur = await kur_getir(r.para_birimi)
+        banka_bakiye_try += Decimal(r.bakiye) * kur
+
+    # 3) Stok (henuz SATILMAMIS urunlerin toplam maliyeti)
+    stok_urunleri = list(db.execute(
+        select(StokSeriNo).where(StokSeriNo.sirket_id == sirket_id, StokSeriNo.durum != StokDurum.SATILDI)
+    ).scalars())
+    stok_degeri_try = sum((
+        u.satinalma_maliyeti_try + u.nakliye_maliyeti_try + u.gumruk_maliyeti_try +
+        u.antrepo_maliyeti_try + u.millilestirme_maliyeti_try + u.leasing_maliyeti_try + u.diger_maliyet_try
+        for u in stok_urunleri
+    ), Decimal("0"))
+
+    # 4) Yedek parca / sarf malzeme
+    yedek_parcalar = list(db.execute(select(YedekParca).where(YedekParca.sirket_id == sirket_id)).scalars())
+    yedek_parca_degeri_try = sum((p.mevcut_miktar * p.birim_fiyat_try for p in yedek_parcalar), Decimal("0"))
+
+    # ------------------------------------------------------------- ALACAKLAR
+    # 5) Cari bakiyeleri - pozitif olanlar (bize borclu olanlar) alacak sayilir
+    cariler_hepsi = list(db.execute(select(CariHesap).where(CariHesap.sirket_id == sirket_id)).scalars())
+    cari_alacak_try = Decimal("0")
+    cari_borc_try = Decimal("0")
+    for c in cariler_hepsi:
+        usd_kur = await kur_getir("USD")
+        eur_kur = await kur_getir("EUR")
+        net = Decimal(c.bakiye_try or 0) + Decimal(c.bakiye_usd or 0) * usd_kur + Decimal(c.bakiye_eur or 0) * eur_kur
+        if net > 0:
+            cari_alacak_try += net
+        elif net < 0:
+            cari_borc_try += -net
+
+    # 6) Taksitli satis - henuz tahsil edilmemis taksitlerin toplami (TRY sabit)
+    taksitli_taksitler = list(db.execute(
+        select(TaksitDetay)
+        .join(TaksitliSatisPlani, TaksitliSatisPlani.id == TaksitDetay.plan_id)
+        .where(TaksitliSatisPlani.sirket_id == sirket_id, TaksitDetay.odendi_mi.is_(False))
+    ).scalars())
+    taksit_alacak_try = sum((t.tutar for t in taksitli_taksitler), Decimal("0"))
+
+    # 7) Kiralama - henuz tahsil edilmemis donemlerin toplami
+    kiralama_sozlesmeler = {
+        s.id: s for s in db.execute(select(KiralamaSozlesme).where(KiralamaSozlesme.sirket_id == sirket_id)).scalars()
+    }
+    kiralama_odemeleri = list(db.execute(
+        select(KiralamaOdeme).where(
+            KiralamaOdeme.sozlesme_id.in_(list(kiralama_sozlesmeler.keys())) if kiralama_sozlesmeler else False,
+            KiralamaOdeme.odendi_mi.is_(False),
+        )
+    ).scalars()) if kiralama_sozlesmeler else []
+    kiralama_alacak_try = Decimal("0")
+    for o in kiralama_odemeleri:
+        sozlesme = kiralama_sozlesmeler.get(o.sozlesme_id)
+        pb = sozlesme.para_birimi.value if sozlesme else "TRY"
+        kur = await kur_getir(pb)
+        kiralama_alacak_try += o.tutar * kur
+
+    # 8) Alinan cekler (portfoyde, henuz tahsil edilmemis)
+    alinan_cekler = list(db.execute(
+        select(Cek).where(Cek.sirket_id == sirket_id, Cek.durum == CekDurum.PORTFOYDE, Cek.tip == CekTip.ALINAN)
+    ).scalars())
+    cek_alacak_try = Decimal("0")
+    for c in alinan_cekler:
+        kur = await kur_getir(c.para_birimi.value if hasattr(c.para_birimi, "value") else c.para_birimi)
+        cek_alacak_try += c.tutar * kur
+
+    # 9) Ortaga verilen borclarin kalan bakiyesi (bize geri donecek)
+    tum_borclar = list(db.execute(select(Borc).where(Borc.sirket_id == sirket_id)).scalars())
+    ortak_alacak_try = Decimal("0")
+    ortak_borc_try = Decimal("0")
+    for b in tum_borclar:
+        odenen = db.execute(
+            select(func.coalesce(func.sum(BorcOdeme.tutar), 0)).where(BorcOdeme.borc_id == b.id)
+        ).scalar_one()
+        kalan = b.tutar - odenen
+        if kalan <= 0:
+            continue
+        pb = b.para_birimi.value if hasattr(b.para_birimi, "value") else b.para_birimi
+        kur = await kur_getir(pb)
+        kalan_try = kalan * kur
+        if b.tip == BorcTip.ORTAGA_VERILEN:
+            ortak_alacak_try += kalan_try
+        else:
+            ortak_borc_try += kalan_try
+
+    # --------------------------------------------------------------- BORCLAR
+    # 10) Akreditif - odenmemis kalemler (taksitlendirilmisse taksitlerin odenmemis toplami)
+    acik_akreditifler = list(db.execute(
+        select(Akreditif).where(Akreditif.sirket_id == sirket_id, Akreditif.durum != AkreditifDurum.IPTAL)
+    ).scalars())
+    akreditif_borc_try = Decimal("0")
+    for ak in acik_akreditifler:
+        kalemler = list(db.execute(select(AkreditifKalemi).where(AkreditifKalemi.akreditif_id == ak.id)).scalars())
+        pb = ak.para_birimi if isinstance(ak.para_birimi, str) else ak.para_birimi.value
+        kur = await kur_getir(pb)
+        for k in kalemler:
+            if k.odendi_mi:
+                continue
+            taksitler = list(db.execute(select(AkreditifKalemTaksiti).where(AkreditifKalemTaksiti.kalem_id == k.id)).scalars())
+            if taksitler:
+                tutar = sum((t.tutar for t in taksitler if not t.odendi_mi), Decimal("0"))
+            else:
+                tutar = k.tutar
+            akreditif_borc_try += tutar * kur
+
+    # 11) Leasing - odenmemis taksitler
+    leasing_sozlesmeler = list(db.execute(select(LeasingSozlesme).where(LeasingSozlesme.sirket_id == sirket_id)).scalars())
+    leasing_borc_try = Decimal("0")
+    for l in leasing_sozlesmeler:
+        odemeler = list(db.execute(
+            select(LeasingOdeme).where(LeasingOdeme.leasing_id == l.id, LeasingOdeme.odendi_mi.is_(False))
+        ).scalars())
+        pb = l.para_birimi if isinstance(l.para_birimi, str) else l.para_birimi.value
+        kur = await kur_getir(pb)
+        leasing_borc_try += sum((o.tutar for o in odemeler), Decimal("0")) * kur
+
+    # 12) Verilen cekler (portfoyde, henuz odenmemis)
+    verilen_cekler = list(db.execute(
+        select(Cek).where(Cek.sirket_id == sirket_id, Cek.durum == CekDurum.PORTFOYDE, Cek.tip == CekTip.VERILEN)
+    ).scalars())
+    cek_borc_try = Decimal("0")
+    for c in verilen_cekler:
+        kur = await kur_getir(c.para_birimi.value if hasattr(c.para_birimi, "value") else c.para_birimi)
+        cek_borc_try += c.tutar * kur
+
+    # 13) Tedarikciye olan kalan borc (siparisler)
+    siparisler = list(db.execute(
+        select(Siparis).where(Siparis.sirket_id == sirket_id, Siparis.durum.notin_(["TASLAK", "IPTAL"]))
+    ).scalars())
+    siparis_borc_try = Decimal("0")
+    for s in siparisler:
+        urunler = list(db.execute(select(SiparisDetay).where(SiparisDetay.siparis_id == s.id)).scalars())
+        toplam_tutar = sum((u.miktar * u.birim_fiyat for u in urunler), Decimal("0"))
+        odenen = db.execute(
+            select(func.coalesce(func.sum(SiparisOdeme.tutar), 0)).where(SiparisOdeme.siparis_id == s.id)
+        ).scalar_one()
+        kalan = toplam_tutar - odenen
+        if kalan <= 0:
+            continue
+        pb = s.para_birimi if isinstance(s.para_birimi, str) else s.para_birimi.value
+        kur = await kur_getir(pb)
+        siparis_borc_try += kalan * kur
+
+    varliklar = [
+        NetDurumKalemi(kategori="Ana Kasa (Nakit)", tutar_try=kasa_bakiye_try),
+        NetDurumKalemi(kategori="Banka", tutar_try=banka_bakiye_try),
+        NetDurumKalemi(kategori="Stok (satılmamış ürünler)", tutar_try=stok_degeri_try),
+        NetDurumKalemi(kategori="Yedek Parça / Sarf Malzeme", tutar_try=yedek_parca_degeri_try),
+    ]
+    alacaklar = [
+        NetDurumKalemi(kategori="Cari Hesaplardan Alacak", tutar_try=cari_alacak_try),
+        NetDurumKalemi(kategori="Taksitli Satış Alacağı", tutar_try=taksit_alacak_try),
+        NetDurumKalemi(kategori="Kiralama Tahsilat Alacağı", tutar_try=kiralama_alacak_try),
+        NetDurumKalemi(kategori="Alınan Çekler (Portföyde)", tutar_try=cek_alacak_try),
+        NetDurumKalemi(kategori="Ortağa Verilen Borç (Alacak)", tutar_try=ortak_alacak_try),
+    ]
+    borclar = [
+        NetDurumKalemi(kategori="Cari Hesaplara Borç", tutar_try=cari_borc_try),
+        NetDurumKalemi(kategori="Akreditif (Ödenmemiş)", tutar_try=akreditif_borc_try),
+        NetDurumKalemi(kategori="Leasing (Ödenmemiş Taksitler)", tutar_try=leasing_borc_try),
+        NetDurumKalemi(kategori="Verilen Çekler (Portföyde)", tutar_try=cek_borc_try),
+        NetDurumKalemi(kategori="Ortaktan/Dışarıdan Alınan Borç", tutar_try=ortak_borc_try),
+        NetDurumKalemi(kategori="Tedarikçilere Olan Borç (Sipariş)", tutar_try=siparis_borc_try),
+    ]
+
+    toplam_varlik = sum((v.tutar_try for v in varliklar), Decimal("0"))
+    toplam_alacak = sum((a.tutar_try for a in alacaklar), Decimal("0"))
+    toplam_borc = sum((b.tutar_try for b in borclar), Decimal("0"))
+
+    return NetDurumYaniti(
+        varliklar=varliklar, alacaklar=alacaklar, borclar=borclar,
+        toplam_varlik_try=toplam_varlik, toplam_alacak_try=toplam_alacak, toplam_borc_try=toplam_borc,
+        net_deger_try=(toplam_varlik + toplam_alacak) - toplam_borc,
+    )
