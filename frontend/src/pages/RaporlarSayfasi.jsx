@@ -587,6 +587,7 @@ export default function RaporlarSayfasi() {
     <div>
       <SayfaBasligi baslik="Raporlar" aciklama="Genel bakış, yaklaşan vadeler, envanter, hareket türü, ürün ve cari bazlı raporlar" />
       <GenelBakisKarti />
+      <KarMarjiKarti />
       <YaklasanVadelerKarti />
       <AnaKasaOzetKarti />
       <DepoEnvanteriKarti />
