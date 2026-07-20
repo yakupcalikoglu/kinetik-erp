@@ -214,11 +214,15 @@ def _kira_geliri_satirlari(db, sirket_id, baslangic, bitis):
         sorgu = sorgu.where(KiralamaOdeme.odeme_tarihi >= baslangic)
     if bitis:
         sorgu = sorgu.where(KiralamaOdeme.odeme_tarihi <= bitis)
-    return [
-        HareketTuruSatiri(tarih=o.odeme_tarihi, tur="KIRA_GELIRI",
-                           aciklama=f"Dönem: {o.donem_basi} - {o.donem_sonu}", tutar=o.tutar, cari_id=cari_id)
-        for o, cari_id in db.execute(sorgu).all()
-    ]
+    sonuc = []
+    for o, cari_id in db.execute(sorgu).all():
+        cari = db.get(CariHesap, cari_id) if cari_id else None
+        sonuc.append(HareketTuruSatiri(
+            tarih=o.odeme_tarihi, tur="KIRA_GELIRI",
+            aciklama=f"Dönem: {o.donem_basi} - {o.donem_sonu}" + (f" — {cari.unvan}" if cari else ""),
+            tutar=o.tutar, cari_id=cari_id, cari_unvan=cari.unvan if cari else None,
+        ))
+    return sonuc
 
 
 def _kira_gideri_satirlari(db, sirket_id, baslangic, bitis):
@@ -232,8 +236,9 @@ def _kira_gideri_satirlari(db, sirket_id, baslangic, bitis):
         sorgu = sorgu.where(SabitGider.odeme_tarihi <= bitis)
     satirlar = []
     for g in db.execute(sorgu).scalars():
+        aciklama = f"{g.kategori or 'Diğer'}" + (f" — {g.aciklama}" if g.aciklama else "")
         satirlar.append(HareketTuruSatiri(tarih=g.odeme_tarihi, tur="SABIT_GIDER",
-                                           aciklama=g.aciklama, tutar=g.tutar))
+                                           aciklama=aciklama, tutar=g.tutar_try))
     return satirlar
 
 
@@ -247,10 +252,15 @@ def _borc_odeme_satirlari(db, sirket_id, baslangic, bitis):
         sorgu = sorgu.where(BorcOdeme.tarih >= baslangic)
     if bitis:
         sorgu = sorgu.where(BorcOdeme.tarih <= bitis)
-    return [
-        HareketTuruSatiri(tarih=o.tarih, tur="BORC_ODEME", aciklama=o.aciklama, tutar=o.tutar, cari_id=cari_id)
-        for o, cari_id in db.execute(sorgu).all()
-    ]
+    sonuc = []
+    for o, cari_id in db.execute(sorgu).all():
+        cari = db.get(CariHesap, cari_id) if cari_id else None
+        sonuc.append(HareketTuruSatiri(
+            tarih=o.tarih, tur="BORC_ODEME",
+            aciklama=(o.aciklama or "Borç ödemesi") + (f" — {cari.unvan}" if cari else ""),
+            tutar=o.tutar, cari_id=cari_id, cari_unvan=cari.unvan if cari else None,
+        ))
+    return sonuc
 
 
 def _bakim_satirlari(db, sirket_id, baslangic, bitis, tip):
@@ -259,11 +269,37 @@ def _bakim_satirlari(db, sirket_id, baslangic, bitis, tip):
         sorgu = sorgu.where(BakimKaydi.tarih >= baslangic)
     if bitis:
         sorgu = sorgu.where(BakimKaydi.tarih <= bitis)
-    return [
-        HareketTuruSatiri(tarih=b.tarih, tur=f"BAKIM_{tip.value}", aciklama=b.aciklama,
-                           tutar=b.tutar, cari_id=b.ilgili_cari_id)
-        for b in db.execute(sorgu).scalars()
-    ]
+    kayitlar = list(db.execute(sorgu).scalars())
+
+    urun_haritasi = {}
+    if kayitlar:
+        urunler = list(db.execute(
+            select(StokSeriNo).where(StokSeriNo.id.in_([k.stok_seri_no_id for k in kayitlar]))
+        ).scalars())
+        kart_haritasi = {
+            kart.id: kart for kart in db.execute(
+                select(StokKarti).where(StokKarti.id.in_([u.stok_karti_id for u in urunler]))
+            ).scalars()
+        } if urunler else {}
+        urun_haritasi = {
+            u.id: f"{u.seri_no}" + (f" ({kart_haritasi[u.stok_karti_id].marka} {kart_haritasi[u.stok_karti_id].model})" if u.stok_karti_id in kart_haritasi else "")
+            for u in urunler
+        }
+
+    sonuc = []
+    for b in kayitlar:
+        cari = db.get(CariHesap, b.ilgili_cari_id) if b.ilgili_cari_id else None
+        urun_bilgisi = urun_haritasi.get(b.stok_seri_no_id, f"#{b.stok_seri_no_id}")
+        aciklama_parcalari = [urun_bilgisi]
+        if b.aciklama:
+            aciklama_parcalari.append(b.aciklama)
+        if cari:
+            aciklama_parcalari.append(cari.unvan)
+        sonuc.append(HareketTuruSatiri(
+            tarih=b.tarih, tur=f"BAKIM_{tip.value}", aciklama=" — ".join(aciklama_parcalari),
+            tutar=b.tutar, cari_id=b.ilgili_cari_id, cari_unvan=cari.unvan if cari else None,
+        ))
+    return sonuc
 
 
 def _akreditif_satirlari(db, sirket_id, baslangic, bitis):
@@ -307,7 +343,7 @@ def _leasing_satirlari(db, sirket_id, baslangic, bitis):
     from app.models.finansal import LeasingOdeme, LeasingSozlesme
 
     sorgu = (
-        select(LeasingOdeme, LeasingSozlesme.sozlesme_no)
+        select(LeasingOdeme, LeasingSozlesme.sozlesme_no, LeasingSozlesme.leasing_firmasi_cari_id)
         .join(LeasingSozlesme, LeasingSozlesme.id == LeasingOdeme.leasing_id)
         .where(LeasingSozlesme.sirket_id == sirket_id, LeasingOdeme.odendi_mi.is_(True))
     )
@@ -315,11 +351,15 @@ def _leasing_satirlari(db, sirket_id, baslangic, bitis):
         sorgu = sorgu.where(LeasingOdeme.odeme_tarihi >= baslangic)
     if bitis:
         sorgu = sorgu.where(LeasingOdeme.odeme_tarihi <= bitis)
-    return [
-        HareketTuruSatiri(tarih=o.odeme_tarihi, tur="LEASING",
-                           aciklama=f"Leasing {no or ''} - Taksit {o.taksit_no}", tutar=o.tutar)
-        for o, no in db.execute(sorgu).all()
-    ]
+    sonuc = []
+    for o, no, firma_cari_id in db.execute(sorgu).all():
+        cari = db.get(CariHesap, firma_cari_id) if firma_cari_id else None
+        sonuc.append(HareketTuruSatiri(
+            tarih=o.odeme_tarihi, tur="LEASING",
+            aciklama=f"Leasing {no or ''} - Taksit {o.taksit_no}" + (f" — {cari.unvan}" if cari else ""),
+            tutar=o.tutar, cari_id=firma_cari_id, cari_unvan=cari.unvan if cari else None,
+        ))
+    return sonuc
 
 
 def _taksit_satirlari(db, sirket_id, baslangic, bitis):
@@ -332,11 +372,15 @@ def _taksit_satirlari(db, sirket_id, baslangic, bitis):
         sorgu = sorgu.where(TaksitDetay.odeme_tarihi >= baslangic)
     if bitis:
         sorgu = sorgu.where(TaksitDetay.odeme_tarihi <= bitis)
-    return [
-        HareketTuruSatiri(tarih=t.odeme_tarihi, tur="TAKSIT",
-                           aciklama=f"Taksit {t.taksit_no} tahsilatı", tutar=t.odenen_tutar or t.tutar, cari_id=cari_id)
-        for t, cari_id in db.execute(sorgu).all()
-    ]
+    sonuc = []
+    for t, cari_id in db.execute(sorgu).all():
+        cari = db.get(CariHesap, cari_id) if cari_id else None
+        sonuc.append(HareketTuruSatiri(
+            tarih=t.odeme_tarihi, tur="TAKSIT",
+            aciklama=f"Taksit {t.taksit_no} tahsilatı" + (f" — {cari.unvan}" if cari else ""),
+            tutar=t.odenen_tutar or t.tutar, cari_id=cari_id, cari_unvan=cari.unvan if cari else None,
+        ))
+    return sonuc
 
 
 def _cek_satirlari(db, sirket_id, baslangic, bitis):
@@ -357,10 +401,11 @@ def _cek_satirlari(db, sirket_id, baslangic, bitis):
     satirlar = []
     for gecmis, cek in db.execute(sorgu).all():
         isaret = 1 if gecmis.yeni_durum == _CekDurum.TAHSIL_EDILDI else -1
+        cari = db.get(CariHesap, cek.cari_id) if cek.cari_id else None
         satirlar.append(HareketTuruSatiri(
             tarih=gecmis.tarih, tur="CEK",
-            aciklama=f"Çek {cek.cek_no or '#' + str(cek.id)} - {'Tahsilat' if isaret > 0 else 'Ödeme'}",
-            tutar=isaret * cek.tutar, cari_id=cek.cari_id,
+            aciklama=f"Çek {cek.cek_no or '#' + str(cek.id)} - {'Tahsilat' if isaret > 0 else 'Ödeme'}" + (f" — {cari.unvan}" if cari else ""),
+            tutar=isaret * cek.tutar, cari_id=cek.cari_id, cari_unvan=cari.unvan if cari else None,
         ))
     return satirlar
 
@@ -371,12 +416,28 @@ def _stok_satis_satirlari(db, sirket_id, baslangic, bitis):
         sorgu = sorgu.where(StokSeriNo.satis_tarihi >= baslangic)
     if bitis:
         sorgu = sorgu.where(StokSeriNo.satis_tarihi <= bitis)
-    return [
-        HareketTuruSatiri(tarih=s.satis_tarihi, tur="STOK_SATIS",
-                           aciklama=f"Satış - Seri No {s.seri_no}", tutar=s.satis_fiyati_try or Decimal("0"),
-                           cari_id=s.musteri_cari_id)
-        for s in db.execute(sorgu).scalars() if s.satis_tarihi is not None
-    ]
+    urunler = [s for s in db.execute(sorgu).scalars() if s.satis_tarihi is not None]
+
+    kart_haritasi = {}
+    if urunler:
+        kart_haritasi = {
+            k.id: k for k in db.execute(
+                select(StokKarti).where(StokKarti.id.in_({u.stok_karti_id for u in urunler}))
+            ).scalars()
+        }
+
+    sonuc = []
+    for s in urunler:
+        kart = kart_haritasi.get(s.stok_karti_id)
+        cari = db.get(CariHesap, s.musteri_cari_id) if s.musteri_cari_id else None
+        urun_adi = f"{kart.marka} {kart.model}" if kart else ""
+        aciklama = f"Satış - {s.seri_no}" + (f" ({urun_adi})" if urun_adi else "") + (f" — {cari.unvan}" if cari else "")
+        sonuc.append(HareketTuruSatiri(
+            tarih=s.satis_tarihi, tur="STOK_SATIS", aciklama=aciklama,
+            tutar=s.satis_fiyati_try or Decimal("0"), cari_id=s.musteri_cari_id,
+            cari_unvan=cari.unvan if cari else None,
+        ))
+    return sonuc
 
 
 _HAREKET_TURU_FONKSIYONLARI = {
