@@ -1,4 +1,5 @@
 import { useEffect, useState, Fragment } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api, hataMesajiCikar } from '../api/client';
 import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat, eylemChipStili, Sekmeler, OtomatikTamamlamaGirdisi, Etiket } from '../components/Ortak';
 
@@ -169,10 +170,30 @@ const GERI_AL_HARITASI = {
   CEKLER: { yontem: 'PUT', url: (id) => `/cekler/${id}/durumu-geri-al` },
 };
 
+// Bir bankaya/kasaya hareket acan kaydin, DUZENLEME yapilabilecek ekrana
+// goturen yol haritasi. "Geri Al" islemi hatali bir hareketi SILER, ama
+// bazen kullanici sadece kaynagi GORUP DUZELTMEK ister (orn. yanlis cari
+// secilmis) - bu harita o sayfaya goturur.
+const KAYNAK_YOL_HARITASI = {
+  AKREDITIF_KALEMI: '/finansal?sekme=akreditif',
+  AKREDITIF_KALEM_TAKSIT: '/finansal?sekme=akreditif',
+  LEASING_ODEME: '/finansal?sekme=leasing',
+  KIRALAMA_ODEME: '/finansal?sekme=kiralama',
+  TAKSIT_DETAY: '/finansal?sekme=taksit',
+  PERSONEL_ODEME: '/finansal?sekme=personel',
+  SABIT_GIDER: '/finansal?sekme=gider',
+  BORC_ODEME: '/finansal?sekme=borc',
+  BAKIM_KAYDI: '/finansal?sekme=bakim',
+  STOK_SATIS: '/stok',
+  CEKLER: '/finansal?sekme=cek',
+  SIPARIS_ODEME: '/siparisler',
+};
+
 function KaynakDetayi({ kaynakTablo, kaynakId, onIslemTamamlandi }) {
   const [detay, setDetay] = useState(null);
   const [hata, setHata] = useState(null);
   const [islemYapiliyor, setIslemYapiliyor] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     api.get(`/kaynak-detay/${kaynakTablo}/${kaynakId}`)
@@ -211,13 +232,18 @@ function KaynakDetayi({ kaynakTablo, kaynakId, onIslemTamamlandi }) {
           <span style={{ color: 'var(--metin-birincil)' }}>{deger}</span>
         </div>
       ))}
-      {geriAlBilgisi && (
-        <div style={{ marginTop: 10 }}>
+      <div style={{ marginTop: 10, display: 'flex', gap: 6 }}>
+        {KAYNAK_YOL_HARITASI[kaynakTablo] && (
+          <button onClick={() => navigate(KAYNAK_YOL_HARITASI[kaynakTablo])} style={eylemChipStili('lacivert')}>
+            Kaynağa Git ve Düzelt
+          </button>
+        )}
+        {geriAlBilgisi && (
           <button onClick={geriAl} disabled={islemYapiliyor} style={eylemChipStili('kirmizi')}>
             {islemYapiliyor ? 'İşleniyor...' : 'Bu İşlemi Geri Al'}
           </button>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
