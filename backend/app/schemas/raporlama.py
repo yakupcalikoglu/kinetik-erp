@@ -24,6 +24,7 @@ class HareketTuruSatiri(BaseModel):
     aciklama: str | None
     tutar: Decimal
     cari_id: int | None = None
+    cari_unvan: str | None = None
 class HareketTuruRaporYaniti(BaseModel):
     tur: str
     toplam_tutar: Decimal
