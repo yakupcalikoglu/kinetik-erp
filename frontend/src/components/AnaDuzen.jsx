@@ -1,24 +1,116 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { useEffect, useRef } from 'react';
+import {
+  LayoutDashboard, Wallet, Users, Boxes, ShoppingCart, Landmark, ArrowLeftRight,
+  Receipt, FileSpreadsheet, BarChart3, HandCoins, Tag, Wrench, ListTree, Settings, Search,
+} from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { api, hataMesajiCikar } from '../api/client';
 
+const ARAMA_TUR_METIN = { CARI: 'Cari', SIPARIS: 'Sipariş', STOK: 'Stok', URUN_TANIMI: 'Ürün Tanımı' };
+
+function GenelArama() {
+  const [sorgu, setSorgu] = useState('');
+  const [sonuclar, setSonuclar] = useState(null);
+  const [acik, setAcik] = useState(false);
+  const navigate = useNavigate();
+  const kutuRef = useRef(null);
+
+  useEffect(() => {
+    if (sorgu.trim().length < 2) {
+      setSonuclar(null);
+      return;
+    }
+    const zamanlayici = setTimeout(() => {
+      api.get('/arama', { params: { q: sorgu } }).then((r) => setSonuclar(r.data)).catch(() => setSonuclar([]));
+    }, 300);
+    return () => clearTimeout(zamanlayici);
+  }, [sorgu]);
+
+  useEffect(() => {
+    function disaTikla(e) {
+      if (kutuRef.current && !kutuRef.current.contains(e.target)) setAcik(false);
+    }
+    document.addEventListener('mousedown', disaTikla);
+    return () => document.removeEventListener('mousedown', disaTikla);
+  }, []);
+
+  function sonucaGit(s) {
+    setAcik(false);
+    setSorgu('');
+    navigate(s.yol);
+  }
+
+  return (
+    <div ref={kutuRef} style={{ position: 'relative', flex: '1 1 240px', maxWidth: 360 }}>
+      <div style={{ position: 'relative' }}>
+        <Search size={15} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }} />
+        <input
+          value={sorgu}
+          onChange={(e) => { setSorgu(e.target.value); setAcik(true); }}
+          onFocus={() => setAcik(true)}
+          placeholder="Ara: cari, sipariş no, seri no, ürün..."
+          style={{
+            width: '100%', padding: '7px 10px 7px 32px', borderRadius: 7,
+            border: '1px solid var(--kenarlik-koyu)', fontSize: 13, background: 'white',
+          }}
+        />
+      </div>
+      {acik && sorgu.trim().length >= 2 && (
+        <div style={{
+          position: 'absolute', top: '110%', left: 0, right: 0, background: 'white',
+          border: '1px solid var(--kenarlik)', borderRadius: 8, boxShadow: '0 6px 18px rgba(0,0,0,0.12)',
+          maxHeight: 320, overflowY: 'auto', zIndex: 50,
+        }}>
+          {sonuclar === null ? (
+            <div style={{ padding: 12, fontSize: 12.5, color: 'var(--metin-soluk)' }}>Aranıyor...</div>
+          ) : sonuclar.length === 0 ? (
+            <div style={{ padding: 12, fontSize: 12.5, color: 'var(--metin-soluk)' }}>Sonuç bulunamadı.</div>
+          ) : (
+            sonuclar.map((s) => (
+              <div
+                key={`${s.tur}-${s.id}`}
+                onClick={() => sonucaGit(s)}
+                style={{
+                  padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid var(--kenarlik)',
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8,
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--zemin)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'white'; }}
+              >
+                <div style={{ overflow: 'hidden' }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{s.baslik}</div>
+                  {s.alt_baslik && <div style={{ fontSize: 11.5, color: 'var(--metin-ikincil)' }}>{s.alt_baslik}</div>}
+                </div>
+                <span style={{ fontSize: 10.5, color: 'var(--lacivert)', background: 'var(--zemin)', padding: '2px 7px', borderRadius: 5, flexShrink: 0 }}>
+                  {ARAMA_TUR_METIN[s.tur] || s.tur}
+                </span>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const MODULLER = [
-  { yol: '/', ad: 'Dashboard', simge: '⌂' },
-  { yol: '/kasa', ad: 'Ana Kasa', simge: '▤', gerekliIzin: 'KASA_GORUNTULE' },
-  { yol: '/cariler', ad: 'Cari', simge: '◑', gerekliIzin: 'CARI_GORUNTULE' },
-  { yol: '/stok', ad: 'Stok', simge: '◫', gerekliIzin: 'STOK_GORUNTULE' },
-  { yol: '/siparisler', ad: 'Siparişler', simge: '⇄' },
-  { yol: '/banka', ad: 'Banka', simge: '◈', gerekliIzin: 'BANKA_GORUNTULE' },
-  { yol: '/virman', ad: 'Virman', simge: '⇌' },
-  { yol: '/finansal', ad: 'Finansal Takip', simge: '◇' },
-  { yol: '/proforma-fatura', ad: 'Proforma / Fatura', simge: '▭', gerekliIzin: 'FATURA_GORUNTULE' },
-  { yol: '/raporlar', ad: 'Raporlar', simge: '◔' },
-  { yol: '/satis-yap', ad: 'Satış Yap', simge: '💰', gerekliIzin: 'STOK_DUZENLE' },
-  { yol: '/urun-tanimlari', ad: 'Ürün Tanımları', simge: '📦', gerekliIzin: 'STOK_GORUNTULE' },
-  { yol: '/yedek-parcalar', ad: 'Yedek Parça / Sarf', simge: '🔧', gerekliIzin: 'STOK_GORUNTULE' },
-  { yol: '/harcama-turleri', ad: 'Harcama Türleri', simge: '☰' },
-  { yol: '/yonetici-paneli', ad: 'Yönetici Paneli', simge: '⚙', gerekliIzin: 'KULLANICI_YONET' },
+  { yol: '/', ad: 'Dashboard', Simge: LayoutDashboard },
+  { yol: '/kasa', ad: 'Ana Kasa', Simge: Wallet, gerekliIzin: 'KASA_GORUNTULE' },
+  { yol: '/cariler', ad: 'Cari', Simge: Users, gerekliIzin: 'CARI_GORUNTULE' },
+  { yol: '/stok', ad: 'Stok', Simge: Boxes, gerekliIzin: 'STOK_GORUNTULE' },
+  { yol: '/siparisler', ad: 'Siparişler', Simge: ShoppingCart },
+  { yol: '/banka', ad: 'Banka', Simge: Landmark, gerekliIzin: 'BANKA_GORUNTULE' },
+  { yol: '/virman', ad: 'Virman', Simge: ArrowLeftRight },
+  { yol: '/finansal', ad: 'Finansal Takip', Simge: Receipt },
+  { yol: '/proforma-fatura', ad: 'Proforma / Fatura', Simge: FileSpreadsheet, gerekliIzin: 'FATURA_GORUNTULE' },
+  { yol: '/raporlar', ad: 'Raporlar', Simge: BarChart3 },
+  { yol: '/satis-yap', ad: 'Satış Yap', Simge: HandCoins, gerekliIzin: 'STOK_DUZENLE' },
+  { yol: '/urun-tanimlari', ad: 'Ürün Tanımları', Simge: Tag, gerekliIzin: 'STOK_GORUNTULE' },
+  { yol: '/yedek-parcalar', ad: 'Yedek Parça / Sarf', Simge: Wrench, gerekliIzin: 'STOK_GORUNTULE' },
+  { yol: '/harcama-turleri', ad: 'Harcama Türleri', Simge: ListTree },
+  { yol: '/yonetici-paneli', ad: 'Yönetici Paneli', Simge: Settings, gerekliIzin: 'KULLANICI_YONET' },
 ];
 
 export default function AnaDuzen() {
@@ -134,7 +226,7 @@ export default function AnaDuzen() {
                 fontWeight: isActive ? 500 : 400,
               })}
             >
-              <span style={{ fontSize: 14, opacity: 0.8 }}>{m.simge}</span>
+              <m.Simge size={16} style={{ opacity: 0.85, flexShrink: 0 }} />
               {m.ad}
             </NavLink>
           ))}
@@ -188,7 +280,9 @@ export default function AnaDuzen() {
               ☰
             </button>
 
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, flex: 1, flexWrap: 'wrap' }}>
+            <GenelArama />
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
               {oturum?.sirketler?.length > 1 ? (
                 <select
                   value={oturum.aktifSirketId ?? ''}
