@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Wallet2, Landmark, Boxes, KeyRound, CalendarClock, Briefcase } from 'lucide-react';
 import { api, hataMesajiCikar } from '../api/client';
 import { Kart, SayfaBasligi, HataMesaji, BosDurum, paraFormat, Etiket } from '../components/Ortak';
 
-function TiklanabilirKart({ baslik, onClick, children, vurgu }) {
+function TiklanabilirKart({ baslik, Simge, onClick, children, vurgu }) {
   const [uzerinde, setUzerinde] = useState(false);
   return (
     <div
@@ -21,7 +22,10 @@ function TiklanabilirKart({ baslik, onClick, children, vurgu }) {
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <div style={{ fontSize: 14.5, fontWeight: 600 }}>{baslik}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14.5, fontWeight: 600 }}>
+            {Simge && <Simge size={18} />}
+            {baslik}
+          </div>
           <span style={{ fontSize: 12, color: 'var(--lacivert)' }}>Aç →</span>
         </div>
         {children}
@@ -56,7 +60,9 @@ function NetDurumKutusu() {
 
   return (
     <Kart style={{ marginBottom: 16, background: 'var(--lacivert-koyu, #0f2340)', color: 'white' }}>
-      <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 14 }}>💼 Net Durum (Bilanço) — şu anki güncel kurla</div>
+      <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <Briefcase size={18} /> Net Durum (Bilanço) — şu anki güncel kurla
+      </div>
       {!veri ? (
         <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13 }}>Yükleniyor...</div>
       ) : (
@@ -131,7 +137,7 @@ function AnaKasaKutusu({ navigate }) {
   }, []);
 
   return (
-    <TiklanabilirKart baslik="💰 Ana Kasa" onClick={() => navigate('/kasa')}>
+    <TiklanabilirKart baslik="Ana Kasa" Simge={Wallet2} onClick={() => navigate('/kasa')}>
       {hata ? <HataMesaji>{hata}</HataMesaji> : !bakiye ? (
         <div style={{ color: 'var(--metin-soluk)', fontSize: 13 }}>Yükleniyor...</div>
       ) : (
@@ -164,7 +170,7 @@ function BankalarKutusu({ navigate }) {
   }, []);
 
   return (
-    <TiklanabilirKart baslik="🏦 Bankalar" onClick={() => navigate('/banka')}>
+    <TiklanabilirKart baslik="Bankalar" Simge={Landmark} onClick={() => navigate('/banka')}>
       {hata ? <HataMesaji>{hata}</HataMesaji> : !hesaplar ? (
         <div style={{ color: 'var(--metin-soluk)', fontSize: 13 }}>Yükleniyor...</div>
       ) : hesaplar.length === 0 ? (
@@ -204,7 +210,7 @@ function StokKutusu({ navigate }) {
   const gosterilecekDurumlar = ['DEPODA', 'ANTREPODA', 'YOLDA', 'GUMRUKTE', 'KIRADA'];
 
   return (
-    <TiklanabilirKart baslik="📦 Stok" onClick={() => navigate('/stok')}>
+    <TiklanabilirKart baslik="Stok" Simge={Boxes} onClick={() => navigate('/stok')}>
       {hata ? <HataMesaji>{hata}</HataMesaji> : !urunler ? (
         <div style={{ color: 'var(--metin-soluk)', fontSize: 13 }}>Yükleniyor...</div>
       ) : (
@@ -234,7 +240,7 @@ function KiralikUrunlerKutusu({ navigate }) {
   const toplamKira = liste ? paraBazliToplamGoster(liste, 'aylik_kira_tutari') : '—';
 
   return (
-    <TiklanabilirKart baslik="🔑 Kiralık Ürünler" onClick={() => navigate('/finansal')}>
+    <TiklanabilirKart baslik="Kiralık Ürünler" Simge={KeyRound} onClick={() => navigate('/finansal')}>
       {hata ? <HataMesaji>{hata}</HataMesaji> : !liste ? (
         <div style={{ color: 'var(--metin-soluk)', fontSize: 13 }}>Yükleniyor...</div>
       ) : liste.length === 0 ? (
@@ -280,7 +286,7 @@ function OdemeAlacakKutusu({ navigate }) {
   const gecikenTahsilat = veri ? veri.tahsilatlar.filter((t) => t.tarih < bugun).length : 0;
 
   return (
-    <TiklanabilirKart baslik="📅 Aylık Ödeme / Alacak Listesi" onClick={() => navigate('/raporlar')} vurgu={gecikenOdeme > 0 || gecikenTahsilat > 0}>
+    <TiklanabilirKart baslik="Aylık Ödeme / Alacak Listesi" Simge={CalendarClock} onClick={() => navigate('/raporlar')} vurgu={gecikenOdeme > 0 || gecikenTahsilat > 0}>
       {hata ? <HataMesaji>{hata}</HataMesaji> : !veri ? (
         <div style={{ color: 'var(--metin-soluk)', fontSize: 13 }}>Yükleniyor...</div>
       ) : (
