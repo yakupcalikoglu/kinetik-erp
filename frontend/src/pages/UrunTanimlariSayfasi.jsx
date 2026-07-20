@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import * as XLSX from 'xlsx';
 import { api, hataMesajiCikar } from '../api/client';
 import {
   Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji,
@@ -7,6 +8,159 @@ import {
 
 function bosForm() {
   return { marka: '', model: '', birim: 'ADET', birim_agirlik_kg: '', aciklama: '', mense_ulke: '', gtip_kodu: '' };
+}
+
+const ALAN_ESLESTIRME = {
+  marka: ['marka', 'brand', 'üretici'],
+  model: ['model', 'ürün adı', 'urun adi', 'ürün', 'urun'],
+  birim: ['birim', 'unit'],
+  mense_ulke: ['menşei', 'mense', 'menşei ülke', 'mense ulke', 'origin'],
+  gtip_kodu: ['gtip', 'gtip kodu', 'gtip no', 'hs kodu', 'hs code'],
+};
+
+function normallestir(s) {
+  return (s || '').toString().trim().toLocaleLowerCase('tr');
+}
+
+function sutunEslestir(basliklar) {
+  const harita = {};
+  for (const [alan, adaylar] of Object.entries(ALAN_ESLESTIRME)) {
+    const bulunan = basliklar.find((b) => adaylar.includes(normallestir(b)));
+    if (bulunan) harita[alan] = bulunan;
+  }
+  return harita;
+}
+
+function IceAktarPaneli({ onKapat, onTamamlandi }) {
+  const [satirlar, setSatirlar] = useState([]);
+  const [hata, setHata] = useState(null);
+  const [yukleniyor, setYukleniyor] = useState(false);
+  const [sonuc, setSonuc] = useState(null);
+
+  function dosyaSecildi(e) {
+    const dosya = e.target.files?.[0];
+    if (!dosya) return;
+    setHata(null);
+    setSonuc(null);
+    setSatirlar([]);
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const kitap = XLSX.read(evt.target.result, { type: 'array' });
+        const sayfa = kitap.Sheets[kitap.SheetNames[0]];
+        const veri = XLSX.utils.sheet_to_json(sayfa, { defval: '' });
+        if (veri.length === 0) {
+          setHata('Dosyada veri bulunamadı.');
+          return;
+        }
+        const basliklar = Object.keys(veri[0]);
+        const harita = sutunEslestir(basliklar);
+        if (!harita.marka && !harita.model) {
+          setHata("Marka veya Model sütunu bulunamadı. Excel dosyasında bu bilgiyi içeren en az bir sütun olmalı (örn. 'Marka', 'Model').");
+          return;
+        }
+        const donusturulmus = veri
+          .map((satir) => ({
+            marka: harita.marka ? String(satir[harita.marka] || '').trim() : '',
+            model: harita.model ? String(satir[harita.model] || '').trim() : '',
+            birim: harita.birim ? String(satir[harita.birim] || 'ADET').trim().toUpperCase() : 'ADET',
+            mense_ulke: harita.mense_ulke ? String(satir[harita.mense_ulke] || '').trim() : '',
+            gtip_kodu: harita.gtip_kodu ? String(satir[harita.gtip_kodu] || '').trim() : '',
+          }))
+          .filter((s) => s.marka || s.model);
+        setSatirlar(donusturulmus);
+      } catch (err) {
+        setHata('Dosya okunamadı. Geçerli bir Excel (.xlsx/.xls) dosyası olduğundan emin olun.');
+      }
+    };
+    reader.readAsArrayBuffer(dosya);
+  }
+
+  async function iceAktar() {
+    setYukleniyor(true);
+    setHata(null);
+    try {
+      const { data } = await api.post('/stok-kartlari/toplu-ice-aktar', {
+        satirlar: satirlar.map((s) => ({
+          marka: s.marka || null,
+          model: s.model || null,
+          birim: s.birim || 'ADET',
+          mense_ulke: s.mense_ulke || null,
+          gtip_kodu: s.gtip_kodu || null,
+        })),
+      });
+      setSonuc(data);
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setYukleniyor(false);
+    }
+  }
+
+  return (
+    <Kart style={{ marginBottom: 20 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div style={{ fontSize: 14.5, fontWeight: 600 }}>Excel'den Ürün Tanımı İçe Aktar</div>
+        <Buton variant="ikincil" onClick={onKapat}>Kapat</Buton>
+      </div>
+      <HataMesaji>{hata}</HataMesaji>
+
+      <div style={{ fontSize: 12.5, color: 'var(--metin-ikincil)', marginBottom: 12 }}>
+        Excel dosyanızda (herhangi bir sütun sırasıyla) şunlar bulunabilir: <strong>Marka</strong>, <strong>Model</strong> (en az biri zorunlu),
+        Birim, Menşei Ülke, GTİP Kodu. Akınsoft Wolvox gibi başka bir sistemden Excel'e aktardığınız ürün listesini doğrudan yükleyebilirsiniz.
+      </div>
+
+      <input type="file" accept=".xlsx,.xls" onChange={dosyaSecildi} style={{ marginBottom: 16 }} />
+
+      {satirlar.length > 0 && !sonuc && (
+        <>
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>{satirlar.length} satır bulundu — önizleme (ilk 10):</div>
+          <table style={{ marginBottom: 16 }}>
+            <thead>
+              <tr style={{ background: 'var(--zemin)' }}>
+                {['Marka', 'Model', 'Birim', 'Menşei', 'GTİP'].map((b) => (
+                  <th key={b} style={{ textAlign: 'left', padding: '6px 10px', fontSize: 12, color: 'var(--metin-ikincil)' }}>{b}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {satirlar.slice(0, 10).map((s, i) => (
+                <tr key={i} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                  <td style={{ padding: '6px 10px' }}>{s.marka || '—'}</td>
+                  <td style={{ padding: '6px 10px' }}>{s.model || '—'}</td>
+                  <td style={{ padding: '6px 10px' }}>{s.birim}</td>
+                  <td style={{ padding: '6px 10px' }}>{s.mense_ulke || '—'}</td>
+                  <td style={{ padding: '6px 10px' }}>{s.gtip_kodu || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <Buton onClick={iceAktar} disabled={yukleniyor}>{yukleniyor ? 'İçe aktarılıyor...' : `${satirlar.length} kaydı içe aktar`}</Buton>
+        </>
+      )}
+
+      {sonuc && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ color: 'var(--yesil)', fontWeight: 600, marginBottom: 8 }}>
+            ✓ {sonuc.basarili_sayisi} kayıt başarıyla eklendi.
+          </div>
+          {sonuc.hatali_satirlar.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ color: 'var(--kirmizi)', fontWeight: 600, marginBottom: 6 }}>
+                ✗ {sonuc.hatali_satirlar.length} satırda hata oluştu:
+              </div>
+              <ul style={{ fontSize: 12.5, color: 'var(--metin-ikincil)' }}>
+                {sonuc.hatali_satirlar.map((h) => (
+                  <li key={h.satir_no}>Satır {h.satir_no} ({h.marka} {h.model}): {h.hata}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <Buton onClick={onTamamlandi}>Kapat ve listeyi yenile</Buton>
+        </div>
+      )}
+    </Kart>
+  );
 }
 
 function UrunTanimiFormu({ duzenlenenKart, onKaydedildi, onVazgec }) {
@@ -114,6 +268,7 @@ export default function UrunTanimlariSayfasi() {
   const [formAcik, setFormAcik] = useState(false);
   const [duzenlenenKart, setDuzenlenenKart] = useState(null);
   const [arama, setArama] = useState('');
+  const [iceAktarAcik, setIceAktarAcik] = useState(false);
 
   function kartlariYukle() {
     setYukleniyor(true);
@@ -175,9 +330,23 @@ export default function UrunTanimlariSayfasi() {
       <SayfaBasligi
         baslik="Ürün Tanımları"
         aciklama="Marka, model, birim ve gümrük bilgileri — fiziksel envanterden bağımsız ürün kataloğu"
-        eylem={!formAcik && <Buton onClick={yeniAc}>+ Yeni ürün tanımı</Buton>}
+        eylem={!formAcik && (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Buton variant="ikincil" onClick={() => setIceAktarAcik((a) => !a)}>
+              {iceAktarAcik ? 'İçe Aktarmayı Kapat' : "Excel'den İçe Aktar"}
+            </Buton>
+            <Buton onClick={yeniAc}>+ Yeni ürün tanımı</Buton>
+          </div>
+        )}
       />
       <HataMesaji>{hata}</HataMesaji>
+
+      {iceAktarAcik && (
+        <IceAktarPaneli
+          onKapat={() => setIceAktarAcik(false)}
+          onTamamlandi={() => { setIceAktarAcik(false); kartlariYukle(); envanterSayilariniYukle(); }}
+        />
+      )}
 
       {formAcik && (
         <UrunTanimiFormu
