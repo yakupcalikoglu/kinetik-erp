@@ -1,4 +1,5 @@
 import { useEffect, useState, Fragment } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api, hataMesajiCikar } from '../api/client';
 import {
   Kart, SayfaBasligi, Buton, Etiket, Alan, girdiStili, BosDurum, HataMesaji, paraFormat, Sekmeler, eylemChipStili,
@@ -3621,7 +3622,8 @@ function BorcSekmesi() {
 }
 
 export default function FinansalTakipSayfasi() {
-  const [sekme, setSekme] = useState('taksit');
+  const [arananParametreler] = useSearchParams();
+  const [sekme, setSekme] = useState(arananParametreler.get('sekme') || 'taksit');
 
   return (
     <div>
