@@ -794,17 +794,36 @@ async def net_durum(
     yedek_parca_degeri_try = sum((p.mevcut_miktar * p.birim_fiyat_try for p in yedek_parcalar), Decimal("0"))
 
     # ------------------------------------------------------------- ALACAKLAR
-    # 5) NOT: Ayri bir "Cari Hesaplardan Alacak/Borc" kalemi KASITLI
-    # OLARAK YOK. Nedeni: CariHareket tablosu sistemde hicbir yerde
-    # doldurulmuyor (para_hareketi_olustur da dahil hicbir servis
-    # CariHareket veya CariHesap.bakiye_try/usd/eur alanlarini
-    # guncellemiyor) - doldursak bile bu "cari ile net nakit akisi"
-    # anlamina gelir, "kalan borc/alacak" ile AYNI sey degildir (orn.
-    # bir tedarikciye yapilan odemeler "borcumuz var" degil "simdiye
-    # kadar odedik" demektir). Her modulun (Siparis, Taksit, Kiralama,
-    # Akreditif, Leasing, Cek, Ortak Borc) KENDI dogru "kalan bakiye"
-    # hesabi zaten asagida ayri ayri yer aliyor; ayrica bir "Cari"
-    # kalemi eklemek yanlis anlasilmaya/cift sayima yol acardi.
+    # 5) Cari Arasi Borc Devri (Virman -> Cariden Cariye) bakiyesi.
+    # CariHareket tablosu SADECE bu virman ozelliginde dolduruluyor (baska
+    # hicbir modul - Siparis/Taksit/Kiralama/Cek/Akreditif/vb. - buraya
+    # yazmiyor, o yuzden GENEL bir "Cari Hesaplardan Alacak/Borc" kalemi
+    # eklemiyoruz; bu, o modullerin KENDI "kalan bakiye" hesaplariyla
+    # cift sayima yol acardi). Ama VIRMAN_CARI_CARI kaynakli kayitlar
+    # gercek, ayri bir bakiye olusturuyor (baska hicbir kategoride
+    # yakalanmiyor) - bu yuzden SADECE bu kaynagi ayri bir kalem olarak
+    # sayiyoruz. Isaret kurali: kaynak caride GIRIS acilir (borcu kapanir),
+    # hedef caride CIKIS acilir (borc ona gecer) - yani bir cari icin
+    # net alacak = CIKIS - GIRIS (CIKIS ne kadar cok, o kadar bize borclu).
+    virman_hareketleri = list(db.execute(
+        select(CariHareket).where(CariHareket.sirket_id == sirket_id, CariHareket.kaynak_tablo == "VIRMAN_CARI_CARI")
+    ).scalars())
+    virman_net_haritasi: dict[int, Decimal] = {}
+    for h in virman_hareketleri:
+        pb = h.para_birimi.value if hasattr(h.para_birimi, "value") else h.para_birimi
+        kur = await kur_getir(pb)
+        tutar_try = h.tutar * kur
+        yon = h.yon.value if hasattr(h.yon, "value") else h.yon
+        katki = tutar_try if yon == "CIKIS" else -tutar_try
+        virman_net_haritasi[h.cari_id] = virman_net_haritasi.get(h.cari_id, Decimal("0")) + katki
+
+    virman_alacak_try = Decimal("0")
+    virman_borc_try = Decimal("0")
+    for net in virman_net_haritasi.values():
+        if net > 0:
+            virman_alacak_try += net
+        elif net < 0:
+            virman_borc_try += -net
 
     # 6) Taksitli satis - henuz tahsil edilmemis taksitlerin toplami (TRY sabit)
     taksitli_taksitler = list(db.execute(
@@ -955,12 +974,14 @@ async def net_durum(
         NetDurumKalemi(kategori="Yedek Parça / Sarf Malzeme", tutar_try=yedek_parca_degeri_try),
     ]
     alacaklar = [
+        NetDurumKalemi(kategori="Cari Arası Devir (Bize Borçlu)", tutar_try=virman_alacak_try),
         NetDurumKalemi(kategori="Taksitli Satış Alacağı", tutar_try=taksit_alacak_try),
         NetDurumKalemi(kategori="Kiralama Tahsilat Alacağı", tutar_try=kiralama_alacak_try),
         NetDurumKalemi(kategori="Alınan Çekler (Portföyde)", tutar_try=cek_alacak_try),
         NetDurumKalemi(kategori="Ortağa Verilen Borç (Alacak)", tutar_try=ortak_alacak_try),
     ]
     borclar = [
+        NetDurumKalemi(kategori="Cari Arası Devir (Biz Borçluyuz)", tutar_try=virman_borc_try),
         NetDurumKalemi(kategori="Akreditif (Ödenmemiş)", tutar_try=akreditif_borc_try),
         NetDurumKalemi(kategori="Leasing (Ödenmemiş Taksitler)", tutar_try=leasing_borc_try),
         NetDurumKalemi(kategori="Verilen Çekler (Portföyde)", tutar_try=cek_borc_try),
