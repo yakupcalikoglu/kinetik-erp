@@ -17,13 +17,18 @@ function GenelArama() {
   const navigate = useNavigate();
   const kutuRef = useRef(null);
 
+  const [aramaHata, setAramaHata] = useState(null);
+
   useEffect(() => {
     if (sorgu.trim().length < 2) {
       setSonuclar(null);
+      setAramaHata(null);
       return;
     }
     const zamanlayici = setTimeout(() => {
-      api.get('/arama', { params: { q: sorgu } }).then((r) => setSonuclar(r.data)).catch(() => setSonuclar([]));
+      api.get('/arama', { params: { q: sorgu } })
+        .then((r) => { setSonuclar(r.data); setAramaHata(null); })
+        .catch((e) => { setSonuclar([]); setAramaHata(hataMesajiCikar(e)); });
     }, 300);
     return () => clearTimeout(zamanlayici);
   }, [sorgu]);
@@ -63,7 +68,9 @@ function GenelArama() {
           border: '1px solid var(--kenarlik)', borderRadius: 8, boxShadow: '0 6px 18px rgba(0,0,0,0.12)',
           maxHeight: 320, overflowY: 'auto', zIndex: 50,
         }}>
-          {sonuclar === null ? (
+          {aramaHata ? (
+            <div style={{ padding: 12, fontSize: 12.5, color: 'var(--kirmizi)' }}>{aramaHata}</div>
+          ) : sonuclar === null ? (
             <div style={{ padding: 12, fontSize: 12.5, color: 'var(--metin-soluk)' }}>Aranıyor...</div>
           ) : sonuclar.length === 0 ? (
             <div style={{ padding: 12, fontSize: 12.5, color: 'var(--metin-soluk)' }}>Sonuç bulunamadı.</div>
