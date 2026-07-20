@@ -12,7 +12,7 @@
   "dependencies": {
     "xlsx": "^0.18.5",
     "axios": "^1.18.1",
-    "lucide-react": "^0.383.0",
+    "lucide-react": "^latest",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-router-dom": "^6.30.4"
