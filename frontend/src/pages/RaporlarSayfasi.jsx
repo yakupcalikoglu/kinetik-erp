@@ -1,4 +1,5 @@
 import { useEffect, useState, Fragment } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api, hataMesajiCikar } from '../api/client';
 import {
   Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, BosDurum, paraFormat, Etiket,
@@ -54,6 +55,14 @@ function GenelBakisKarti() {
 }
 
 // ============================================================== YAKLAŞAN VADELER
+const KAYNAK_YOL_HARITASI = {
+  CEKLER: '/finansal?sekme=cek',
+  LEASING_ODEME: '/finansal?sekme=leasing',
+  AKREDITIF_KALEMI: '/finansal?sekme=akreditif',
+  TAKSIT_DETAY: '/finansal?sekme=taksit',
+  KIRALAMA_ODEME: '/finansal?sekme=kiralama',
+};
+
 function paraBazliToplamGoster(satirlar) {
   if (!satirlar || satirlar.length === 0) return '—';
   const gruplar = {};
@@ -69,6 +78,7 @@ function YaklasanVadelerKarti() {
   const [veri, setVeri] = useState(null);
   const [hata, setHata] = useState(null);
   const [yukleniyor, setYukleniyor] = useState(true);
+  const navigate = useNavigate();
 
   function yukle() {
     setYukleniyor(true);
@@ -115,13 +125,23 @@ function YaklasanVadelerKarti() {
             ) : (
               <table>
                 <tbody>
-                  {veri.odemeler.map((o, i) => (
-                    <tr key={i} style={{ borderTop: '1px solid var(--kenarlik)' }}>
-                      <td style={{ padding: '6px 8px', color: 'var(--metin-ikincil)', fontSize: 12.5 }}>{o.tarih}</td>
-                      <td style={{ padding: '6px 8px', fontSize: 12.5 }}>{o.aciklama}</td>
-                      <td style={{ padding: '6px 8px', fontSize: 12.5, fontWeight: 500, textAlign: 'right' }}>{paraFormat(o.tutar, o.para_birimi)}</td>
-                    </tr>
-                  ))}
+                  {veri.odemeler.map((o, i) => {
+                    const yol = KAYNAK_YOL_HARITASI[o.kaynak_tablo];
+                    return (
+                      <tr
+                        key={i}
+                        onClick={() => yol && navigate(yol)}
+                        style={{ borderTop: '1px solid var(--kenarlik)', cursor: yol ? 'pointer' : 'default' }}
+                      >
+                        <td style={{ padding: '6px 8px', color: 'var(--metin-ikincil)', fontSize: 12.5 }}>{o.tarih}</td>
+                        <td style={{ padding: '6px 8px', fontSize: 12.5 }}>
+                          {o.aciklama}
+                          {o.cari_unvan && <div style={{ color: 'var(--metin-ikincil)', fontSize: 11.5 }}>{o.cari_unvan}</div>}
+                        </td>
+                        <td style={{ padding: '6px 8px', fontSize: 12.5, fontWeight: 500, textAlign: 'right' }}>{paraFormat(o.tutar, o.para_birimi)}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
@@ -135,13 +155,23 @@ function YaklasanVadelerKarti() {
             ) : (
               <table>
                 <tbody>
-                  {veri.tahsilatlar.map((t, i) => (
-                    <tr key={i} style={{ borderTop: '1px solid var(--kenarlik)' }}>
-                      <td style={{ padding: '6px 8px', color: 'var(--metin-ikincil)', fontSize: 12.5 }}>{t.tarih}</td>
-                      <td style={{ padding: '6px 8px', fontSize: 12.5 }}>{t.aciklama}</td>
-                      <td style={{ padding: '6px 8px', fontSize: 12.5, fontWeight: 500, textAlign: 'right' }}>{paraFormat(t.tutar, t.para_birimi)}</td>
-                    </tr>
-                  ))}
+                  {veri.tahsilatlar.map((t, i) => {
+                    const yol = KAYNAK_YOL_HARITASI[t.kaynak_tablo];
+                    return (
+                      <tr
+                        key={i}
+                        onClick={() => yol && navigate(yol)}
+                        style={{ borderTop: '1px solid var(--kenarlik)', cursor: yol ? 'pointer' : 'default' }}
+                      >
+                        <td style={{ padding: '6px 8px', color: 'var(--metin-ikincil)', fontSize: 12.5 }}>{t.tarih}</td>
+                        <td style={{ padding: '6px 8px', fontSize: 12.5 }}>
+                          {t.aciklama}
+                          {t.cari_unvan && <div style={{ color: 'var(--metin-ikincil)', fontSize: 11.5 }}>{t.cari_unvan}</div>}
+                        </td>
+                        <td style={{ padding: '6px 8px', fontSize: 12.5, fontWeight: 500, textAlign: 'right' }}>{paraFormat(t.tutar, t.para_birimi)}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
