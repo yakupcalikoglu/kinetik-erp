@@ -54,6 +54,7 @@ class StokSeriNoYanit(BaseModel):
     satis_cek_id: int | None = None
     garanti_bitis_tarihi: date | None
     barkod: str | None
+    sahiplik_tipi: str = "TICARI"
 
     class Config:
         from_attributes = True
@@ -64,6 +65,37 @@ class StokSeriNoYanit(BaseModel):
                 self.gumruk_maliyeti_try + self.antrepo_maliyeti_try +
                 self.millilestirme_maliyeti_try + self.leasing_maliyeti_try +
                 self.diger_maliyet_try)
+
+
+# ------------------------------------------------------- Öz Mal / Demirbaş
+class OzMalIlkKayitIstegi(BaseModel):
+    """
+    Gecmiste alinmis, siparis kaydi olmadan dogrudan envantere eklenecek
+    'Oz Mal' urunler icin. Kasa/Banka hareketi OLUSTURMAZ (para zaten
+    gecmiste harcanmis kabul edilir) - sadece maliyeti kayit altina alir ki
+    ileride satildiginda/hurdaya cikarildiginda kar/zarar hesaplanabilsin.
+    """
+    stok_karti_id: int
+    seri_no: str
+    sasi_no: str | None = None
+    uretim_yili: int | None = None
+    durum: StokDurum = StokDurum.DEPODA
+    maliyet_try: Decimal
+    aciklama: str | None = None
+
+
+class HurdayaCikarIstegi(BaseModel):
+    """
+    Bir urunu hurdaya cikarir. hurda_bedeli_try > 0 ise (orn. hurda demir
+    karsiligi bir miktar nakit alindiysa) bu tutar Kasa/Banka'ya GIRIS
+    olarak islenir; toplam maliyet ile hurda bedeli arasindaki fark
+    otomatik olarak zarar (kar_zarar_try negatif) olarak hesaplanir -
+    normal satis akisindaki ayni kar/zarar mantigi kullanilir.
+    """
+    hurda_bedeli_try: Decimal = Decimal("0")
+    odeme_yontemi: str | None = None  # "NAKIT" | "BANKA" - hurda_bedeli_try > 0 ise zorunlu
+    banka_hesap_id: int | None = None
+    aciklama: str | None = None
 
 
 class StokSeriNoDuzenleIstegi(BaseModel):
