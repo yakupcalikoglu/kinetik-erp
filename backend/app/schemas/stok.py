@@ -80,7 +80,9 @@ class OzMalIlkKayitIstegi(BaseModel):
     sasi_no: str | None = None
     uretim_yili: int | None = None
     durum: StokDurum = StokDurum.DEPODA
-    maliyet_try: Decimal
+    maliyet_orijinal: Decimal  # girilen tutar, kendi para biriminde
+    para_birimi: str = "TRY"
+    kur: Decimal = Decimal("1")
     aciklama: str | None = None
 
 
