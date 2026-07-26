@@ -18,6 +18,7 @@ from app.models.akreditif import Akreditif, AkreditifKalemi, AkreditifDurum
 from app.models.akreditif_taksit import AkreditifKalemTaksiti
 from app.models.diger import PersonelOdeme, Personel, SabitGider, BorcOdeme, Borc, BorcTip
 from app.models.yedek_parca import YedekParca
+from app.models.demirbas import Demirbas
 from app.services.kur_servisi import guncel_kur_getir
 from app.schemas.raporlama import (
     SeriNoRaporYaniti, HareketTuruRaporYaniti, HareketTuruSatiri,
@@ -1076,3 +1077,118 @@ async def net_durum(
         toplam_varlik_try=toplam_varlik, toplam_alacak_try=toplam_alacak, toplam_borc_try=toplam_borc,
         net_deger_try=(toplam_varlik + toplam_alacak) - toplam_borc,
     )
+
+
+class AylikKarSatiri(BaseModel):
+    ay: str  # "2026-07" formatinda
+    stok_satis_kari: Decimal
+    demirbas_satis_kari: Decimal
+    bakim_geliri: Decimal
+    bakim_gideri: Decimal
+    kira_geliri: Decimal
+    personel_gideri: Decimal
+    diger_gider: Decimal
+    net_kar: Decimal
+
+
+@router.get("/aylik-net-kar", response_model=list[AylikKarSatiri],
+            dependencies=[Depends(izin_gerektir("RAPOR_GORUNTULE"))])
+def aylik_net_kar(
+    ay_sayisi: int = 12,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Ay ay net kar/zarar ozeti. Gelir kalemleri: stok satis kari (satis
+    fiyati - toplam maliyet), demirbas satis kari, bakim geliri, kira
+    geliri. Gider kalemleri: bakim gideri, odenmis personel maaslari,
+    odenmis diger giderler. Akreditif/Leasing/Cek/Taksit odemeleri BURAYA
+    DAHIL EDILMEZ - bunlar borc/alacak kapatma islemleridir, kar/zarar
+    (gelir tablosu) kalemi degildir.
+    """
+    aylik: dict[str, dict] = {}
+
+    def satir(ay: str) -> dict:
+        return aylik.setdefault(ay, {
+            "stok_satis_kari": Decimal("0"), "demirbas_satis_kari": Decimal("0"),
+            "bakim_geliri": Decimal("0"), "bakim_gideri": Decimal("0"),
+            "kira_geliri": Decimal("0"), "personel_gideri": Decimal("0"), "diger_gider": Decimal("0"),
+        })
+
+    # 1) Stok satis kari
+    stok_urunleri = list(db.execute(
+        select(StokSeriNo).where(
+            StokSeriNo.sirket_id == sirket_id, StokSeriNo.durum == StokDurum.SATILDI,
+            StokSeriNo.satis_tarihi.isnot(None),
+        )
+    ).scalars())
+    for u in stok_urunleri:
+        ay = u.satis_tarihi.strftime("%Y-%m")
+        toplam_maliyet = (
+            u.satinalma_maliyeti_try + u.nakliye_maliyeti_try + u.gumruk_maliyeti_try +
+            u.antrepo_maliyeti_try + u.millilestirme_maliyeti_try + u.leasing_maliyeti_try + u.diger_maliyet_try
+        )
+        kar = (u.satis_fiyati_try or Decimal("0")) - toplam_maliyet
+        satir(ay)["stok_satis_kari"] += kar
+
+    # 2) Demirbas satis kari
+    demirbaslar = list(db.execute(
+        select(Demirbas).where(Demirbas.sirket_id == sirket_id, Demirbas.durum == "SATILDI", Demirbas.satis_tarihi.isnot(None))
+    ).scalars())
+    for d in demirbaslar:
+        ay = d.satis_tarihi.strftime("%Y-%m")
+        kar = (d.satis_fiyati_try or Decimal("0")) - d.maliyet_try
+        satir(ay)["demirbas_satis_kari"] += kar
+
+    # 3) Bakim geliri/gideri
+    bakimlar = list(db.execute(select(BakimKaydi).where(BakimKaydi.sirket_id == sirket_id)).scalars())
+    for b in bakimlar:
+        if not b.tarih:
+            continue
+        ay = b.tarih.strftime("%Y-%m")
+        if b.tip == BakimTip.GELIR:
+            satir(ay)["bakim_geliri"] += b.tutar
+        else:
+            satir(ay)["bakim_gideri"] += b.tutar
+
+    # 4) Kira geliri (tahsil edilmis donemler)
+    kira_odemeleri = list(db.execute(
+        select(KiralamaOdeme)
+        .join(KiralamaSozlesme, KiralamaSozlesme.id == KiralamaOdeme.sozlesme_id)
+        .where(KiralamaSozlesme.sirket_id == sirket_id, KiralamaOdeme.odendi_mi.is_(True))
+    ).scalars())
+    for o in kira_odemeleri:
+        if o.odeme_tarihi:
+            ay = o.odeme_tarihi.strftime("%Y-%m")
+            satir(ay)["kira_geliri"] += o.tutar
+
+    # 5) Odenmis personel maaslari/avanslari
+    personel_odemeleri = list(db.execute(
+        select(PersonelOdeme)
+        .join(Personel, Personel.id == PersonelOdeme.personel_id)
+        .where(Personel.sirket_id == sirket_id, PersonelOdeme.odendi_mi.is_(True))
+    ).scalars())
+    for o in personel_odemeleri:
+        if o.odeme_tarihi:
+            ay = o.odeme_tarihi.strftime("%Y-%m")
+            satir(ay)["personel_gideri"] += o.tutar
+
+    # 6) Odenmis diger giderler (TL karsiligi uzerinden)
+    giderler = list(db.execute(
+        select(SabitGider).where(SabitGider.sirket_id == sirket_id, SabitGider.odendi_mi.is_(True))
+    ).scalars())
+    for g in giderler:
+        if g.odeme_tarihi:
+            ay = g.odeme_tarihi.strftime("%Y-%m")
+            satir(ay)["diger_gider"] += g.tutar_try
+
+    sonuc = []
+    for ay, veri in aylik.items():
+        net_kar = (
+            veri["stok_satis_kari"] + veri["demirbas_satis_kari"] + veri["bakim_geliri"] + veri["kira_geliri"]
+            - veri["bakim_gideri"] - veri["personel_gideri"] - veri["diger_gider"]
+        )
+        sonuc.append(AylikKarSatiri(ay=ay, net_kar=net_kar, **veri))
+
+    sonuc.sort(key=lambda s: s.ay, reverse=True)
+    return sonuc[:ay_sayisi]
