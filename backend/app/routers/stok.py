@@ -1,7 +1,7 @@
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.exc import IntegrityError
 
 from app.db.session import get_db
@@ -161,6 +161,38 @@ def stok_seri_no_listele(
     if sahiplik_tipi:
         sorgu = sorgu.where(StokSeriNo.sahiplik_tipi == sahiplik_tipi)
     return list(db.execute(sorgu).scalars())
+
+
+@router.get("/stok-seri-no/toplam-doviz-maliyet-haritasi",
+            dependencies=[Depends(izin_gerektir("STOK_GORUNTULE"))])
+def toplam_doviz_maliyet_haritasi(
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Her stok_seri_no_id icin, o urune eklenmis maliyet kalemlerinden USD ve
+    EUR cinsinden GIRILMIS olanlarin ORIJINAL (canli kurla yeniden
+    hesaplanmamis) tutarlarinin toplamini doner. Boylece "USD Karsiligi"
+    gibi sutunlar, bugunku kurla yapilan bir TAHMIN yerine, o urun icin
+    GERCEKTEN doviz cinsinden odenmis tarihsel tutari gosterebilir.
+    Not: Bir urune sadece TL cinsinden maliyet girildiyse (orn. normal
+    Siparis->Teslim Al akisindan gelen ve hicbir zaman geriye donuk
+    maliyet kalemi eklenmemis urunler), bu haritada o urun icin veri
+    OLMAYACAKTIR - boyle durumlarda frontend canli kur tahminine geri
+    donmelidir.
+    """
+    sorgu = (
+        select(StokMaliyetKalemi.stok_seri_no_id, StokMaliyetKalemi.para_birimi,
+               func.sum(StokMaliyetKalemi.tutar).label("toplam"))
+        .join(StokSeriNo, StokSeriNo.id == StokMaliyetKalemi.stok_seri_no_id)
+        .where(StokSeriNo.sirket_id == sirket_id, StokMaliyetKalemi.para_birimi != ParaBirimi.TRY)
+        .group_by(StokMaliyetKalemi.stok_seri_no_id, StokMaliyetKalemi.para_birimi)
+    )
+    harita: dict[str, dict[str, Decimal]] = {}
+    for seri_id, para_birimi, toplam in db.execute(sorgu).all():
+        pb = para_birimi.value if hasattr(para_birimi, "value") else para_birimi
+        harita.setdefault(str(seri_id), {})[pb] = toplam
+    return harita
 
 
 def _seri_no_getir_veya_404(db: Session, seri_id: int, sirket_id: int) -> StokSeriNo:
@@ -399,6 +431,20 @@ def oz_mal_ilk_kaydi_olustur(
         sahiplik_tipi="OZ_MAL", satinalma_maliyeti_try=maliyet_try,
     )
     db.add(yeni)
+    db.flush()
+
+    # Orijinal doviz tutarini (ornegin 18.600 USD) KALICI olarak kaydetmek
+    # icin bir StokMaliyetKalemi de aciyoruz - boylece "Maliyet Detayi"
+    # panelinde ve toplu USD/EUR ozetlerinde gercek tarihsel tutar (canli
+    # kurla yeniden hesaplanmis bir tahmin degil) gorunur. odendi_mi=True,
+    # cunku bu gecmiste zaten harcanmis bir tutardir.
+    db.add(StokMaliyetKalemi(
+        stok_seri_no_id=yeni.id, tip=MaliyetTip.SATINALMA,
+        aciklama=istek.aciklama or "Öz Mal ilk kaydı",
+        para_birimi=istek.para_birimi, tutar=istek.maliyet_orijinal,
+        kur=istek.kur, tutar_try=maliyet_try, tarih=date.today(), odendi_mi=True,
+    ))
+
     db.commit()
     db.refresh(yeni)
     return yeni
