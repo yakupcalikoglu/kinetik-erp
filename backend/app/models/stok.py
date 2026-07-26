@@ -89,6 +89,10 @@ class StokSeriNo(Base):
     siparis_id = Column(BigInteger, ForeignKey("siparisler.id"))
     durum = Column(SAEnum(StokDurum, name="stok_durum_t"), nullable=False, default=StokDurum.SIPARISTE)
     tedarikci_cari_id = Column(BigInteger, ForeignKey("cari_hesaplar.id"))
+    # TICARI: musteriye satmak icin alinan normal stok. OZ_MAL: kendi
+    # kullanimimiz/kiralama icin ayirdigimiz, kendi mulkumuz olan urun -
+    # yine de maliyeti uzerinden ileride satilabilir/hurdaya cikarilabilir.
+    sahiplik_tipi = Column(String(20), nullable=False, default="TICARI")
 
     satinalma_maliyeti_try = Column(Numeric(18, 2), default=0)
     nakliye_maliyeti_try = Column(Numeric(18, 2), default=0)
