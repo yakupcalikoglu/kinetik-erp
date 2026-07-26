@@ -25,7 +25,7 @@ from app.schemas.finansal import (
     TaksitliSatisOlusturIstegi, TaksitliSatisYanit, TaksitDetayYanit, TaksitTahsilIstegi,
     TaksitOdemeSonucu,
     KiralamaOlusturIstegi, KiralamaYanit, KiralamaOdemeOlusturIstegi, KiralamaOdemeYanit,
-    KiralamaDuzenleIstegi,
+    KiralamaDuzenleIstegi, KiralamaSonlandirIstegi,
     BakimOlusturIstegi, BakimYanit,
 )
 from app.services.para_hareketi import para_hareketi_olustur
@@ -67,7 +67,7 @@ def _urun_bilgisi_ekle(nesne, urun_id, urun_haritasi):
 
 
 def _kalemler_seri_no_ekle(db: Session, kalem_urunu_model, kalemler: list) -> None:
-    """Verilen kalem listesine (her birinde .id var) seri_numaralari alanini ekler."""
+    """Verilen kalem listesine (her birinde .id var) seri_numaralari ve sahiplik bilgisini ekler."""
     kalem_idleri = [k.id for k in kalemler]
     if not kalem_idleri:
         return
@@ -75,17 +75,21 @@ def _kalemler_seri_no_ekle(db: Session, kalem_urunu_model, kalemler: list) -> No
         select(kalem_urunu_model).where(kalem_urunu_model.kalem_id.in_(kalem_idleri))
     ).scalars())
     stok_ids = [j.stok_seri_no_id for j in junction_rows]
-    seri_no_haritasi = {
-        u.id: u.seri_no for u in db.execute(select(StokSeriNo).where(StokSeriNo.id.in_(stok_ids))).scalars()
-    } if stok_ids else {}
+    urunler = list(db.execute(select(StokSeriNo).where(StokSeriNo.id.in_(stok_ids))).scalars()) if stok_ids else []
+    seri_no_haritasi = {u.id: u.seri_no for u in urunler}
+    sahiplik_haritasi = {u.id: u.sahiplik_tipi for u in urunler}
     kalem_seri_haritasi = {}
     kalem_seri_id_haritasi = {}
+    kalem_oz_mal_haritasi = {}
     for j in junction_rows:
         kalem_seri_haritasi.setdefault(j.kalem_id, []).append(seri_no_haritasi.get(j.stok_seri_no_id, f"#{j.stok_seri_no_id}"))
         kalem_seri_id_haritasi.setdefault(j.kalem_id, []).append(j.stok_seri_no_id)
+        if sahiplik_haritasi.get(j.stok_seri_no_id) == "OZ_MAL":
+            kalem_oz_mal_haritasi[j.kalem_id] = True
     for k in kalemler:
         k.seri_numaralari = kalem_seri_haritasi.get(k.id, [])
         k.stok_seri_no_idleri = kalem_seri_id_haritasi.get(k.id, [])
+        k.oz_mal_mi = kalem_oz_mal_haritasi.get(k.id, False)
 
 
 def _degisiklikleri_kaydet(db: Session, sirket_id: int, kullanici_id: int, tablo_adi: str, kayit_id: int, degisiklikler: dict) -> None:
@@ -930,20 +934,52 @@ def taksitli_satis_plani_sil(plan_id: int, sirket_id: int = Depends(aktif_sirket
 @router.put("/kiralama-sozlesmeleri/{sozlesme_id}/sonlandir", response_model=KiralamaYanit,
             dependencies=[Depends(izin_gerektir("KIRALAMA_DUZENLE"))])
 def kiralama_sozlesmesini_sonlandir(
-    sozlesme_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
+    sozlesme_id: int, istek: KiralamaSonlandirIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    kullanici: Kullanici = Depends(aktif_kullanici_getir),
+    db: Session = Depends(get_db),
 ):
     """
     Sozlesmeyi 'SONA_ERDI' durumuna gecirir ve sozlesmeye bagli TUM
     urunlerin Stok'taki durumunu otomatik olarak "Depoda"ya dondurur -
-    yani urun iade edilmis/kiralama bitmis sayilir. Odeme gecmisi
-    (KiralamaOdeme kayitlari) DOKUNULMADAN kalir, sadece sozlesme ve
-    urunlerin durumu guncellenir.
+    yani urun iade edilmis/kiralama bitmis sayilir.
+
+    son_donem_tutari > 0 verildiyse (orn. aylik sozlesme tam ay
+    dolmadan bitirildiginde, gecen gunlere karsilik gelen orantili
+    kira bedeli), bu tutar icin AYRICA bir KiralamaOdeme kaydi (odendi_mi=True)
+    olusturulur VE Kasa/Banka'ya GIRIS olarak islenir - yani sonlandirma
+    ile birlikte son tahsilat da tek adimda yapilmis olur.
     """
     sozlesme = db.get(KiralamaSozlesme, sozlesme_id)
     if sozlesme is None or sozlesme.sirket_id != sirket_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Kiralama sözleşmesi bulunamadı.")
     if sozlesme.durum != "AKTIF":
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bu sözleşme zaten aktif değil.")
+
+    if istek.son_donem_tutari > 0 and not istek.odeme_yontemi:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Son dönem tutarı girildiyse ödeme yöntemi (Nakit/Banka) zorunludur.")
+
+    from datetime import date
+    bugun = date.today()
+    if istek.son_donem_tutari > 0:
+        son_odeme = KiralamaOdeme(
+            sozlesme_id=sozlesme_id,
+            donem_basi=istek.donem_basi or bugun,
+            donem_sonu=istek.donem_sonu or bugun,
+            tutar=istek.son_donem_tutari,
+            odendi_mi=True,
+            odeme_tarihi=bugun,
+        )
+        db.add(son_odeme)
+        db.flush()
+        para_hareketi_olustur(
+            db, sirket_id, kullanici.id, "GIRIS", istek.son_donem_tutari,
+            istek.odeme_yontemi, istek.banka_hesap_id,
+            aciklama=f"Kiralama sonlandırma - son dönem tahsilatı - {sozlesme.sozlesme_no or ('#' + str(sozlesme.id))}"
+                     + (f" - {istek.aciklama}" if istek.aciklama else ""),
+            kaynak_tablo="KIRALAMA_ODEME", kaynak_id=son_odeme.id,
+            cari_id=sozlesme.kiraci_cari_id, para_birimi=sozlesme.para_birimi.value,
+        )
 
     sozlesme.durum = "SONA_ERDI"
 
