@@ -2800,7 +2800,7 @@ function KiralamaSekmesi() {
       {seciliSozlesme && (
         <Kart>
           <div style={{ fontWeight: 600, fontSize: 13.5, marginBottom: 12 }}>
-            Sözleşme #{seciliSozlesme} — kira ödemeleri
+            Sözleşme #{seciliSozlesme}{aktifSozlesme?.kiraci_unvan ? ` — ${aktifSozlesme.kiraci_unvan}` : ''} — kira ödemeleri
           </div>
 
           <form onSubmit={odemeEkle} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 10, marginBottom: 14 }}>
