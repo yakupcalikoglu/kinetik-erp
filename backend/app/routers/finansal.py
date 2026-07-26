@@ -213,7 +213,7 @@ def cek_durum_guncelle(
     if istek.ciro_edilen_cari_id is not None:
         cek.ciro_edilen_cari_id = istek.ciro_edilen_cari_id
         from datetime import date
-        cek.ciro_tarihi = date.today()
+        cek.ciro_tarihi = istek.ciro_tarihi or date.today()
 
     if istek.yeni_durum in para_hareketi_gereken_durumlar:
         yon = "GIRIS" if cek.tip == CekTip.ALINAN else "CIKIS"
