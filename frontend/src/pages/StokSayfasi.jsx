@@ -452,10 +452,20 @@ function DurumDegistirFormu({ urun, onKaydedildi, onVazgec }) {
 function OzMalIlkKayitFormu({ stokKartlari, onKaydedildi, onVazgec }) {
   const [form, setForm] = useState({
     stok_karti_id: '', seri_no: '', sasi_no: '', uretim_yili: '',
-    durum: 'DEPODA', maliyet_try: '', aciklama: '',
+    durum: 'DEPODA', maliyet_orijinal: '', para_birimi: 'TRY', kur: '1', aciklama: '',
   });
   const [hata, setHata] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
+
+  useEffect(() => {
+    if (form.para_birimi !== 'TRY') {
+      api.get(`/kur/${form.para_birimi}`).then((r) => setForm((f) => ({ ...f, kur: String(r.data.kur) }))).catch(() => {});
+    } else {
+      setForm((f) => ({ ...f, kur: '1' }));
+    }
+  }, [form.para_birimi]);
+
+  const tlKarsiligi = form.maliyet_orijinal ? Number(form.maliyet_orijinal) * Number(form.kur || 1) : null;
 
   async function kaydet(e) {
     e.preventDefault();
@@ -468,7 +478,9 @@ function OzMalIlkKayitFormu({ stokKartlari, onKaydedildi, onVazgec }) {
         sasi_no: form.sasi_no || null,
         uretim_yili: form.uretim_yili ? Number(form.uretim_yili) : null,
         durum: form.durum,
-        maliyet_try: Number(form.maliyet_try),
+        maliyet_orijinal: Number(form.maliyet_orijinal),
+        para_birimi: form.para_birimi,
+        kur: Number(form.kur || 1),
         aciklama: form.aciklama || null,
       });
       onKaydedildi();
@@ -511,13 +523,30 @@ function OzMalIlkKayitFormu({ stokKartlari, onKaydedildi, onVazgec }) {
               {Object.entries(DURUM_METIN).filter(([k]) => !['SATILDI', 'HURDA', 'SIPARISTE'].includes(k)).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
           </Alan>
-          <Alan etiket="Maliyet (TL)">
-            <input required type="number" step="0.01" value={form.maliyet_try} onChange={(e) => setForm((f) => ({ ...f, maliyet_try: e.target.value }))} style={girdiStili} />
+          <Alan etiket="Maliyet">
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input required type="number" step="0.01" value={form.maliyet_orijinal} onChange={(e) => setForm((f) => ({ ...f, maliyet_orijinal: e.target.value }))} style={{ ...girdiStili, flex: 1 }} />
+              <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={{ ...girdiStili, width: 90 }}>
+                <option value="TRY">TL</option>
+                <option value="USD">USD</option>
+                <option value="EUR">EUR</option>
+              </select>
+            </div>
           </Alan>
+          {form.para_birimi !== 'TRY' && (
+            <Alan etiket={`Kur (${form.para_birimi} → TL) — otomatik, değiştirilebilir`}>
+              <input type="number" step="0.0001" value={form.kur} onChange={(e) => setForm((f) => ({ ...f, kur: e.target.value }))} style={girdiStili} />
+            </Alan>
+          )}
           <Alan etiket="Not (opsiyonel)">
             <input value={form.aciklama} onChange={(e) => setForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
           </Alan>
         </div>
+        {tlKarsiligi != null && form.para_birimi !== 'TRY' && (
+          <div style={{ fontSize: 12.5, color: 'var(--metin-ikincil)', marginBottom: 10 }}>
+            TL karşılığı ≈ {paraFormat(tlKarsiligi)}
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
           <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Kaydediliyor...' : 'Öz Mal olarak kaydet'}</Buton>
           <Buton type="button" variant="ikincil" onClick={onVazgec}>Vazgeç</Buton>
