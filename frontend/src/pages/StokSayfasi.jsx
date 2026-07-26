@@ -474,6 +474,16 @@ function DurumDegistirFormu({ urun, onKaydedildi, onVazgec }) {
               </Link>.
             </div>
           )}
+          {urun.durum === 'KIRADA' && yeniDurum !== 'KIRADA' && (
+            <div style={{ marginTop: 10, padding: '10px 12px', background: 'var(--kirmizi-acik, #fde2e2)', borderRadius: 7, fontSize: 12.5 }}>
+              ⚠ Bu ürün aktif bir kiralama sözleşmesine bağlı olabilir. Sadece durumu değiştirirsen sözleşme
+              "Aktif" olarak kalmaya devam eder — tutarsızlık oluşur. Önce{' '}
+              <Link to="/finansal?sekme=kiralama" style={{ color: 'var(--kirmizi)', fontWeight: 600 }}>
+                Finansal Takip → Kiralama'dan bu ürünün sözleşmesini "Sonlandır"
+              </Link>
+              , kalan/eksik ay için tahsilat yapıp öyle kapat — ürün otomatik olarak "Depoda"ya dönecektir.
+            </div>
+          )}
           {hata && <div style={{ marginTop: 8 }}><HataMesaji>{hata}</HataMesaji></div>}
         </div>
       </td>
