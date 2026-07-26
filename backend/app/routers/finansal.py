@@ -583,6 +583,12 @@ def kiralama_olustur(
         db.flush()
         for seri_id in k.stok_seri_no_idleri:
             db.add(KiralamaKalemUrunu(kalem_id=yeni_kalem.id, stok_seri_no_id=seri_id))
+            # ONEMLI: sozlesmeye baglanan spesifik urunun Stok'taki durumunu
+            # otomatik "KIRADA" yapiyoruz - aksi halde sozlesme var ama
+            # Stok ekrani/Dashboard bunu "kirada" olarak hic gormuyordu.
+            urun = db.get(StokSeriNo, seri_id)
+            if urun is not None:
+                urun.durum = StokDurum.KIRADA
 
     db.commit()
     db.refresh(yeni)
@@ -653,17 +659,32 @@ def kiralama_sozlesmesi_duzenle(
     _degisiklikleri_kaydet(db, sirket_id, kullanici.id, "kiralama_sozlesmeleri", sozlesme.id, degisiklikler)
 
     eski_kalemler = list(db.execute(select(KiralamaSozlesmeKalemi).where(KiralamaSozlesmeKalemi.sozlesme_id == sozlesme_id)).scalars())
-    for j in list(db.execute(select(KiralamaKalemUrunu).where(KiralamaKalemUrunu.kalem_id.in_([k.id for k in eski_kalemler]))).scalars()):
+    eski_baglantilar = list(db.execute(select(KiralamaKalemUrunu).where(KiralamaKalemUrunu.kalem_id.in_([k.id for k in eski_kalemler]))).scalars())
+    eski_seri_idleri = {j.stok_seri_no_id for j in eski_baglantilar}
+    for j in eski_baglantilar:
         db.delete(j)
     for eski in eski_kalemler:
         db.delete(eski)
     db.flush()
+
+    yeni_seri_idleri = set()
     for k in istek.kalemler:
         yeni_kalem = KiralamaSozlesmeKalemi(sozlesme_id=sozlesme_id, stok_karti_id=k.stok_karti_id, miktar=k.miktar, birim_fiyat=k.birim_fiyat)
         db.add(yeni_kalem)
         db.flush()
         for seri_id in k.stok_seri_no_idleri:
             db.add(KiralamaKalemUrunu(kalem_id=yeni_kalem.id, stok_seri_no_id=seri_id))
+            yeni_seri_idleri.add(seri_id)
+            urun = db.get(StokSeriNo, seri_id)
+            if urun is not None:
+                urun.durum = StokDurum.KIRADA
+
+    # Sozlesmeden cikarilmis (artik secili olmayan) urunler varsa, bunlari
+    # tekrar "Depoda" durumuna donduruyoruz - artik kirada degiller.
+    for seri_id in eski_seri_idleri - yeni_seri_idleri:
+        urun = db.get(StokSeriNo, seri_id)
+        if urun is not None and urun.durum == StokDurum.KIRADA:
+            urun.durum = StokDurum.DEPODA
 
     db.commit()
     db.refresh(sozlesme)
@@ -902,6 +923,46 @@ def taksitli_satis_plani_sil(plan_id: int, sirket_id: int = Depends(aktif_sirket
     db.delete(plan)
     db.commit()
     return {"silindi": True}
+
+
+# ===================================================================== KİRALAMA - SONLANDIR
+@router.put("/kiralama-sozlesmeleri/{sozlesme_id}/sonlandir", response_model=KiralamaYanit,
+            dependencies=[Depends(izin_gerektir("KIRALAMA_DUZENLE"))])
+def kiralama_sozlesmesini_sonlandir(
+    sozlesme_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
+):
+    """
+    Sozlesmeyi 'SONA_ERDI' durumuna gecirir ve sozlesmeye bagli TUM
+    urunlerin Stok'taki durumunu otomatik olarak "Depoda"ya dondurur -
+    yani urun iade edilmis/kiralama bitmis sayilir. Odeme gecmisi
+    (KiralamaOdeme kayitlari) DOKUNULMADAN kalir, sadece sozlesme ve
+    urunlerin durumu guncellenir.
+    """
+    sozlesme = db.get(KiralamaSozlesme, sozlesme_id)
+    if sozlesme is None or sozlesme.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Kiralama sözleşmesi bulunamadı.")
+    if sozlesme.durum != "AKTIF":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bu sözleşme zaten aktif değil.")
+
+    sozlesme.durum = "SONA_ERDI"
+
+    kalemler = list(db.execute(select(KiralamaSozlesmeKalemi).where(KiralamaSozlesmeKalemi.sozlesme_id == sozlesme_id)).scalars())
+    baglantilar = list(db.execute(select(KiralamaKalemUrunu).where(KiralamaKalemUrunu.kalem_id.in_([k.id for k in kalemler]))).scalars())
+    for b in baglantilar:
+        urun = db.get(StokSeriNo, b.stok_seri_no_id)
+        if urun is not None and urun.durum == StokDurum.KIRADA:
+            urun.durum = StokDurum.DEPODA
+
+    db.commit()
+    db.refresh(sozlesme)
+    cari_h = _cari_haritasi(db, sirket_id)
+    urun_tanimi_h = _urun_tanimi_haritasi(db, sirket_id)
+    sozlesme.kiraci_unvan = cari_h.get(sozlesme.kiraci_cari_id)
+    sozlesme.kalemler = kalemler
+    for k in sozlesme.kalemler:
+        k.urun_adi = urun_tanimi_h.get(k.stok_karti_id)
+    _kalemler_seri_no_ekle(db, KiralamaKalemUrunu, sozlesme.kalemler)
+    return sozlesme
 
 
 # ===================================================================== KİRALAMA - SİL
