@@ -52,6 +52,7 @@ class CekYanit(BaseModel):
 class CekDurumGuncelleIstegi(BaseModel):
     yeni_durum: CekDurum
     ciro_edilen_cari_id: int | None = None
+    ciro_tarihi: date | None = None  # verilmezse bugunun tarihi kullanilir
     aciklama: str | None = None
     odeme_yontemi: str | None = None  # TAHSIL_EDILDI/ODENDI icin zorunlu: "NAKIT" | "BANKA"
     banka_hesap_id: int | None = None
@@ -98,6 +99,16 @@ class LeasingOlusturIstegi(BaseModel):
     taksit_sayisi: int
     notlar: str | None = None
     kalemler: list[LeasingKalemIstegi]
+
+
+class LeasingDuzenleIstegi(BaseModel):
+    sifre: str  # kullanicinin kendi giris sifresi - degisiklik onayi icin zorunlu
+    # NOT: sadece tanimlayici alanlar duzenlenebilir - tutar/taksit_sayisi/
+    # baslangic_tarihi degistirilmiyor cunku odeme plani (taksitler) zaten
+    # olusturulmus ve bunlarin bir kismi odenmis olabilir.
+    leasing_firmasi_cari_id: int
+    sozlesme_no: str | None = None
+    notlar: str | None = None
 
 
 class LeasingYanit(BaseModel):
@@ -160,6 +171,13 @@ class TaksitliSatisOlusturIstegi(BaseModel):
     baslangic_tarihi: date
     notlar: str | None = None
     kalemler: list[TaksitKalemIstegi]
+
+
+class TaksitliSatisDuzenleIstegi(BaseModel):
+    sifre: str  # kullanicinin kendi giris sifresi - degisiklik onayi icin zorunlu
+    # NOT: sadece musteri/notlar duzenlenebilir - taksit plani zaten olusturulmus.
+    musteri_cari_id: int
+    notlar: str | None = None
 
 
 class TaksitliSatisYanit(BaseModel):
@@ -304,6 +322,16 @@ class BakimOlusturIstegi(BaseModel):
     odeme_yontemi: str  # "NAKIT" | "BANKA"
     banka_hesap_id: int | None = None
     kur: Decimal | None = None  # NAKIT + TRY disi para birimi icin zorunlu
+
+
+class BakimDuzenleIstegi(BaseModel):
+    sifre: str  # kullanicinin kendi giris sifresi - degisiklik onayi icin zorunlu
+    # NOT: tutar/tarih/odeme bilgisi duzenlenemiyor - kayit olusturulurken
+    # ayni anda bir Kasa/Banka hareketi de acilmisti, bu hareket burada
+    # otomatik guncellenmez. Sadece tanimlayici alanlar duzenlenebilir.
+    tip: BakimTip
+    aciklama: str | None = None
+    ilgili_cari_id: int | None = None
 
 
 class BakimYanit(BaseModel):
