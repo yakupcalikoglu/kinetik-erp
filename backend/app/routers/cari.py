@@ -14,7 +14,7 @@ from app.core.security import sifre_dogrula
 from app.schemas.cari import (
     VergiNoSorguIstegi, VergiNoSorguYaniti, CariOlusturIstegi,
     CariGuncelleIstegi, CariYanit, CariHareketYanit, CariBakiyeYanit,
-    CariTopluIceAktarIstegi, CariTopluIceAktarSonucu,
+    CariTopluIceAktarIstegi, CariTopluIceAktarSonucu, CariOzetYaniti, CariOzetKalemi,
 )
 from app.services import uyumsoft_mock
 
@@ -239,3 +239,165 @@ def cari_sil(
             "Bu cari kayıt başka kayıtlarda (sipariş, çek, hareket vb.) kullanıldığı için silinemiyor."
         )
     return {"silindi": True}
+
+
+@router.get("/{cari_id}/ozet", response_model=CariOzetYaniti,
+            dependencies=[Depends(izin_gerektir("CARI_GORUNTULE"))])
+async def cari_ozet(
+    cari_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
+):
+    """
+    Bu carinin GERCEK alacak/borc durumunu, ilgili TUM modulleri (Taksitli
+    Satis, Kiralama, Siparis, Akreditif, Cek, Ortak/Dis Borc) bu cari_id'ye
+    gore filtreleyerek hesaplar. CariHesap.bakiye_try/CariHareket
+    alanlarina GUVENILMEZ (bunlar sistemde genel olarak doldurulmuyor) -
+    bunun yerine /raporlar/net-durum'daki AYNI mantik, TEK bir cari icin
+    calistirilir.
+    """
+    from datetime import date as _date
+    from decimal import Decimal as _Decimal
+    from app.models.stok import Siparis, SiparisDetay, SiparisOdeme
+    from app.models.finansal import (
+        TaksitliSatisPlani, TaksitDetay, KiralamaSozlesme, KiralamaOdeme,
+        Cek, CekDurum, CekTip, Borc, BorcOdeme, BorcTip,
+    )
+    from app.models.akreditif import Akreditif, AkreditifKalemi, AkreditifDurum
+    from app.models.akreditif_taksit import AkreditifKalemTaksiti
+    from app.services.kur_servisi import guncel_kur_getir
+
+    cari = db.get(CariHesap, cari_id)
+    if cari is None or cari.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Cari bulunamadı.")
+
+    kur_cache: dict[str, _Decimal] = {}
+
+    async def kur_getir(pb: str) -> _Decimal:
+        if pb == "TRY":
+            return _Decimal("1")
+        if pb not in kur_cache:
+            k = await guncel_kur_getir(pb)
+            kur_cache[pb] = _Decimal(str(k)) if k else _Decimal("0")
+        return kur_cache[pb]
+
+    # 1) Taksitli satis alacagi (bu cari MUSTERI ise)
+    taksit_alacak_try = _Decimal("0")
+    taksitler = list(db.execute(
+        select(TaksitDetay)
+        .join(TaksitliSatisPlani, TaksitliSatisPlani.id == TaksitDetay.plan_id)
+        .where(TaksitliSatisPlani.sirket_id == sirket_id, TaksitliSatisPlani.musteri_cari_id == cari_id,
+               TaksitDetay.odendi_mi.is_(False))
+    ).scalars())
+    taksit_alacak_try = sum((t.tutar for t in taksitler), _Decimal("0"))
+
+    # 2) Kiralama tahsilat alacagi (bu cari KIRACI ise)
+    kira_alacak_try = _Decimal("0")
+    kira_sozlesmeler = {
+        s.id: s for s in db.execute(
+            select(KiralamaSozlesme).where(KiralamaSozlesme.sirket_id == sirket_id, KiralamaSozlesme.kiraci_cari_id == cari_id)
+        ).scalars()
+    }
+    if kira_sozlesmeler:
+        odemeler = list(db.execute(
+            select(KiralamaOdeme).where(KiralamaOdeme.sozlesme_id.in_(list(kira_sozlesmeler.keys())), KiralamaOdeme.odendi_mi.is_(False))
+        ).scalars())
+        for o in odemeler:
+            sozlesme = kira_sozlesmeler.get(o.sozlesme_id)
+            pb = sozlesme.para_birimi.value if sozlesme and hasattr(sozlesme.para_birimi, "value") else "TRY"
+            kur = await kur_getir(pb)
+            kira_alacak_try += o.tutar * kur
+
+    # 3) Tedarikciye olan siparis borcu (bu cari TEDARIKCI ise)
+    siparis_borc_try = _Decimal("0")
+    siparisler = list(db.execute(
+        select(Siparis).where(Siparis.sirket_id == sirket_id, Siparis.tedarikci_cari_id == cari_id, Siparis.durum.notin_(["TASLAK", "IPTAL"]))
+    ).scalars())
+    acik_akreditifler_bu_cari = []
+    for s in siparisler:
+        urunler = list(db.execute(select(SiparisDetay).where(SiparisDetay.siparis_id == s.id)).scalars())
+        toplam_tutar = sum((u.miktar * u.birim_fiyat for u in urunler), _Decimal("0"))
+        odenen = db.execute(select(func.coalesce(func.sum(SiparisOdeme.tutar), 0)).where(SiparisOdeme.siparis_id == s.id)).scalar_one()
+        pb = s.para_birimi if isinstance(s.para_birimi, str) else s.para_birimi.value
+        kur = await kur_getir(pb)
+        kalan_try = (toplam_tutar - odenen) * kur
+
+        akreditifler = list(db.execute(
+            select(Akreditif).where(Akreditif.siparis_id == s.id, Akreditif.sirket_id == sirket_id, Akreditif.durum != AkreditifDurum.IPTAL)
+        ).scalars())
+        for ak in akreditifler:
+            acik_akreditifler_bu_cari.append(ak)
+            ak_pb = ak.para_birimi if isinstance(ak.para_birimi, str) else ak.para_birimi.value
+            ak_kur = await kur_getir(ak_pb)
+            kalan_try -= ak.tutar * ak_kur
+
+        if kalan_try > 0:
+            siparis_borc_try += kalan_try
+
+    # 4) Akreditif (ayni sipariste zaten dusuldu, burada ayrica ekliyoruz)
+    akreditif_borc_try = _Decimal("0")
+    for ak in acik_akreditifler_bu_cari:
+        kalemler = list(db.execute(select(AkreditifKalemi).where(AkreditifKalemi.akreditif_id == ak.id)).scalars())
+        pb = ak.para_birimi if isinstance(ak.para_birimi, str) else ak.para_birimi.value
+        kur = await kur_getir(pb)
+        odenen_toplam = _Decimal("0")
+        for k in kalemler:
+            if k.odendi_mi:
+                odenen_toplam += k.tutar
+                continue
+            taksitler_ak = list(db.execute(select(AkreditifKalemTaksiti).where(AkreditifKalemTaksiti.kalem_id == k.id)).scalars())
+            odenen_toplam += sum((t.tutar for t in taksitler_ak if t.odendi_mi), _Decimal("0"))
+        kalan = ak.tutar - odenen_toplam
+        if kalan > 0:
+            akreditif_borc_try += kalan * kur
+
+    # 5) Cekler (bu cariye ait, portfoyde)
+    cek_alacak_try = _Decimal("0")
+    cek_borc_try = _Decimal("0")
+    cekler = list(db.execute(
+        select(Cek).where(Cek.sirket_id == sirket_id, Cek.cari_id == cari_id, Cek.durum == CekDurum.PORTFOYDE)
+    ).scalars())
+    for c in cekler:
+        pb = c.para_birimi.value if hasattr(c.para_birimi, "value") else c.para_birimi
+        kur = await kur_getir(pb)
+        if c.tip == CekTip.ALINAN:
+            cek_alacak_try += c.tutar * kur
+        else:
+            cek_borc_try += c.tutar * kur
+
+    # 6) Ortak/Dis Borc (bu cari ile iliskili)
+    ortak_alacak_try = _Decimal("0")
+    ortak_borc_try = _Decimal("0")
+    borclar = list(db.execute(select(Borc).where(Borc.sirket_id == sirket_id, Borc.cari_id == cari_id)).scalars())
+    for b in borclar:
+        odenen = db.execute(select(func.coalesce(func.sum(BorcOdeme.tutar), 0)).where(BorcOdeme.borc_id == b.id)).scalar_one()
+        kalan = b.tutar - odenen
+        if kalan <= 0:
+            continue
+        pb = b.para_birimi.value if hasattr(b.para_birimi, "value") else b.para_birimi
+        kur = await kur_getir(pb)
+        kalan_try = kalan * kur
+        if b.tip == BorcTip.ORTAGA_VERILEN:
+            ortak_alacak_try += kalan_try
+        else:
+            ortak_borc_try += kalan_try
+
+    alacaklar = [
+        CariOzetKalemi(kategori="Taksitli Satış Alacağı", tutar_try=taksit_alacak_try),
+        CariOzetKalemi(kategori="Kiralama Tahsilat Alacağı", tutar_try=kira_alacak_try),
+        CariOzetKalemi(kategori="Alınan Çekler (Portföyde)", tutar_try=cek_alacak_try),
+        CariOzetKalemi(kategori="Ortağa Verilen Borç (Alacak)", tutar_try=ortak_alacak_try),
+    ]
+    borclar_listesi = [
+        CariOzetKalemi(kategori="Tedarikçiye Olan Borç (Sipariş)", tutar_try=siparis_borc_try),
+        CariOzetKalemi(kategori="Akreditif (Ödenmemiş)", tutar_try=akreditif_borc_try),
+        CariOzetKalemi(kategori="Verilen Çekler (Portföyde)", tutar_try=cek_borc_try),
+        CariOzetKalemi(kategori="Ortaktan/Dışarıdan Alınan Borç", tutar_try=ortak_borc_try),
+    ]
+
+    toplam_alacak = sum((a.tutar_try for a in alacaklar), _Decimal("0"))
+    toplam_borc = sum((b.tutar_try for b in borclar_listesi), _Decimal("0"))
+
+    return CariOzetYaniti(
+        cari_id=cari.id, unvan=cari.unvan, alacaklar=alacaklar, borclar=borclar_listesi,
+        toplam_alacak_try=toplam_alacak, toplam_borc_try=toplam_borc,
+        net_try=toplam_alacak - toplam_borc,
+    )
