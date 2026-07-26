@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import {
   LayoutDashboard, Wallet, Users, Boxes, ShoppingCart, Landmark, ArrowLeftRight,
   Receipt, FileSpreadsheet, BarChart3, HandCoins, Tag, Wrench, ListTree, Settings, Search,
+  Building2,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { api, hataMesajiCikar } from '../api/client';
@@ -116,6 +117,7 @@ const MODULLER = [
   { yol: '/satis-yap', ad: 'Satış Yap', Simge: HandCoins, gerekliIzin: 'STOK_DUZENLE' },
   { yol: '/urun-tanimlari', ad: 'Ürün Tanımları', Simge: Tag, gerekliIzin: 'STOK_GORUNTULE' },
   { yol: '/yedek-parcalar', ad: 'Yedek Parça / Sarf', Simge: Wrench, gerekliIzin: 'STOK_GORUNTULE' },
+  { yol: '/oz-mal', ad: 'Öz Mal / Demirbaş', Simge: Building2, gerekliIzin: 'STOK_GORUNTULE' },
   { yol: '/harcama-turleri', ad: 'Harcama Türleri', Simge: ListTree },
   { yol: '/yonetici-paneli', ad: 'Yönetici Paneli', Simge: Settings, gerekliIzin: 'KULLANICI_YONET' },
 ];
