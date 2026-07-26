@@ -12,7 +12,7 @@ from app.models.banka import KasaHareketi, BankaHesabi, BankaHareketi
 from app.models.finansal import (
     Cek, CekDurum, CekTip, TaksitDetay, TaksitliSatisPlani,
     KiralamaOdeme, KiralamaSozlesme, BakimKaydi, BakimTip,
-    LeasingOdeme, LeasingSozlesme,
+    LeasingOdeme, LeasingSozlesme, KiralamaSozlesmeKalemi, KiralamaKalemUrunu,
 )
 from app.models.akreditif import Akreditif, AkreditifKalemi, AkreditifDurum
 from app.models.akreditif_taksit import AkreditifKalemTaksiti
@@ -779,22 +779,51 @@ def aktif_kiralamalar(
     Aktif kiralama sozlesmelerini urun bilgisi ve kiraci unvaniyla birlikte
     getirir. Genel Bakis ekraninda 'kime kiralandi, ne kadara' gorunumu icin.
     """
-    kayitlar = list(db.execute(
-        select(KiralamaSozlesme, StokSeriNo, StokKarti, CariHesap)
-        .join(StokSeriNo, StokSeriNo.id == KiralamaSozlesme.stok_seri_no_id)
-        .join(StokKarti, StokKarti.id == StokSeriNo.stok_karti_id)
-        .join(CariHesap, CariHesap.id == KiralamaSozlesme.kiraci_cari_id)
-        .where(KiralamaSozlesme.sirket_id == sirket_id, KiralamaSozlesme.durum == "AKTIF")
-    ).all())
+    # ONEMLI: KiralamaSozlesme.stok_seri_no_id ESKI (tekli urun) tasarimdan
+    # kalma bir alan - coklu urun sistemine gectigimizden beri YENI
+    # sozlesmelerde bu alan hep NULL. Gercek urun/seri no baglantisi artik
+    # KiralamaSozlesmeKalemi -> KiralamaKalemUrunu uzerinden kuruluyor. Bu
+    # yuzden dogrudan STokSeriNo'ya JOIN etmek yerine kalemler/kalem_urunu
+    # tablolarini kullaniyoruz.
+    sozlesmeler = list(db.execute(
+        select(KiralamaSozlesme).where(KiralamaSozlesme.sirket_id == sirket_id, KiralamaSozlesme.durum == "AKTIF")
+    ).scalars())
 
-    return [
-        AktifKiralamaSatiri(
-            stok_seri_no_id=seri.id, marka=kart.marka, model=kart.model, seri_no=seri.seri_no,
-            kiraci_unvan=cari.unvan, aylik_kira_tutari=sozlesme.aylik_kira_tutari,
-            para_birimi=sozlesme.para_birimi.value,
-        )
-        for sozlesme, seri, kart, cari in kayitlar
-    ]
+    sonuc = []
+    for sozlesme in sozlesmeler:
+        cari = db.get(CariHesap, sozlesme.kiraci_cari_id)
+        kiraci_unvan = cari.unvan if cari else None
+        para_birimi = sozlesme.para_birimi.value if hasattr(sozlesme.para_birimi, "value") else sozlesme.para_birimi
+
+        kalemler = list(db.execute(
+            select(KiralamaSozlesmeKalemi).where(KiralamaSozlesmeKalemi.sozlesme_id == sozlesme.id)
+        ).scalars())
+        for kalem in kalemler:
+            kart = db.get(StokKarti, kalem.stok_karti_id)
+            baglantilar = list(db.execute(
+                select(KiralamaKalemUrunu).where(KiralamaKalemUrunu.kalem_id == kalem.id)
+            ).scalars())
+            if baglantilar:
+                for b in baglantilar:
+                    seri = db.get(StokSeriNo, b.stok_seri_no_id)
+                    if seri is None:
+                        continue
+                    sonuc.append(AktifKiralamaSatiri(
+                        stok_seri_no_id=seri.id, marka=kart.marka if kart else None,
+                        model=kart.model if kart else None, seri_no=seri.seri_no,
+                        kiraci_unvan=kiraci_unvan, aylik_kira_tutari=kalem.birim_fiyat, para_birimi=para_birimi,
+                    ))
+            else:
+                # Bu kalem icin spesifik seri no secilmemis (sadece urun turu +
+                # miktar girilmis) - yine de "kimde ne kadarlik urun kirada"
+                # bilgisi kaybolmasin diye genel bir satir olarak gosteriyoruz.
+                sonuc.append(AktifKiralamaSatiri(
+                    stok_seri_no_id=kalem.id, marka=kart.marka if kart else None,
+                    model=kart.model if kart else None,
+                    seri_no=f"{kalem.miktar} adet (seri no belirtilmemiş)",
+                    kiraci_unvan=kiraci_unvan, aylik_kira_tutari=kalem.birim_fiyat, para_birimi=para_birimi,
+                ))
+    return sonuc
 
 
 class NetDurumKalemi(BaseModel):
