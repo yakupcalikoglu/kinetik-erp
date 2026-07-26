@@ -127,6 +127,11 @@ class MaliyetKalemiEkleIstegi(BaseModel):
     kur: Decimal = Decimal("1")
     belge_no: str | None = None
     tarih: date
+    # TL cinsinden girilen kalemler icin (Nakliye/Gumruk/Antrepo vb. genelde
+    # TL odenir) - odemenin yapildigi GUNKU USD kurunu saklamak icin.
+    # Boylece bu TL tutarin USD karsiligi, ileride CANLI kurla yeniden
+    # hesaplanan bir TAHMIN degil, o gunku GERCEK kurla hesaplanmis olur.
+    referans_usd_kuru: Decimal | None = None
 
 
 class MaliyetKalemiDuzenleIstegi(BaseModel):
@@ -139,6 +144,7 @@ class MaliyetKalemiDuzenleIstegi(BaseModel):
     kur: Decimal = Decimal("1")
     belge_no: str | None = None
     tarih: date
+    referans_usd_kuru: Decimal | None = None
 
 
 class KarRaporuYanit(BaseModel):
@@ -254,6 +260,7 @@ class StokMaliyetKalemiYanit(BaseModel):
     tutar_try: Decimal
     belge_no: str | None
     tarih: date
+    referans_usd_kuru: Decimal | None = None
 
     class Config:
         from_attributes = True
