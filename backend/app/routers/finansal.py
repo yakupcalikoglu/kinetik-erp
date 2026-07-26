@@ -25,6 +25,7 @@ from app.schemas.finansal import (
     TaksitliSatisOlusturIstegi, TaksitliSatisYanit, TaksitDetayYanit, TaksitTahsilIstegi,
     TaksitOdemeSonucu,
     KiralamaOlusturIstegi, KiralamaYanit, KiralamaOdemeOlusturIstegi, KiralamaOdemeYanit,
+    KiralamaDuzenleIstegi,
     BakimOlusturIstegi, BakimYanit,
 )
 from app.services.para_hareketi import para_hareketi_olustur
