@@ -428,6 +428,75 @@ function CariFormu({ duzenlenenCari, onKaydedildi, onVazgec }) {
 
 const HAREKET_YON_METIN = { GIRIS: 'Giriş', CIKIS: 'Çıkış' };
 
+function CariOzetKarti({ cari }) {
+  const [ozet, setOzet] = useState(null);
+  const [hata, setHata] = useState(null);
+  const [detayAcik, setDetayAcik] = useState(false);
+
+  useEffect(() => {
+    api.get(`/cariler/${cari.id}/ozet`).then((r) => setOzet(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
+  }, [cari.id]);
+
+  if (hata) return <Kart style={{ marginBottom: 16 }}><HataMesaji>{hata}</HataMesaji></Kart>;
+
+  return (
+    <Kart style={{ marginBottom: 16, border: '1px solid var(--lacivert)' }}>
+      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>{cari.unvan} — Alacak/Borç Özeti</div>
+      {!ozet ? (
+        <div style={{ color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
+      ) : (
+        <>
+          <div style={{ display: 'flex', gap: 24, marginBottom: 10 }}>
+            <div>
+              <div style={{ fontSize: 11.5, color: 'var(--metin-ikincil)' }}>Toplam Alacağımız</div>
+              <div style={{ fontSize: 19, fontWeight: 700, color: 'var(--yesil)' }}>{paraFormat(ozet.toplam_alacak_try)}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11.5, color: 'var(--metin-ikincil)' }}>Toplam Borcumuz</div>
+              <div style={{ fontSize: 19, fontWeight: 700, color: 'var(--kirmizi)' }}>{paraFormat(ozet.toplam_borc_try)}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11.5, color: 'var(--metin-ikincil)' }}>Net</div>
+              <div style={{ fontSize: 19, fontWeight: 700, color: Number(ozet.net_try) >= 0 ? 'var(--yesil)' : 'var(--kirmizi)' }}>
+                {paraFormat(ozet.net_try)} {Number(ozet.net_try) >= 0 ? '(bize borçlu)' : '(biz borçluyuz)'}
+              </div>
+            </div>
+          </div>
+          <span onClick={() => setDetayAcik((a) => !a)} style={{ fontSize: 12.5, color: 'var(--lacivert)', cursor: 'pointer', textDecoration: 'underline' }}>
+            {detayAcik ? 'Detayı gizle' : 'Kalem kalem detayı göster'}
+          </span>
+          {detayAcik && (
+            <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, color: 'var(--yesil)' }}>Alacaklar</div>
+                {ozet.alacaklar.filter((a) => Number(a.tutar_try) > 0).length === 0 ? (
+                  <div style={{ fontSize: 12, color: 'var(--metin-soluk)' }}>Yok</div>
+                ) : ozet.alacaklar.filter((a) => Number(a.tutar_try) > 0).map((a) => (
+                  <div key={a.kategori} style={{ fontSize: 12.5, display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}>
+                    <span style={{ color: 'var(--metin-ikincil)' }}>{a.kategori}</span>
+                    <span>{paraFormat(a.tutar_try)}</span>
+                  </div>
+                ))}
+              </div>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, color: 'var(--kirmizi)' }}>Borçlar</div>
+                {ozet.borclar.filter((b) => Number(b.tutar_try) > 0).length === 0 ? (
+                  <div style={{ fontSize: 12, color: 'var(--metin-soluk)' }}>Yok</div>
+                ) : ozet.borclar.filter((b) => Number(b.tutar_try) > 0).map((b) => (
+                  <div key={b.kategori} style={{ fontSize: 12.5, display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}>
+                    <span style={{ color: 'var(--metin-ikincil)' }}>{b.kategori}</span>
+                    <span>{paraFormat(b.tutar_try)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </Kart>
+  );
+}
+
 function CariHareketleri({ cari, onKapat }) {
   const [hareketler, setHareketler] = useState([]);
   const [yukleniyor, setYukleniyor] = useState(true);
@@ -594,7 +663,10 @@ export default function CarilerSayfasi() {
       )}
 
       {seciliCari && (
-        <CariHareketleri cari={seciliCari} onKapat={() => setSeciliCari(null)} />
+        <>
+          <CariOzetKarti cari={seciliCari} />
+          <CariHareketleri cari={seciliCari} onKapat={() => setSeciliCari(null)} />
+        </>
       )}
 
       <Kart style={{ padding: 0 }}>
