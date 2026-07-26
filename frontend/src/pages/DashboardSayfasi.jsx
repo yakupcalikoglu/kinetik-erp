@@ -240,7 +240,7 @@ function KiralikUrunlerKutusu({ navigate }) {
   const toplamKira = liste ? paraBazliToplamGoster(liste, 'aylik_kira_tutari') : '—';
 
   return (
-    <TiklanabilirKart baslik="Kiralık Ürünler" Simge={KeyRound} onClick={() => navigate('/finansal')}>
+    <TiklanabilirKart baslik="Kiralık Ürünler" Simge={KeyRound} onClick={() => navigate('/finansal?sekme=kiralama')}>
       {hata ? <HataMesaji>{hata}</HataMesaji> : !liste ? (
         <div style={{ color: 'var(--metin-soluk)', fontSize: 13 }}>Yükleniyor...</div>
       ) : liste.length === 0 ? (
