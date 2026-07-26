@@ -404,7 +404,14 @@ function MaliyetDetayi({ urun, stokKartlari, onKapat }) {
                 <tr key={k.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
                   <td style={{ padding: '8px 12px' }}><Etiket ton="notr">{MALIYET_TIP_METIN[k.tip] || k.tip}</Etiket></td>
                   <td style={{ padding: '8px 12px' }}>{paraFormat(k.tutar, k.para_birimi)}</td>
-                  <td style={{ padding: '8px 12px', fontWeight: 500 }}>{paraFormat(k.tutar_try)}</td>
+                  <td style={{ padding: '8px 12px', fontWeight: 500 }}>
+                    {paraFormat(k.tutar_try)}
+                    {k.para_birimi === 'TRY' && k.referans_usd_kuru > 0 && (
+                      <div style={{ fontSize: 11, color: 'var(--metin-soluk)', fontWeight: 400 }}>
+                        ≈ {paraFormat(k.tutar_try / k.referans_usd_kuru, 'USD')} (o günkü kur: {k.referans_usd_kuru})
+                      </div>
+                    )}
+                  </td>
                   <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{k.belge_no || '—'}</td>
                   <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{tarihFormat(k.tarih)}</td>
                   <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{k.aciklama || '—'}</td>
