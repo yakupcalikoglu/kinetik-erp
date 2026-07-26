@@ -1,6 +1,43 @@
 import { useEffect, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { api, hataMesajiCikar } from '../api/client';
+
+function useSiralama() {
+  const [alan, setAlan] = useState(null);
+  const [yon, setYon] = useState('asc');
+  function tikla(yeniAlan) {
+    if (alan === yeniAlan) setYon((y) => (y === 'asc' ? 'desc' : 'asc'));
+    else { setAlan(yeniAlan); setYon('asc'); }
+  }
+  function sirala(liste, degerFn) {
+    if (!alan) return liste;
+    return [...liste].sort((a, b) => {
+      const av = degerFn(a, alan);
+      const bv = degerFn(b, alan);
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      if (typeof av === 'string') return yon === 'asc' ? av.localeCompare(bv, 'tr') : bv.localeCompare(av, 'tr');
+      return yon === 'asc' ? av - bv : bv - av;
+    });
+  }
+  return { alan, yon, tikla, sirala };
+}
+
+function SiraliBaslik({ children, alanAdi, siralama, style }) {
+  const aktif = siralama.alan === alanAdi;
+  return (
+    <th
+      onClick={() => siralama.tikla(alanAdi)}
+      style={{
+        textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)',
+        fontWeight: 500, cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', ...style,
+      }}
+    >
+      {children} {aktif ? (siralama.yon === 'asc' ? '▲' : '▼') : ''}
+    </th>
+  );
+}
 import {
   Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji,
   eylemChipStili, BIRIM_SECENEKLERI,
@@ -269,6 +306,7 @@ export default function UrunTanimlariSayfasi() {
   const [duzenlenenKart, setDuzenlenenKart] = useState(null);
   const [arama, setArama] = useState('');
   const [iceAktarAcik, setIceAktarAcik] = useState(false);
+  const siralama = useSiralama();
 
   function kartlariYukle() {
     setYukleniyor(true);
@@ -374,13 +412,20 @@ export default function UrunTanimlariSayfasi() {
           <table>
             <thead>
               <tr style={{ background: 'var(--zemin)' }}>
-                {['ID', 'Marka', 'Model', 'Birim', 'Elde Bulunan (Satılmamış)', 'Menşei', 'GTİP', 'İşlem'].map((b) => (
-                  <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
-                ))}
+                <SiraliBaslik alanAdi="id" siralama={siralama}>ID</SiraliBaslik>
+                <SiraliBaslik alanAdi="marka" siralama={siralama}>Marka</SiraliBaslik>
+                <SiraliBaslik alanAdi="model" siralama={siralama}>Model</SiraliBaslik>
+                <SiraliBaslik alanAdi="birim" siralama={siralama}>Birim</SiraliBaslik>
+                <SiraliBaslik alanAdi="_envanter" siralama={siralama}>Elde Bulunan (Satılmamış)</SiraliBaslik>
+                <SiraliBaslik alanAdi="mense_ulke" siralama={siralama}>Menşei</SiraliBaslik>
+                <SiraliBaslik alanAdi="gtip_kodu" siralama={siralama}>GTİP</SiraliBaslik>
+                <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>İşlem</th>
               </tr>
             </thead>
             <tbody>
-              {gosterilecekler.map((k) => (
+              {siralama.sirala(gosterilecekler, (item, alan) => (
+                alan === '_envanter' ? (envanterSayilari[item.id] || 0) : item[alan]
+              )).map((k) => (
                 <tr key={k.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
                   <td style={{ padding: '10px 16px', fontFamily: 'var(--font-mono)', color: 'var(--metin-ikincil)' }}>{k.id}</td>
                   <td style={{ padding: '10px 16px', fontWeight: 500 }}>{k.marka}</td>
