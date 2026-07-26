@@ -261,6 +261,63 @@ function HarcamaTurleriOzetiKarti() {
 }
 
 // ============================================================== KÂR MARJI ANALİZİ
+function AylikNetKarKarti() {
+  const [veri, setVeri] = useState(null);
+  const [hata, setHata] = useState(null);
+
+  useEffect(() => {
+    api.get('/raporlar/aylik-net-kar', { params: { ay_sayisi: 12 } }).then((r) => setVeri(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
+  }, []);
+
+  const ayAdiGoster = (ay) => {
+    const [yil, ayNo] = ay.split('-');
+    const aylar = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+    return `${aylar[Number(ayNo) - 1]} ${yil}`;
+  };
+
+  return (
+    <Kart style={{ marginBottom: 16 }}>
+      <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Aylık Net Kâr</div>
+      <div style={{ fontSize: 12.5, color: 'var(--metin-ikincil)', marginBottom: 14 }}>
+        (Stok satış kârı + Demirbaş satış kârı + Bakım geliri + Kira geliri) − (Bakım gideri + Personel gideri + Diğer giderler).
+        Akreditif/Leasing/Çek/Taksit ödemeleri borç kapatma işlemidir, buraya dahil edilmez.
+      </div>
+      <HataMesaji>{hata}</HataMesaji>
+      {!veri ? (
+        <div style={{ color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
+      ) : veri.length === 0 ? (
+        <BosDurum baslik="Henüz veri yok" />
+      ) : (
+        <table>
+          <thead>
+            <tr style={{ background: 'var(--zemin)' }}>
+              {['Ay', 'Stok Satış Kârı', 'Demirbaş Kârı', 'Bakım (Net)', 'Kira Geliri', 'Personel Gideri', 'Diğer Gider', 'Net Kâr'].map((b) => (
+                <th key={b} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {veri.map((s) => (
+              <tr key={s.ay} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                <td style={{ padding: '8px 12px', fontWeight: 500 }}>{ayAdiGoster(s.ay)}</td>
+                <td style={{ padding: '8px 12px' }}>{paraFormat(s.stok_satis_kari)}</td>
+                <td style={{ padding: '8px 12px' }}>{paraFormat(s.demirbas_satis_kari)}</td>
+                <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{paraFormat(s.bakim_geliri - s.bakim_gideri)}</td>
+                <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{paraFormat(s.kira_geliri)}</td>
+                <td style={{ padding: '8px 12px', color: 'var(--kirmizi)' }}>−{paraFormat(s.personel_gideri)}</td>
+                <td style={{ padding: '8px 12px', color: 'var(--kirmizi)' }}>−{paraFormat(s.diger_gider)}</td>
+                <td style={{ padding: '8px 12px', fontWeight: 700, color: Number(s.net_kar) >= 0 ? 'var(--yesil)' : 'var(--kirmizi)' }}>
+                  {paraFormat(s.net_kar)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </Kart>
+  );
+}
+
 function KarMarjiKarti() {
   const [veri, setVeri] = useState(null);
   const [hata, setHata] = useState(null);
@@ -764,6 +821,7 @@ export default function RaporlarSayfasi() {
     <div>
       <SayfaBasligi baslik="Raporlar" aciklama="Genel bakış, yaklaşan vadeler, envanter, hareket türü, ürün ve cari bazlı raporlar" />
       <GenelBakisKarti />
+      <AylikNetKarKarti />
       <KarMarjiKarti />
       <HarcamaTurleriOzetiKarti />
       <YaklasanVadelerKarti />
