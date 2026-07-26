@@ -708,6 +708,7 @@ export default function StokSayfasi() {
   const [stokKartlari, setStokKartlari] = useState([]);
   const [siparisler, setSiparisler] = useState([]);
   const [durumFiltre, setDurumFiltre] = useState('');
+  const [dovizMaliyetHaritasi, setDovizMaliyetHaritasi] = useState({});
   const [urunFiltre, setUrunFiltre] = useState('');
   const [siparisFiltre, setSiparisFiltre] = useState('');
   const [sahiplikFiltre, setSahiplikFiltre] = useState('TICARI');
@@ -845,6 +846,7 @@ export default function StokSayfasi() {
     stokKartlariniYukle();
     api.get('/siparisler').then((r) => setSiparisler(r.data)).catch(() => {});
     api.get('/kur/USD').then((r) => setUsdKur(Number(r.data.kur))).catch(() => {});
+    api.get('/stok-seri-no/toplam-doviz-maliyet-haritasi').then((r) => setDovizMaliyetHaritasi(r.data)).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -1187,7 +1189,12 @@ export default function StokSayfasi() {
                       </td>
                       <td style={{ padding: '12px 16px' }}>{paraFormat(u.toplam_maliyet_try)}</td>
                       <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>
-                        {usdKur ? paraFormat(u.toplam_maliyet_try / usdKur, 'USD') : '—'}
+                        {(() => {
+                          const gercekUsd = dovizMaliyetHaritasi[String(u.id)]?.USD;
+                          if (gercekUsd != null) return paraFormat(gercekUsd, 'USD');
+                          if (usdKur) return <span title="Gerçek döviz kaydı yok — bugünkü kurla tahmini gösterim">~{paraFormat(u.toplam_maliyet_try / usdKur, 'USD')}</span>;
+                          return '—';
+                        })()}
                       </td>
                       <td style={{ padding: '12px 16px' }}>{u.satis_fiyati_try != null ? paraFormat(u.satis_fiyati_try) : '—'}</td>
                       <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>
