@@ -448,6 +448,63 @@ function CekDuzenleFormu({ cek, cariler, onKaydedildi, onVazgec }) {
   );
 }
 
+function CiroFormu({ cek, cariler, onKaydedildi, onVazgec }) {
+  const [form, setForm] = useState({
+    ciro_edilen_cari_id: '', ciro_tarihi: new Date().toISOString().slice(0, 10), aciklama: '',
+  });
+  const [hata, setHata] = useState(null);
+  const [kaydediliyor, setKaydediliyor] = useState(false);
+
+  async function kaydet(e) {
+    e.preventDefault();
+    setHata(null);
+    setKaydediliyor(true);
+    try {
+      await api.put(`/cekler/${cek.id}/durum`, {
+        yeni_durum: 'CIRO_EDILDI',
+        ciro_edilen_cari_id: Number(form.ciro_edilen_cari_id),
+        ciro_tarihi: form.ciro_tarihi,
+        aciklama: form.aciklama || null,
+      });
+      onKaydedildi();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setKaydediliyor(false);
+    }
+  }
+
+  return (
+    <tr>
+      <td colSpan={9} style={{ padding: '0 16px 12px' }}>
+        <div style={{ padding: 14, background: 'var(--zemin)', borderRadius: 8 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 10 }}>{cek.cek_no || `#${cek.id}`} — Çeki Ciro Et</div>
+          <HataMesaji>{hata}</HataMesaji>
+          <form onSubmit={kaydet} style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <div style={{ minWidth: 220 }}>
+              <Alan etiket="Ciro edilecek kişi/firma (cari)">
+                <AramaliSecici secenekler={cariler} deger={form.ciro_edilen_cari_id} onDegistir={(v) => setForm((f) => ({ ...f, ciro_edilen_cari_id: v }))} etiketFn={(c) => c.unvan} />
+              </Alan>
+            </div>
+            <div style={{ minWidth: 160 }}>
+              <Alan etiket="Ciro tarihi">
+                <input required type="date" value={form.ciro_tarihi} onChange={(e) => setForm((f) => ({ ...f, ciro_tarihi: e.target.value }))} style={girdiStili} />
+              </Alan>
+            </div>
+            <div style={{ minWidth: 200 }}>
+              <Alan etiket="Açıklama (opsiyonel)">
+                <input value={form.aciklama} onChange={(e) => setForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
+              </Alan>
+            </div>
+            <Buton type="submit" disabled={kaydediliyor || !form.ciro_edilen_cari_id}>{kaydediliyor ? 'Kaydediliyor...' : 'Ciroyu Onayla'}</Buton>
+            <Buton type="button" variant="ikincil" onClick={onVazgec}>Vazgeç</Buton>
+          </form>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 function CekSekmesi() {
   const [cekler, setCekler] = useState([]);
   const [formAcik, setFormAcik] = useState(false);
@@ -479,14 +536,7 @@ function CekSekmesi() {
     } catch (err) { setHata(hataMesajiCikar(err)); }
   }
 
-  async function ciroEt(cekId) {
-    const ciroEdilenCariId = window.prompt('Çekin ciro edileceği cari ID:');
-    if (!ciroEdilenCariId) return;
-    try {
-      await api.put(`/cekler/${cekId}/durum`, { yeni_durum: 'CIRO_EDILDI', ciro_edilen_cari_id: Number(ciroEdilenCariId) });
-      yukle();
-    } catch (err) { setHata(hataMesajiCikar(err)); }
-  }
+  const [ciroAcikCekId, setCiroAcikCekId] = useState(null);
 
   async function odemeyiTamamla(cek, secim) {
     await api.put(`/cekler/${cek.id}/durum`, {
@@ -650,7 +700,12 @@ function CekSekmesi() {
                             >
                               {duzenlenenCekId === c.id ? 'Kapat' : 'Düzenle'}
                             </button>
-                            <button onClick={() => ciroEt(c.id)} style={eylemChipStili('lacivert')}>Ciro et</button>
+                            <button
+                              onClick={() => setCiroAcikCekId((mevcut) => (mevcut === c.id ? null : c.id))}
+                              style={eylemChipStili('lacivert')}
+                            >
+                              {ciroAcikCekId === c.id ? 'Kapat' : 'Ciro et'}
+                            </button>
                             <button
                               onClick={() => setOdemeAcikCekId((mevcut) => (mevcut === c.id ? null : c.id))}
                               style={eylemChipStili('yesil')}
@@ -672,6 +727,14 @@ function CekSekmesi() {
                       cariler={cariler}
                       onKaydedildi={() => { setDuzenlenenCekId(null); yukle(); }}
                       onVazgec={() => setDuzenlenenCekId(null)}
+                    />
+                  )}
+                  {ciroAcikCekId === c.id && (
+                    <CiroFormu
+                      cek={c}
+                      cariler={cariler}
+                      onKaydedildi={() => { setCiroAcikCekId(null); yukle(); }}
+                      onVazgec={() => setCiroAcikCekId(null)}
                     />
                   )}
                   {odemeAcikCekId === c.id && (
