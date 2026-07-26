@@ -22,6 +22,7 @@ import UrunTanimlariSayfasi from './pages/UrunTanimlariSayfasi';
 import SatisYapSayfasi from './pages/SatisYapSayfasi';
 import HarcamaTurleriSayfasi from './pages/HarcamaTurleriSayfasi';
 import YedekParcaSayfasi from './pages/YedekParcaSayfasi';
+import OzMalSayfasi from './pages/OzMalSayfasi';
 
 function KorumaliRota({ children }) {
   const { oturum } = useAuth();
@@ -66,6 +67,7 @@ function App() {
             <Route path="yonetici-paneli" element={<YetkiliSayfa gerekliIzin="KULLANICI_YONET"><YoneticiPaneliSayfasi /></YetkiliSayfa>} />
             <Route path="harcama-turleri" element={<HarcamaTurleriSayfasi />} />
             <Route path="yedek-parcalar" element={<YedekParcaSayfasi />} />
+            <Route path="oz-mal" element={<OzMalSayfasi />} />
             <Route path="satis-yap" element={<YetkiliSayfa gerekliIzin="STOK_DUZENLE"><SatisYapSayfasi /></YetkiliSayfa>} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
