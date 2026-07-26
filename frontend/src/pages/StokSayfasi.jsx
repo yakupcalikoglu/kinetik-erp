@@ -740,6 +740,7 @@ export default function StokSayfasi() {
   const [stokKartlari, setStokKartlari] = useState([]);
   const [siparisler, setSiparisler] = useState([]);
   const [durumFiltre, setDurumFiltre] = useState('');
+  const [satilanlariGoster, setSatilanlariGoster] = useState(false);
   const [dovizMaliyetHaritasi, setDovizMaliyetHaritasi] = useState({});
   const [urunFiltre, setUrunFiltre] = useState('');
   const [siparisFiltre, setSiparisFiltre] = useState('');
@@ -912,12 +913,17 @@ export default function StokSayfasi() {
     excelIndir(veri, dosyaAdi, 'Stok');
   }
 
-  const gruplananUrunler = [...urunler].sort((a, b) => {
-    if (a.siparis_id === b.siparis_id) return a.id - b.id;
-    if (a.siparis_id == null) return 1;
-    if (b.siparis_id == null) return -1;
-    return a.siparis_id - b.siparis_id;
-  });
+  // Satilmis urunler, listeyi gereksiz kalabalik gostermesin diye
+  // varsayilan olarak GIZLENIR - "Satilanlari da göster" acikca
+  // isaretlenmedikce (ya da durum filtresi ozellikle "SATILDI" secilmedikce).
+  const gruplananUrunler = [...urunler]
+    .filter((u) => satilanlariGoster || durumFiltre === 'SATILDI' || u.durum !== 'SATILDI')
+    .sort((a, b) => {
+      if (a.siparis_id === b.siparis_id) return a.id - b.id;
+      if (a.siparis_id == null) return 1;
+      if (b.siparis_id == null) return -1;
+      return a.siparis_id - b.siparis_id;
+    });
 
   const durumOzet = {};
   tumUrunler.forEach((u) => {
@@ -1006,6 +1012,10 @@ export default function StokSayfasi() {
             {etiket}
           </button>
         ))}
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, marginLeft: 8, cursor: 'pointer' }}>
+          <input type="checkbox" checked={satilanlariGoster} onChange={(e) => setSatilanlariGoster(e.target.checked)} />
+          Satılanları da göster
+        </label>
       </div>
 
       <div className="no-print" style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
@@ -1200,7 +1210,11 @@ export default function StokSayfasi() {
                   <Fragment key={u.id}>
                     <tr style={{
                       borderTop: grupBasi ? '3px solid var(--lacivert)' : '1px solid var(--kenarlik)',
-                      background: seciliMi(u.id) ? 'var(--zemin)' : 'transparent',
+                      background: seciliMi(u.id)
+                        ? 'var(--zemin)'
+                        : u.durum === 'SATILDI' ? 'var(--yesil-acik, #e3f5e9)'
+                        : u.durum === 'KIRADA' ? 'var(--amber-acik, #fdf0d5)'
+                        : 'transparent',
                     }}>
                       <td style={{ padding: '12px 16px' }}>
                         <input type="checkbox" checked={seciliMi(u.id)} onChange={() => secimiDegistir(u.id)} />
