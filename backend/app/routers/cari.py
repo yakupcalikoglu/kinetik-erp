@@ -259,8 +259,9 @@ async def cari_ozet(
     from app.models.stok import Siparis, SiparisDetay, SiparisOdeme
     from app.models.finansal import (
         TaksitliSatisPlani, TaksitDetay, KiralamaSozlesme, KiralamaOdeme,
-        Cek, CekDurum, CekTip, Borc, BorcOdeme, BorcTip,
+        Cek, CekDurum, CekTip,
     )
+    from app.models.diger import Borc, BorcOdeme, BorcTip
     from app.models.akreditif import Akreditif, AkreditifKalemi, AkreditifDurum
     from app.models.akreditif_taksit import AkreditifKalemTaksiti
     from app.services.kur_servisi import guncel_kur_getir
