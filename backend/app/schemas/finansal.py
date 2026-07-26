@@ -250,6 +250,7 @@ class KiralamaKalemYanit(BaseModel):
     urun_adi: str | None = None
     seri_numaralari: list[str] = []
     stok_seri_no_idleri: list[int] = []
+    oz_mal_mi: bool = False
 
     class Config:
         from_attributes = True
@@ -290,6 +291,15 @@ class KiralamaYanit(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class KiralamaSonlandirIstegi(BaseModel):
+    son_donem_tutari: Decimal = Decimal("0")  # eksik/kismi ay icin tahsil edilecek tutar (0 olabilir)
+    donem_basi: date | None = None
+    donem_sonu: date | None = None
+    odeme_yontemi: str | None = None  # "NAKIT" | "BANKA" - son_donem_tutari > 0 ise zorunlu
+    banka_hesap_id: int | None = None
+    aciklama: str | None = None
 
 
 class KiralamaOdemeOlusturIstegi(BaseModel):
