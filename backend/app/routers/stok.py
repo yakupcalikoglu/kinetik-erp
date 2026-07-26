@@ -181,6 +181,7 @@ def toplam_doviz_maliyet_haritasi(
     OLMAYACAKTIR - boyle durumlarda frontend canli kur tahminine geri
     donmelidir.
     """
+    # Dogrudan dovizli (USD/EUR) girilmis kalemler - orijinal tutar aynen kullanilir.
     sorgu = (
         select(StokMaliyetKalemi.stok_seri_no_id, StokMaliyetKalemi.para_birimi,
                func.sum(StokMaliyetKalemi.tutar).label("toplam"))
@@ -192,6 +193,25 @@ def toplam_doviz_maliyet_haritasi(
     for seri_id, para_birimi, toplam in db.execute(sorgu).all():
         pb = para_birimi.value if hasattr(para_birimi, "value") else para_birimi
         harita.setdefault(str(seri_id), {})[pb] = toplam
+
+    # TL cinsinden girilmis ama referans_usd_kuru belirtilmis kalemler -
+    # o gunku GERCEK kurla USD karsiligi hesaplanip USD toplamina eklenir
+    # (canli/guncel kurla degil).
+    tl_sorgu = (
+        select(StokMaliyetKalemi.stok_seri_no_id, StokMaliyetKalemi.tutar_try, StokMaliyetKalemi.referans_usd_kuru)
+        .join(StokSeriNo, StokSeriNo.id == StokMaliyetKalemi.stok_seri_no_id)
+        .where(
+            StokSeriNo.sirket_id == sirket_id,
+            StokMaliyetKalemi.para_birimi == ParaBirimi.TRY,
+            StokMaliyetKalemi.referans_usd_kuru.isnot(None),
+            StokMaliyetKalemi.referans_usd_kuru > 0,
+        )
+    )
+    for seri_id, tutar_try, referans_kur in db.execute(tl_sorgu).all():
+        usd_karsiligi = tutar_try / referans_kur
+        mevcut = harita.setdefault(str(seri_id), {})
+        mevcut["USD"] = (mevcut.get("USD") or Decimal("0")) + usd_karsiligi
+
     return harita
 
 
@@ -571,6 +591,7 @@ def maliyet_kalemi_ekle(
         tutar_try=tutar_try,
         belge_no=istek.belge_no,
         tarih=istek.tarih,
+        referans_usd_kuru=istek.referans_usd_kuru,
     )
     db.add(yeni_kalem)
 
@@ -785,11 +806,11 @@ def maliyet_kalemi_duzenle(
     if kalem is None or kalem.stok_seri_no_id != seri_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Maliyet kalemi bulunamadı.")
 
-    alan_adlari = {"tip": "Tip", "aciklama": "Açıklama", "tedarikci_cari_id": "Tedarikçi", "para_birimi": "Para Birimi", "tutar": "Tutar", "kur": "Kur", "belge_no": "Belge No", "tarih": "Tarih"}
+    alan_adlari = {"tip": "Tip", "aciklama": "Açıklama", "tedarikci_cari_id": "Tedarikçi", "para_birimi": "Para Birimi", "tutar": "Tutar", "kur": "Kur", "belge_no": "Belge No", "tarih": "Tarih", "referans_usd_kuru": "Referans USD Kuru"}
     yeni_degerler = {
         "tip": istek.tip, "aciklama": istek.aciklama, "tedarikci_cari_id": istek.tedarikci_cari_id,
         "para_birimi": istek.para_birimi, "tutar": istek.tutar, "kur": istek.kur,
-        "belge_no": istek.belge_no, "tarih": istek.tarih,
+        "belge_no": istek.belge_no, "tarih": istek.tarih, "referans_usd_kuru": istek.referans_usd_kuru,
     }
     degisiklikler = {}
     for alan, etiket in alan_adlari.items():
@@ -815,6 +836,7 @@ def maliyet_kalemi_duzenle(
     kalem.tutar_try = yeni_tutar_try
     kalem.belge_no = istek.belge_no
     kalem.tarih = istek.tarih
+    kalem.referans_usd_kuru = istek.referans_usd_kuru
 
     yeni_ozet_sutun = MALIYET_TIP_SUTUN_ESLEME[istek.tip]
     yeni_deger = getattr(kayit, yeni_ozet_sutun) or 0
