@@ -465,6 +465,15 @@ function DurumDegistirFormu({ urun, onKaydedildi, onVazgec }) {
             <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Kaydediliyor...' : 'Durumu güncelle'}</Buton>
             <Buton type="button" variant="ikincil" onClick={onVazgec}>Vazgeç</Buton>
           </form>
+          {yeniDurum === 'KIRADA' && (
+            <div style={{ marginTop: 10, padding: '10px 12px', background: 'var(--amber-acik, #fdf0d5)', borderRadius: 7, fontSize: 12.5 }}>
+              ⚠ Bu, sadece ürünün durum etiketini değiştirir — <strong>kime kiralandığını sisteme kaydetmez</strong>.
+              Kiracıyı ve aylık kira tutarını kaydetmek için{' '}
+              <Link to="/finansal?sekme=kiralama" style={{ color: 'var(--lacivert)', fontWeight: 600 }}>
+                Finansal Takip → Kiralama'dan bu ürünü seçerek bir sözleşme oluşturun
+              </Link>.
+            </div>
+          )}
           {hata && <div style={{ marginTop: 8 }}><HataMesaji>{hata}</HataMesaji></div>}
         </div>
       </td>
