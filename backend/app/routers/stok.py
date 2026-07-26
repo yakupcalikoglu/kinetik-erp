@@ -9,14 +9,15 @@ from app.core.deps import aktif_sirket_id_getir, izin_gerektir, aktif_kullanici_
 from app.models.auth import Kullanici
 from datetime import date
 from app.models.stok import (StokKarti, StokSeriNo, StokMaliyetKalemi,
-                              MALIYET_TIP_SUTUN_ESLEME, StokDurum, MaliyetTip, ParaBirimi)
+                              MALIYET_TIP_SUTUN_ESLEME, StokDurum, MaliyetTip, ParaBirimi, StokKaynak)
 import json
 from app.schemas.stok import (StokKartiOlusturIstegi, StokKartiYanit,
                                StokSeriNoYanit, StokDurumGuncelleIstegi,
                                MaliyetKalemiEkleIstegi, MaliyetKalemiDuzenleIstegi, KarRaporuYanit, StokSatisIstegi,
                                StokMaliyetKalemiYanit, TopluDurumGuncelleIstegi,
                                StokSeriNoDuzenleIstegi, StokSeriNoDuzenleSifreliIstegi,
-                               StokKartiTopluIceAktarIstegi, StokKartiTopluIceAktarSonucu)
+                               StokKartiTopluIceAktarIstegi, StokKartiTopluIceAktarSonucu,
+                               OzMalIlkKayitIstegi, HurdayaCikarIstegi)
 from app.services.para_hareketi import para_hareketi_olustur
 from app.models.denetim import DuzenlemeKaydi
 from app.core.security import sifre_dogrula
@@ -146,6 +147,7 @@ def stok_seri_no_listele(
     durum: StokDurum | None = None,
     stok_karti_id: int | None = None,
     siparis_id: int | None = None,
+    sahiplik_tipi: str | None = None,
     sirket_id: int = Depends(aktif_sirket_id_getir),
     db: Session = Depends(get_db),
 ):
@@ -156,6 +158,8 @@ def stok_seri_no_listele(
         sorgu = sorgu.where(StokSeriNo.stok_karti_id == stok_karti_id)
     if siparis_id:
         sorgu = sorgu.where(StokSeriNo.siparis_id == siparis_id)
+    if sahiplik_tipi:
+        sorgu = sorgu.where(StokSeriNo.sahiplik_tipi == sahiplik_tipi)
     return list(db.execute(sorgu).scalars())
 
 
@@ -357,6 +361,82 @@ def stok_durum_guncelle(
         kayit.satis_fiyati_try = istek.satis_fiyati_try
     if istek.satis_tarihi is not None:
         kayit.satis_tarihi = istek.satis_tarihi
+
+    db.commit()
+    db.refresh(kayit)
+    return kayit
+
+
+@router.post("/stok-seri-no/oz-mal-ilk-kayit", response_model=StokSeriNoYanit,
+             dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
+def oz_mal_ilk_kaydi_olustur(
+    istek: OzMalIlkKayitIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Gecmiste alinmis, siparis kaydi olmadan elde bulunan bir urunu (Oz Mal /
+    Demirbas) dogrudan envantere ekler. HICBIR Kasa/Banka hareketi
+    OLUSTURMAZ (para gecmiste zaten harcanmis kabul edilir) - sadece
+    maliyeti kayit altina alir ki ileride satildiginda/hurdaya
+    cikarildiginda kar/zarar dogru hesaplansin. Bundan sonraki yeni
+    alimlar icin normal Siparis -> Teslim Al akisi kullanilmalidir (o akis
+    SiparisOdeme uzerinden normal sekilde Kasa/Banka'ya yansir).
+    """
+    kart = db.get(StokKarti, istek.stok_karti_id)
+    if kart is None or kart.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Ürün tanımı bulunamadı (ID={istek.stok_karti_id}).")
+
+    mevcut = db.execute(select(StokSeriNo).where(StokSeriNo.seri_no == istek.seri_no)).scalar_one_or_none()
+    if mevcut is not None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"'{istek.seri_no}' seri numaralı bir ürün zaten mevcut.")
+
+    yeni = StokSeriNo(
+        sirket_id=sirket_id, stok_karti_id=istek.stok_karti_id,
+        seri_no=istek.seri_no, sasi_no=istek.sasi_no, uretim_yili=istek.uretim_yili,
+        kaynak=StokKaynak.YURTICI_ALIM, siparis_id=None, durum=istek.durum,
+        sahiplik_tipi="OZ_MAL", satinalma_maliyeti_try=istek.maliyet_try,
+    )
+    db.add(yeni)
+    db.commit()
+    db.refresh(yeni)
+    return yeni
+
+
+@router.put("/stok-seri-no/{seri_id}/hurdaya-cikar", response_model=StokSeriNoYanit,
+            dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
+def urunu_hurdaya_cikar(
+    seri_id: int,
+    istek: HurdayaCikarIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    kullanici: Kullanici = Depends(aktif_kullanici_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Bir urunu hurdaya cikarir. hurda_bedeli_try > 0 ise bu tutar Kasa/
+    Banka'ya GIRIS olarak islenir; kar_zarar_try alani (toplam maliyet -
+    hurda bedeli farki uzerinden) otomatik olarak hesaplanmis olur - ayni
+    normal satis akisindaki kar/zarar mantigi (satis_fiyati_try alanina
+    hurda bedelini yazarak).
+    """
+    kayit = _seri_no_getir_veya_404(db, seri_id, sirket_id)
+    if kayit.durum in (StokDurum.SATILDI, StokDurum.HURDA):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bu ürün zaten satılmış veya hurdaya çıkarılmış.")
+
+    if istek.hurda_bedeli_try > 0 and not istek.odeme_yontemi:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Hurda bedeli girildiyse ödeme yöntemi (Nakit/Banka) zorunludur.")
+
+    kayit.durum = StokDurum.HURDA
+    kayit.satis_fiyati_try = istek.hurda_bedeli_try
+    kayit.satis_tarihi = date.today()
+
+    if istek.hurda_bedeli_try > 0:
+        para_hareketi_olustur(
+            db, sirket_id, kullanici.id, "GIRIS", istek.hurda_bedeli_try,
+            istek.odeme_yontemi, istek.banka_hesap_id,
+            aciklama=f"Hurda bedeli - Seri No {kayit.seri_no}" + (f" - {istek.aciklama}" if istek.aciklama else ""),
+            kaynak_tablo="STOK_SATIS", kaynak_id=kayit.id,
+        )
 
     db.commit()
     db.refresh(kayit)
