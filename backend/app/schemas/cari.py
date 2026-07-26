@@ -98,3 +98,19 @@ class CariTopluIceAktarIstegi(BaseModel):
 class CariTopluIceAktarSonucu(BaseModel):
     basarili_sayisi: int
     hatali_satirlar: list[dict]
+
+
+# ---------------------------------------------------------- Cari Özet (Alacak/Borç)
+class CariOzetKalemi(BaseModel):
+    kategori: str
+    tutar_try: Decimal
+
+
+class CariOzetYaniti(BaseModel):
+    cari_id: int
+    unvan: str
+    alacaklar: list[CariOzetKalemi]
+    borclar: list[CariOzetKalemi]
+    toplam_alacak_try: Decimal
+    toplam_borc_try: Decimal
+    net_try: Decimal  # pozitif: bize borclu, negatif: biz borcluyuz
