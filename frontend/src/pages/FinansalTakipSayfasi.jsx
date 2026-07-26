@@ -2581,6 +2581,14 @@ function KiralamaSekmesi() {
     } catch (err) { setHata(hataMesajiCikar(err)); }
   }
 
+  async function sozlesmeyiSonlandir(sozlesmeId) {
+    if (!window.confirm('Bu sözleşmeyi sonlandırmak istediğinize emin misiniz? Ürün(ler) otomatik olarak "Depoda" durumuna dönecek.')) return;
+    try {
+      await api.put(`/kiralama-sozlesmeleri/${sozlesmeId}/sonlandir`);
+      yukle();
+    } catch (err) { setHata(hataMesajiCikar(err)); }
+  }
+
   async function odemeEkle(e) {
     e.preventDefault();
     try {
@@ -2760,12 +2768,28 @@ function KiralamaSekmesi() {
                 <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{k.kiraci_unvan || cariGoster(k.kiraci_cari_id, cariHaritasi)}</td>
                 <td style={{ padding: '10px 16px' }}>{paraFormat(k.aylik_kira_tutari, k.para_birimi)}</td>
                 <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{tlKarsiligiGoster(k.aylik_kira_tutari, k.para_birimi, kurlar)}</td>
-                <td style={{ padding: '10px 16px' }}><Etiket ton={k.durum === 'AKTIF' ? 'yesil' : 'notr'}>{k.durum}</Etiket></td>
                 <td style={{ padding: '10px 16px' }}>
-                  <button onClick={() => duzenlemeyeBasla(k)} style={eylemChipStili('lacivert')}>Düzenle</button>
-                  <button onClick={() => odemeleriGoster(k.id)} style={eylemChipStili('lacivert')}>
-                    Ödemeler
-                  </button>
+                  {k.durum === 'AKTIF' ? (
+                    <Etiket ton="yesil">Aktif</Etiket>
+                  ) : (
+                    <span style={{ display: 'inline-block', padding: '2px 9px', borderRadius: 5, fontSize: 12, fontWeight: 500, background: '#dbeafe', color: '#1d4ed8' }}>
+                      Sona Erdi
+                    </span>
+                  )}
+                </td>
+                <td style={{ padding: '10px 16px' }}>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {k.durum === 'AKTIF' && (
+                      <>
+                        <button onClick={() => duzenlemeyeBasla(k)} style={eylemChipStili('lacivert')}>Düzenle</button>
+                        <button onClick={() => odemeleriGoster(k.id)} style={eylemChipStili('lacivert')}>Ödemeler</button>
+                        <button onClick={() => sozlesmeyiSonlandir(k.id)} style={eylemChipStili('kirmizi')}>Sonlandır</button>
+                      </>
+                    )}
+                    {k.durum !== 'AKTIF' && (
+                      <button onClick={() => odemeleriGoster(k.id)} style={eylemChipStili('notr')}>Geçmiş</button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
