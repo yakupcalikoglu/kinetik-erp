@@ -38,6 +38,12 @@ class Demirbas(Base):
     durum = Column(String(20), nullable=False, default="KULLANIMDA")
     kiraci_cari_id = Column(BigInteger, ForeignKey("cari_hesaplar.id"))
     maliyet_try = Column(Numeric(18, 2), nullable=False, default=0)
+    # Girilen orijinal tutar/para birimi KALICI olarak saklanir (Stok'taki
+    # Oz Mal ile ayni mantik) - boylece "18.600 $ verdim" gibi tarihsel
+    # bilgi, ileride canli kurla yeniden hesaplanan bir TAHMIN olarak degil,
+    # GERCEK deger olarak gosterilebilir.
+    maliyet_orijinal = Column(Numeric(18, 2))
+    para_birimi = Column(String(10), nullable=False, default="TRY")
     alim_tarihi = Column(Date)
     satis_fiyati_try = Column(Numeric(18, 2))
     satis_tarihi = Column(Date)
