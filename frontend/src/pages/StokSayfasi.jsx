@@ -75,7 +75,7 @@ const MALIYET_TIP_METIN = {
 function MaliyetKalemiEkleFormu({ urun, onKaydedildi }) {
   const [cariler, setCariler] = useState([]);
   const [form, setForm] = useState({
-    tip: 'NAKLIYE', tutar: '', para_birimi: 'TRY', kur: '1',
+    tip: 'NAKLIYE', tutar: '', para_birimi: 'TRY', kur: '1', referans_usd_kuru: '',
     tedarikci_cari_id: '', belge_no: '', tarih: new Date().toISOString().slice(0, 10), aciklama: '',
   });
   const [hata, setHata] = useState(null);
@@ -88,6 +88,10 @@ function MaliyetKalemiEkleFormu({ urun, onKaydedildi }) {
   useEffect(() => {
     if (form.para_birimi === 'TRY') {
       setForm((f) => ({ ...f, kur: '1' }));
+      // TL kalemler icin, o gunku USD kurunu referans olarak otomatik cekiyoruz -
+      // boylece bu TL tutarin USD karsiligi ileride CANLI kurla degil, o
+      // gunku GERCEK kurla hesaplanabilir.
+      api.get('/kur/USD').then((r) => setForm((f) => ({ ...f, referans_usd_kuru: r.data.kur }))).catch(() => {});
       return;
     }
     api.get(`/kur/${form.para_birimi}`).then((r) => setForm((f) => ({ ...f, kur: r.data.kur }))).catch(() => {});
@@ -107,6 +111,7 @@ function MaliyetKalemiEkleFormu({ urun, onKaydedildi }) {
         belge_no: form.belge_no || null,
         tarih: form.tarih,
         aciklama: form.aciklama || null,
+        referans_usd_kuru: form.para_birimi === 'TRY' && form.referans_usd_kuru ? Number(form.referans_usd_kuru) : null,
       });
       setForm((f) => ({ ...f, tutar: '', belge_no: '', aciklama: '' }));
       onKaydedildi();
@@ -136,9 +141,13 @@ function MaliyetKalemiEkleFormu({ urun, onKaydedildi }) {
         <Alan etiket="Tutar">
           <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
         </Alan>
-        {form.para_birimi !== 'TRY' && (
+        {form.para_birimi !== 'TRY' ? (
           <Alan etiket="Kur (otomatik, elle değiştirilebilir)">
             <input required type="number" step="0.0001" value={form.kur} onChange={(e) => setForm((f) => ({ ...f, kur: e.target.value }))} style={girdiStili} />
+          </Alan>
+        ) : (
+          <Alan etiket="O günkü USD kuru (opsiyonel — USD karşılığını doğru hesaplamak için)">
+            <input type="number" step="0.0001" value={form.referans_usd_kuru} onChange={(e) => setForm((f) => ({ ...f, referans_usd_kuru: e.target.value }))} style={girdiStili} />
           </Alan>
         )}
         <Alan etiket="Tedarikçi/firma (opsiyonel)">
@@ -166,6 +175,7 @@ function MaliyetKalemiDuzenleFormu({ kalem, urunId, onKaydedildi, onVazgec }) {
   const [cariler, setCariler] = useState([]);
   const [form, setForm] = useState({
     tip: kalem.tip, tutar: kalem.tutar, para_birimi: kalem.para_birimi, kur: kalem.kur,
+    referans_usd_kuru: kalem.referans_usd_kuru || '',
     tedarikci_cari_id: kalem.tedarikci_cari_id || '', belge_no: kalem.belge_no || '',
     tarih: kalem.tarih, aciklama: kalem.aciklama || '', sifre: '',
   });
@@ -191,6 +201,7 @@ function MaliyetKalemiDuzenleFormu({ kalem, urunId, onKaydedildi, onVazgec }) {
         belge_no: form.belge_no || null,
         tarih: form.tarih,
         aciklama: form.aciklama || null,
+        referans_usd_kuru: form.para_birimi === 'TRY' && form.referans_usd_kuru ? Number(form.referans_usd_kuru) : null,
       });
       onKaydedildi();
     } catch (err) {
@@ -225,6 +236,11 @@ function MaliyetKalemiDuzenleFormu({ kalem, urunId, onKaydedildi, onVazgec }) {
               <Alan etiket="Kur">
                 <input required type="number" step="0.0001" value={form.kur} onChange={(e) => setForm((f) => ({ ...f, kur: e.target.value }))} style={girdiStili} />
               </Alan>
+              {form.para_birimi === 'TRY' && (
+                <Alan etiket="O günkü USD kuru (opsiyonel)">
+                  <input type="number" step="0.0001" value={form.referans_usd_kuru} onChange={(e) => setForm((f) => ({ ...f, referans_usd_kuru: e.target.value }))} style={girdiStili} />
+                </Alan>
+              )}
               <Alan etiket="Tedarikçi/firma">
                 <select value={form.tedarikci_cari_id} onChange={(e) => setForm((f) => ({ ...f, tedarikci_cari_id: e.target.value }))} style={girdiStili}>
                   <option value="">Seçin...</option>
