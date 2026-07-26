@@ -391,11 +391,12 @@ def oz_mal_ilk_kaydi_olustur(
     if mevcut is not None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"'{istek.seri_no}' seri numaralı bir ürün zaten mevcut.")
 
+    maliyet_try = istek.maliyet_orijinal * istek.kur
     yeni = StokSeriNo(
         sirket_id=sirket_id, stok_karti_id=istek.stok_karti_id,
         seri_no=istek.seri_no, sasi_no=istek.sasi_no, uretim_yili=istek.uretim_yili,
         kaynak=StokKaynak.YURTICI_ALIM, siparis_id=None, durum=istek.durum,
-        sahiplik_tipi="OZ_MAL", satinalma_maliyeti_try=istek.maliyet_try,
+        sahiplik_tipi="OZ_MAL", satinalma_maliyeti_try=maliyet_try,
     )
     db.add(yeni)
     db.commit()
