@@ -133,6 +133,9 @@ class StokMaliyetKalemi(Base):
     belge_no = Column(String(100))
     tarih = Column(Date, nullable=False)
     odendi_mi = Column(Boolean, default=False)
+    # TL kalemler icin, odeme tarihindeki GERCEK USD/TRY kuru (referans
+    # bilgi - sadece bu kalemin USD karsiligini dogru hesaplamak icin).
+    referans_usd_kuru = Column(Numeric(18, 6))
 
 
 # Maliyet tipi -> stok_seri_no uzerindeki ozet sutun adi eslemesi.
