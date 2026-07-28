@@ -67,14 +67,23 @@ function HareketlerPaneli({ parca, cariler, onKapat, onDegisti }) {
   const [form, setForm] = useState({
     tarih: new Date().toISOString().slice(0, 10), yon: 'GIRIS', miktar: '',
     birim_fiyat: '', para_birimi: 'TRY', kur: '1', ilgili_cari_id: '', aciklama: '',
-    odeme_yontemi: 'NAKIT', banka_hesap_id: '',
+    odeme_yontemi: 'NAKIT', banka_hesap_id: '', ilgili_stok_seri_no_id: '',
   });
   const [bankaHesaplari, setBankaHesaplari] = useState([]);
+  const [urunSecenekleri, setUrunSecenekleri] = useState([]);
   const [hata, setHata] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
 
   useEffect(() => {
     api.get('/banka-bakiyeleri').then((r) => setBankaHesaplari(r.data)).catch(() => {});
+    Promise.all([api.get('/stok-seri-no'), api.get('/stok-kartlari')]).then(([u, k]) => {
+      const kartHaritasi = {};
+      k.data.forEach((kart) => { kartHaritasi[kart.id] = kart; });
+      setUrunSecenekleri(u.data.map((urun) => {
+        const kart = kartHaritasi[urun.stok_karti_id];
+        return { ...urun, etiket: kart ? `${kart.marka} ${kart.model} (${urun.seri_no})` : urun.seri_no };
+      }));
+    }).catch(() => {});
   }, []);
 
   function yukle() {
@@ -104,11 +113,13 @@ function HareketlerPaneli({ parca, cariler, onKapat, onDegisti }) {
         aciklama: form.aciklama || null,
         odeme_yontemi: dolduruldu ? form.odeme_yontemi : null,
         banka_hesap_id: dolduruldu && form.odeme_yontemi === 'BANKA' ? Number(form.banka_hesap_id) : null,
+        ilgili_stok_seri_no_id: form.ilgili_stok_seri_no_id ? Number(form.ilgili_stok_seri_no_id) : null,
       });
       setFormAcik(false);
       setForm({
         tarih: new Date().toISOString().slice(0, 10), yon: 'GIRIS', miktar: '', birim_fiyat: '',
         para_birimi: 'TRY', kur: '1', ilgili_cari_id: '', aciklama: '', odeme_yontemi: 'NAKIT', banka_hesap_id: '',
+        ilgili_stok_seri_no_id: '',
       });
       yukle();
       onDegisti();
@@ -198,7 +209,10 @@ function HareketlerPaneli({ parca, cariler, onKapat, onDegisti }) {
             <Alan etiket="İlgili cari (opsiyonel)">
               <AramaliSecici secenekler={cariler} deger={form.ilgili_cari_id} onDegistir={(v) => setForm((f) => ({ ...f, ilgili_cari_id: v }))} etiketFn={(c) => c.unvan} />
             </Alan>
-            <Alan etiket="Açıklama">
+            <Alan etiket="İlgili ürün (opsiyonel — örn. garanti kapsamında hangi forklifte takıldı)">
+              <AramaliSecici secenekler={urunSecenekleri} deger={form.ilgili_stok_seri_no_id} onDegistir={(v) => setForm((f) => ({ ...f, ilgili_stok_seri_no_id: v }))} etiketFn={(u) => u.etiket} />
+            </Alan>
+            <Alan etiket="Açıklama (örn. 'garanti kapsamında bedelsiz değişim')">
               <input value={form.aciklama} onChange={(e) => setForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
             </Alan>
           </div>
@@ -219,7 +233,7 @@ function HareketlerPaneli({ parca, cariler, onKapat, onDegisti }) {
         <table style={{ width: '100%', background: 'white' }}>
           <thead>
             <tr>
-              {['Tarih', 'Yön', 'Miktar', 'Birim Fiyat', 'TL Karşılığı', 'Kâr', 'Ödeme', 'Cari', 'Açıklama', ''].map((b) => (
+              {['Tarih', 'Yön', 'Miktar', 'Birim Fiyat', 'TL Karşılığı', 'Kâr', 'Ödeme', 'Cari', 'İlgili Ürün', 'Açıklama', ''].map((b) => (
                 <th key={b} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 12, color: 'var(--metin-ikincil)' }}>{b}</th>
               ))}
             </tr>
@@ -245,6 +259,7 @@ function HareketlerPaneli({ parca, cariler, onKapat, onDegisti }) {
                   {h.odeme_yontemi === 'NAKIT' ? 'Nakit' : h.odeme_yontemi === 'BANKA' ? 'Banka' : '—'}
                 </td>
                 <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{h.ilgili_cari_unvan || '—'}</td>
+                <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{h.ilgili_urun_bilgisi || '—'}</td>
                 <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{h.aciklama || '—'}</td>
                 <td style={{ padding: '8px 12px' }}>
                   <button onClick={() => sil(h.id)} style={eylemChipStili('kirmizi')}>Sil</button>
