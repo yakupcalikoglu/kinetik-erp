@@ -52,6 +52,21 @@ class YedekParcaTopluIceAktarSonucu(BaseModel):
     hatali_satirlar: list[dict]
 
 
+class YedekParcaHareketDuzenleIstegi(BaseModel):
+    sifre: str  # kullanicinin kendi giris sifresi - degisiklik onayi icin zorunlu
+    tarih: date
+    yon: YedekParcaHareketYon
+    miktar: Decimal
+    birim_fiyat_orijinal: Decimal | None = None
+    para_birimi: str = "TRY"
+    kur: Decimal = Decimal("1")
+    ilgili_cari_id: int | None = None
+    aciklama: str | None = None
+    odeme_yontemi: str | None = None
+    banka_hesap_id: int | None = None
+    ilgili_stok_seri_no_id: int | None = None
+
+
 class YedekParcaHareketOlusturIstegi(BaseModel):
     tarih: date
     yon: YedekParcaHareketYon
