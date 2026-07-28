@@ -110,6 +110,125 @@ def cari_toplu_ice_aktar(
     return CariTopluIceAktarSonucu(basarili_sayisi=basarili, hatali_satirlar=hatalar)
 
 
+@router.get("/ozet-listesi", dependencies=[Depends(izin_gerektir("CARI_GORUNTULE"))])
+async def tum_carilerin_ozeti(
+    sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
+):
+    """
+    Ana Cariler listesindeki Bakiye sutunu icin, TUM carilerin net
+    alacak/borc TL karsiligini TEK seferde (cari basina ayri sorgu
+    ATMADAN) hesaplar - /{cari_id}/ozet ile ayni mantik, ama N+1 sorgu
+    yerine her kategori icin BIR sorgu atip Python'da cari_id'ye gore
+    gruplar. Doner: { cari_id: net_try }.
+    """
+    from decimal import Decimal as _Decimal
+    from app.models.stok import Siparis, SiparisDetay, SiparisOdeme
+    from app.models.finansal import (
+        TaksitliSatisPlani, TaksitDetay, KiralamaSozlesme, KiralamaOdeme, Cek, CekDurum, CekTip,
+    )
+    from app.models.diger import Borc, BorcOdeme, BorcTip
+    from app.models.akreditif import Akreditif, AkreditifKalemi, AkreditifDurum
+    from app.models.akreditif_taksit import AkreditifKalemTaksiti
+    from app.services.kur_servisi import guncel_kur_getir
+
+    kur_cache: dict[str, _Decimal] = {"TRY": _Decimal("1")}
+
+    async def kur_getir(pb: str) -> _Decimal:
+        if pb not in kur_cache:
+            k = await guncel_kur_getir(pb)
+            kur_cache[pb] = _Decimal(str(k)) if k else _Decimal("0")
+        return kur_cache[pb]
+
+    net: dict[int, _Decimal] = {}
+
+    def ekle(cari_id, tutar):
+        if cari_id is None:
+            return
+        net[cari_id] = net.get(cari_id, _Decimal("0")) + tutar
+
+    # Taksit alacagi
+    for cari_id, tutar in db.execute(
+        select(TaksitliSatisPlani.musteri_cari_id, TaksitDetay.tutar)
+        .join(TaksitDetay, TaksitDetay.plan_id == TaksitliSatisPlani.id)
+        .where(TaksitliSatisPlani.sirket_id == sirket_id, TaksitDetay.odendi_mi.is_(False))
+    ).all():
+        ekle(cari_id, tutar)
+
+    # Kira alacagi
+    kira_sozlesmeler = {
+        s.id: s for s in db.execute(select(KiralamaSozlesme).where(KiralamaSozlesme.sirket_id == sirket_id)).scalars()
+    }
+    if kira_sozlesmeler:
+        for o in db.execute(select(KiralamaOdeme).where(KiralamaOdeme.sozlesme_id.in_(list(kira_sozlesmeler.keys())), KiralamaOdeme.odendi_mi.is_(False))).scalars():
+            s = kira_sozlesmeler.get(o.sozlesme_id)
+            if not s:
+                continue
+            pb = s.para_birimi.value if hasattr(s.para_birimi, "value") else s.para_birimi
+            kur = await kur_getir(pb)
+            ekle(s.kiraci_cari_id, o.tutar * kur)
+
+    # Siparis borcu + Akreditif dususu
+    siparisler = list(db.execute(
+        select(Siparis).where(Siparis.sirket_id == sirket_id, Siparis.durum.notin_(["TASLAK", "IPTAL"]))
+    ).scalars())
+    akreditif_borc_per_cari: dict[int, _Decimal] = {}
+    for s in siparisler:
+        urunler = list(db.execute(select(SiparisDetay).where(SiparisDetay.siparis_id == s.id)).scalars())
+        toplam_tutar = sum((u.miktar * u.birim_fiyat for u in urunler), _Decimal("0"))
+        odenen = db.execute(select(func.coalesce(func.sum(SiparisOdeme.tutar), 0)).where(SiparisOdeme.siparis_id == s.id)).scalar_one()
+        pb = s.para_birimi if isinstance(s.para_birimi, str) else s.para_birimi.value
+        kur = await kur_getir(pb)
+        kalan_try = (toplam_tutar - odenen) * kur
+
+        akreditifler = list(db.execute(
+            select(Akreditif).where(Akreditif.siparis_id == s.id, Akreditif.sirket_id == sirket_id, Akreditif.durum != AkreditifDurum.IPTAL)
+        ).scalars())
+        for ak in akreditifler:
+            ak_pb = ak.para_birimi if isinstance(ak.para_birimi, str) else ak.para_birimi.value
+            ak_kur = await kur_getir(ak_pb)
+            kalan_try -= ak.tutar * ak_kur
+
+            kalemler = list(db.execute(select(AkreditifKalemi).where(AkreditifKalemi.akreditif_id == ak.id)).scalars())
+            odenen_toplam = _Decimal("0")
+            for k in kalemler:
+                if k.odendi_mi:
+                    odenen_toplam += k.tutar
+                    continue
+                taksitler_ak = list(db.execute(select(AkreditifKalemTaksiti).where(AkreditifKalemTaksiti.kalem_id == k.id)).scalars())
+                odenen_toplam += sum((t.tutar for t in taksitler_ak if t.odendi_mi), _Decimal("0"))
+            kalan_ak = ak.tutar - odenen_toplam
+            if kalan_ak > 0:
+                akreditif_borc_per_cari[s.tedarikci_cari_id] = akreditif_borc_per_cari.get(s.tedarikci_cari_id, _Decimal("0")) + kalan_ak * ak_kur
+
+        if kalan_try > 0:
+            ekle(s.tedarikci_cari_id, -kalan_try)
+
+    for cari_id, tutar in akreditif_borc_per_cari.items():
+        ekle(cari_id, -tutar)
+
+    # Cekler
+    for c in db.execute(select(Cek).where(Cek.sirket_id == sirket_id, Cek.durum == CekDurum.PORTFOYDE)).scalars():
+        pb = c.para_birimi.value if hasattr(c.para_birimi, "value") else c.para_birimi
+        kur = await kur_getir(pb)
+        isaret = 1 if c.tip == CekTip.ALINAN else -1
+        ekle(c.cari_id, isaret * c.tutar * kur)
+
+    # Ortak/Dis Borc
+    for b in db.execute(select(Borc).where(Borc.sirket_id == sirket_id)).scalars():
+        odenen = db.execute(select(func.coalesce(func.sum(BorcOdeme.tutar), 0)).where(BorcOdeme.borc_id == b.id)).scalar_one()
+        kalan = b.tutar - odenen
+        if kalan <= 0:
+            continue
+        pb = b.para_birimi.value if hasattr(b.para_birimi, "value") else b.para_birimi
+        kur = await kur_getir(pb)
+        isaret = 1 if b.tip == BorcTip.ORTAGA_VERILEN else -1
+        ekle(b.cari_id, isaret * kalan * kur)
+
+    return {str(k): v for k, v in net.items()}
+
+
+
+
 @router.get("/{cari_id}", response_model=CariYanit,
             dependencies=[Depends(izin_gerektir("CARI_GORUNTULE"))])
 def cari_getir(
