@@ -122,9 +122,46 @@ def demirbas_sil(
     demirbas_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
 ):
     kayit = _demirbas_getir_veya_404(db, demirbas_id, sirket_id)
+    if kayit.durum == "SATILDI":
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Satılmış bir demirbaş doğrudan silinemez (kasaya işlenen tutar asılı kalır). "
+            "Önce 'Satışı Geri Al' ile satışı iptal edin, sonra silin.",
+        )
     db.delete(kayit)
     db.commit()
     return {"silindi": True}
+
+
+@router.put("/{demirbas_id}/satisi-geri-al", response_model=DemirbasYanit,
+            dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
+def demirbas_satisini_geri_al(
+    demirbas_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
+):
+    """Bir demirbasin satisini iptal eder: ilgili Kasa/Banka hareketini siler ve durumu 'KULLANIMDA'ya dondurur."""
+    from app.models.banka import KasaHareketi, BankaHareketi
+
+    kayit = _demirbas_getir_veya_404(db, demirbas_id, sirket_id)
+    if kayit.durum != "SATILDI":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bu demirbaş zaten satılmış durumda değil.")
+
+    for kh in db.execute(
+        select(KasaHareketi).where(KasaHareketi.kaynak_tablo == "DEMIRBAS_SATIS", KasaHareketi.kaynak_id == kayit.id)
+    ).scalars():
+        db.delete(kh)
+    for bh in db.execute(
+        select(BankaHareketi).where(BankaHareketi.kaynak_tablo == "DEMIRBAS_SATIS", BankaHareketi.kaynak_id == kayit.id)
+    ).scalars():
+        db.delete(bh)
+
+    kayit.durum = "KULLANIMDA"
+    kayit.satis_fiyati_try = None
+    kayit.satis_tarihi = None
+
+    db.commit()
+    db.refresh(kayit)
+    _cari_unvan_ekle(db, [kayit])
+    return kayit
 
 
 @router.put("/{demirbas_id}/satis", response_model=DemirbasYanit,
