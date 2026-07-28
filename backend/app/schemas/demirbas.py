@@ -47,6 +47,8 @@ class DemirbasYanit(BaseModel):
     kiraci_cari_id: int | None
     kiraci_unvan: str | None = None
     maliyet_try: Decimal
+    maliyet_orijinal: Decimal | None = None
+    para_birimi: str = "TRY"
     alim_tarihi: date | None
     satis_fiyati_try: Decimal | None
     satis_tarihi: date | None
