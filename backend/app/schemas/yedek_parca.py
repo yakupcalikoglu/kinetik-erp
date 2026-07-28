@@ -49,6 +49,9 @@ class YedekParcaHareketOlusturIstegi(BaseModel):
     # Odeme entegrasyonu - doldurulursa gercek Kasa/Banka hareketi olusur.
     odeme_yontemi: str | None = None  # "NAKIT" | "BANKA"
     banka_hesap_id: int | None = None
+    # Bu parcanin takildigi/kullanildigi urun (orn. garanti kapsaminda
+    # bedelsiz degisim yapilan forkliftin seri no'su) - opsiyonel.
+    ilgili_stok_seri_no_id: int | None = None
 
 
 class YedekParcaHareketYanit(BaseModel):
@@ -67,6 +70,8 @@ class YedekParcaHareketYanit(BaseModel):
     banka_hesap_id: int | None = None
     ilgili_cari_id: int | None
     ilgili_cari_unvan: str | None = None
+    ilgili_stok_seri_no_id: int | None = None
+    ilgili_urun_bilgisi: str | None = None  # "JAC 3,5 Ton (HC2026-001)" gibi, backend'de olusturulur
     aciklama: str | None
 
     class Config:
