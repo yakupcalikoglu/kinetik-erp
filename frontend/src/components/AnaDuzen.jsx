@@ -4,12 +4,122 @@ import { useEffect, useRef } from 'react';
 import {
   LayoutDashboard, Wallet, Users, Boxes, ShoppingCart, Landmark, ArrowLeftRight,
   Receipt, FileSpreadsheet, BarChart3, HandCoins, Tag, Wrench, ListTree, Settings, Search,
-  Building2,
+  Building2, Bell,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { api, hataMesajiCikar } from '../api/client';
 
 const ARAMA_TUR_METIN = { CARI: 'Cari', SIPARIS: 'Sipariş', STOK: 'Stok', URUN_TANIMI: 'Ürün Tanımı', DEMIRBAS: 'Demirbaş', YEDEK_PARCA: 'Yedek Parça' };
+
+function Bildirimler() {
+  const [acik, setAcik] = useState(false);
+  const [bildirimler, setBildirimler] = useState([]);
+  const [yukleniyor, setYukleniyor] = useState(true);
+  const navigate = useNavigate();
+  const kutuRef = useRef(null);
+
+  useEffect(() => {
+    setYukleniyor(true);
+    Promise.all([
+      api.get('/yedek-parcalar').catch(() => ({ data: [] })),
+      api.get('/kiralama-sozlesmeleri').catch(() => ({ data: [] })),
+      api.get('/cekler').catch(() => ({ data: [] })),
+    ]).then(([yp, kira, cek]) => {
+      const bugun = new Date().toISOString().slice(0, 10);
+      const liste = [];
+
+      (yp.data || [])
+        .filter((p) => p.min_stok_seviyesi && Number(p.mevcut_miktar) < Number(p.min_stok_seviyesi))
+        .forEach((p) => liste.push({
+          id: `yp-${p.id}`,
+          mesaj: `${p.ad}: stok azaldı (${p.mevcut_miktar} / min ${p.min_stok_seviyesi} ${p.birim})`,
+          yol: '/yedek-parcalar',
+        }));
+
+      (kira.data || [])
+        .filter((k) => k.durum === 'AKTIF' && k.bitis_tarihi && k.bitis_tarihi < bugun)
+        .forEach((k) => liste.push({
+          id: `kira-${k.id}`,
+          mesaj: `Kiralama sözleşmesi süresi doldu (${k.bitis_tarihi}) — sonlandırmayı unutma`,
+          yol: '/finansal?sekme=kiralama',
+        }));
+
+      (cek.data || [])
+        .filter((c) => c.durum === 'PORTFOYDE' && c.vade_tarihi && c.vade_tarihi < bugun)
+        .forEach((c) => liste.push({
+          id: `cek-${c.id}`,
+          mesaj: `Çek ${c.cek_no || '#' + c.id} vadesi geçti (${c.vade_tarihi})`,
+          yol: '/finansal?sekme=cek',
+        }));
+
+      setBildirimler(liste);
+    }).finally(() => setYukleniyor(false));
+  }, []);
+
+  useEffect(() => {
+    function disaTikla(e) {
+      if (kutuRef.current && !kutuRef.current.contains(e.target)) setAcik(false);
+    }
+    document.addEventListener('mousedown', disaTikla);
+    return () => document.removeEventListener('mousedown', disaTikla);
+  }, []);
+
+  function bildirimeGit(b) {
+    setAcik(false);
+    navigate(b.yol);
+  }
+
+  return (
+    <div ref={kutuRef} style={{ position: 'relative' }}>
+      <button
+        onClick={() => setAcik((a) => !a)}
+        style={{
+          position: 'relative', background: 'transparent', border: 'none', cursor: 'pointer',
+          padding: 8, borderRadius: 7, display: 'flex', alignItems: 'center',
+        }}
+      >
+        <Bell size={18} color="white" style={{ opacity: 0.85 }} />
+        {bildirimler.length > 0 && (
+          <span style={{
+            position: 'absolute', top: 2, right: 2, background: 'var(--kirmizi)', color: 'white',
+            borderRadius: '50%', minWidth: 16, height: 16, fontSize: 10, fontWeight: 700,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px',
+          }}>
+            {bildirimler.length}
+          </span>
+        )}
+      </button>
+      {acik && (
+        <div style={{
+          position: 'absolute', top: '110%', right: 0, width: 340, background: 'white',
+          border: '1px solid var(--kenarlik)', borderRadius: 8, boxShadow: '0 6px 18px rgba(0,0,0,0.15)',
+          maxHeight: 380, overflowY: 'auto', zIndex: 60,
+        }}>
+          <div style={{ padding: '10px 14px', fontWeight: 600, fontSize: 13, borderBottom: '1px solid var(--kenarlik)' }}>
+            Bildirimler
+          </div>
+          {yukleniyor ? (
+            <div style={{ padding: 14, fontSize: 12.5, color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
+          ) : bildirimler.length === 0 ? (
+            <div style={{ padding: 14, fontSize: 12.5, color: 'var(--metin-soluk)' }}>✓ Bekleyen bildirim yok</div>
+          ) : (
+            bildirimler.map((b) => (
+              <div
+                key={b.id}
+                onClick={() => bildirimeGit(b)}
+                style={{ padding: '10px 14px', borderBottom: '1px solid var(--kenarlik)', cursor: 'pointer', fontSize: 12.5 }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--zemin)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'white'; }}
+              >
+                ⚠ {b.mesaj}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function GenelArama() {
   const [sorgu, setSorgu] = useState('');
@@ -292,6 +402,7 @@ export default function AnaDuzen() {
             <GenelArama />
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
+              <Bildirimler />
               {oturum?.sirketler?.length > 1 ? (
                 <select
                   value={oturum.aktifSirketId ?? ''}
