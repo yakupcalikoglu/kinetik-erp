@@ -744,6 +744,18 @@ export default function ProformaFaturaSayfasi() {
   const [satisaCevirAcikKalemId, setSatisaCevirAcikKalemId] = useState(null);
 
   function kalemGuncelle(i, alan, deger) {
+    if (alan === 'stok_karti_id' && deger) {
+      const kart = stokKartlari.find((s) => String(s.id) === String(deger));
+      // Bu urun modelinin standart alt metni varsa, Notlar'a otomatik
+      // onerelim (zaten eklenmemisse) - kullanici sonradan duzenleyebilir/silebilir.
+      if (kart && kart.standart_alt_metin) {
+        setForm((f) => {
+          const mevcutSatirlar = (f.notlar || '').split('\n').filter(Boolean);
+          if (mevcutSatirlar.includes(kart.standart_alt_metin)) return f;
+          return { ...f, notlar: [...mevcutSatirlar, kart.standart_alt_metin].join('\n') };
+        });
+      }
+    }
     setKalemler((liste) => liste.map((k, idx) => {
       if (idx !== i) return k;
       if (alan === 'stok_karti_id' && deger) {
