@@ -106,6 +106,16 @@ class CariOzetKalemi(BaseModel):
     tutar_try: Decimal
 
 
+class CariHareketSatiri(BaseModel):
+    tarih: date
+    tur: str  # "SATIS", "KIRALAMA", "BAKIM", "TAKSITLI_SATIS", "CEK", "SIPARIS"
+    aciklama: str
+    tutar_try: Decimal
+    durum: str | None = None
+    kaynak_tablo: str | None = None
+    kaynak_id: int | None = None
+
+
 class CariOzetYaniti(BaseModel):
     cari_id: int
     unvan: str
