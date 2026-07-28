@@ -14,6 +14,7 @@ from app.core.security import sifre_dogrula
 from app.schemas.yedek_parca import (
     YedekParcaOlusturIstegi, YedekParcaDuzenleIstegi, YedekParcaYanit,
     YedekParcaHareketOlusturIstegi, YedekParcaHareketYanit,
+    YedekParcaTopluIceAktarIstegi, YedekParcaTopluIceAktarSonucu,
 )
 from app.services.para_hareketi import para_hareketi_olustur
 
@@ -55,6 +56,54 @@ def yedek_parca_olustur(
     db.commit()
     db.refresh(yeni)
     return yeni
+
+
+@router.post("/toplu-ice-aktar", response_model=YedekParcaTopluIceAktarSonucu,
+             dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
+def yedek_parca_toplu_ice_aktar(
+    istek: YedekParcaTopluIceAktarIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
+):
+    """
+    Excel'den toplu yedek parca tanimi ekler. baslangic_miktari > 0 ise,
+    bu miktari kayit altina almak icin ayrica bir GIRIS hareketi de
+    olusturulur (odeme_yontemi yok - gecmiste zaten alinmis/mevcut stok
+    kabul edilir, Kasa/Banka'ya hicbir hareket yansimaz). Her satir AYRI
+    AYRI commit edilir.
+    """
+    from datetime import date as _date
+
+    basarili = 0
+    hatalar = []
+
+    for i, satir in enumerate(istek.satirlar, start=1):
+        try:
+            if not satir.ad or not satir.ad.strip():
+                raise ValueError("Ad boş olamaz.")
+            yeni = YedekParca(
+                sirket_id=sirket_id, ad=satir.ad.strip(), birim=satir.birim or "ADET",
+                birim_fiyat_try=satir.birim_fiyat_try or 0, min_stok_seviyesi=satir.min_stok_seviyesi or 0,
+                notlar=satir.notlar,
+            )
+            db.add(yeni)
+            db.flush()
+
+            if satir.baslangic_miktari and satir.baslangic_miktari > 0:
+                db.add(YedekParcaHareketi(
+                    yedek_parca_id=yeni.id, tarih=_date.today(), yon=YedekParcaHareketYon.GIRIS,
+                    miktar=satir.baslangic_miktari, birim_fiyat_orijinal=satir.birim_fiyat_try,
+                    para_birimi="TRY", kur=1, birim_fiyat_try=satir.birim_fiyat_try,
+                    aciklama="Excel'den toplu içe aktarma - başlangıç stoğu",
+                ))
+                yeni.mevcut_miktar = satir.baslangic_miktari
+
+            db.commit()
+            basarili += 1
+        except Exception as e:
+            db.rollback()
+            hatalar.append({"satir_no": i, "ad": satir.ad, "hata": str(e)})
+
+    return YedekParcaTopluIceAktarSonucu(basarili_sayisi=basarili, hatali_satirlar=hatalar)
 
 
 @router.get("", response_model=list[YedekParcaYanit],
