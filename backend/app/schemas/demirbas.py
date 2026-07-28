@@ -14,6 +14,7 @@ class DemirbasOlusturIstegi(BaseModel):
     para_birimi: str = "TRY"
     kur: Decimal = Decimal("1")
     alim_tarihi: date | None = None
+    amortisman_orani: Decimal | None = None
     notlar: str | None = None
 
 
@@ -27,6 +28,7 @@ class DemirbasDuzenleIstegi(BaseModel):
     kiraci_cari_id: int | None = None
     maliyet_try: Decimal
     alim_tarihi: date | None = None
+    amortisman_orani: Decimal | None = None
     notlar: str | None = None
 
 
@@ -68,6 +70,8 @@ class DemirbasYanit(BaseModel):
     maliyet_orijinal: Decimal | None = None
     para_birimi: str = "TRY"
     alim_tarihi: date | None
+    amortisman_orani: Decimal | None = None
+    guncel_deger_try: Decimal | None = None  # backend'de hesaplanir (amortisman uygulanmis)
     satis_fiyati_try: Decimal | None
     satis_tarihi: date | None
     notlar: str | None
