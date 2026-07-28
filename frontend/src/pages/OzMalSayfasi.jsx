@@ -3,7 +3,9 @@ import { api, hataMesajiCikar } from '../api/client';
 import {
   Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat, eylemChipStili,
 } from '../components/Ortak';
+import * as XLSX from 'xlsx';
 import AramaliSecici from '../components/AramaliSecici';
+import { excelIndir } from '../utils/disaAktarma';
 
 function useSiralama() {
   const [alan, setAlan] = useState(null);
@@ -288,6 +290,140 @@ function useCariler() {
   return cariler;
 }
 
+const DEMIRBAS_ALAN_ESLESTIRME = {
+  kategori: ['kategori', 'tur', 'category'],
+  ad: ['ad', 'tanim', 'ürün adı', 'urun adi', 'name'],
+  tanimlayici_no: ['tanimlayici no', 'plaka', 'tapu no', 'seri no', 'plaka/tapu no'],
+  konum: ['konum', 'adres', 'sube'],
+  maliyet_try: ['maliyet', 'maliyet (tl)', 'tutar', 'fiyat'],
+  alim_tarihi: ['alim tarihi', 'tarih', 'alış tarihi'],
+};
+
+function normallestirBaslik(s) {
+  return (s || '').toString().trim().toLocaleLowerCase('tr');
+}
+
+function demirbasSutunEslestir(basliklar) {
+  const harita = {};
+  for (const [alan, adaylar] of Object.entries(DEMIRBAS_ALAN_ESLESTIRME)) {
+    const bulunan = basliklar.find((b) => adaylar.includes(normallestirBaslik(b)));
+    if (bulunan) harita[alan] = bulunan;
+  }
+  return harita;
+}
+
+function DemirbasIceAktarPaneli({ onKapat, onTamamlandi }) {
+  const [satirlar, setSatirlar] = useState([]);
+  const [hata, setHata] = useState(null);
+  const [yukleniyor, setYukleniyor] = useState(false);
+  const [sonuc, setSonuc] = useState(null);
+
+  function dosyaSecildi(e) {
+    const dosya = e.target.files?.[0];
+    if (!dosya) return;
+    setHata(null);
+    setSonuc(null);
+    setSatirlar([]);
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const kitap = XLSX.read(evt.target.result, { type: 'array' });
+        const sayfa = kitap.Sheets[kitap.SheetNames[0]];
+        const veri = XLSX.utils.sheet_to_json(sayfa, { defval: '' });
+        if (veri.length === 0) { setHata('Dosyada veri bulunamadı.'); return; }
+        const basliklar = Object.keys(veri[0]);
+        const harita = demirbasSutunEslestir(basliklar);
+        if (!harita.ad) {
+          setHata("Ad/Tanım sütunu bulunamadı. Excel dosyasında bu bilgiyi içeren bir sütun olmalı (örn. 'Ad').");
+          return;
+        }
+        const donusturulmus = veri
+          .map((satir) => ({
+            kategori: harita.kategori ? String(satir[harita.kategori] || 'DIGER').trim().toUpperCase() : 'DIGER',
+            ad: harita.ad ? String(satir[harita.ad] || '').trim() : '',
+            tanimlayici_no: harita.tanimlayici_no ? String(satir[harita.tanimlayici_no] || '').trim() : '',
+            konum: harita.konum ? String(satir[harita.konum] || '').trim() : '',
+            maliyet_try: harita.maliyet_try ? Number(satir[harita.maliyet_try] || 0) : 0,
+            alim_tarihi: null,
+          }))
+          .filter((s) => s.ad);
+        setSatirlar(donusturulmus);
+      } catch (err) {
+        setHata('Dosya okunamadı. Geçerli bir Excel (.xlsx/.xls) dosyası olduğundan emin olun.');
+      }
+    };
+    reader.readAsArrayBuffer(dosya);
+  }
+
+  async function iceAktar() {
+    setYukleniyor(true);
+    setHata(null);
+    try {
+      const { data } = await api.post('/demirbaslar/toplu-ice-aktar', { satirlar });
+      setSonuc(data);
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setYukleniyor(false);
+    }
+  }
+
+  return (
+    <Kart style={{ marginBottom: 20 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div style={{ fontSize: 14.5, fontWeight: 600 }}>Excel'den Demirbaş İçe Aktar</div>
+        <Buton variant="ikincil" onClick={onKapat}>Kapat</Buton>
+      </div>
+      <HataMesaji>{hata}</HataMesaji>
+      <div style={{ fontSize: 12.5, color: 'var(--metin-ikincil)', marginBottom: 12 }}>
+        Excel dosyanızda (herhangi bir sütun sırasıyla): <strong>Ad</strong> (zorunlu), Kategori, Tanımlayıcı No, Konum, Maliyet bulunabilir.
+        Maliyet, TL cinsinden kabul edilir — döviz cinsinden girmek isterseniz "Yeni Demirbaş" formunu kullanın.
+      </div>
+      <input type="file" accept=".xlsx,.xls" onChange={dosyaSecildi} style={{ marginBottom: 16 }} />
+      {satirlar.length > 0 && !sonuc && (
+        <>
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>{satirlar.length} satır bulundu — önizleme (ilk 10):</div>
+          <table style={{ marginBottom: 16 }}>
+            <thead>
+              <tr style={{ background: 'var(--zemin)' }}>
+                {['Kategori', 'Ad', 'Tanımlayıcı No', 'Konum', 'Maliyet (TL)'].map((b) => (
+                  <th key={b} style={{ textAlign: 'left', padding: '6px 10px', fontSize: 12, color: 'var(--metin-ikincil)' }}>{b}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {satirlar.slice(0, 10).map((s, i) => (
+                <tr key={i} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                  <td style={{ padding: '6px 10px' }}>{KATEGORI_METIN[s.kategori] || s.kategori}</td>
+                  <td style={{ padding: '6px 10px' }}>{s.ad}</td>
+                  <td style={{ padding: '6px 10px' }}>{s.tanimlayici_no || '—'}</td>
+                  <td style={{ padding: '6px 10px' }}>{s.konum || '—'}</td>
+                  <td style={{ padding: '6px 10px' }}>{paraFormat(s.maliyet_try)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <Buton onClick={iceAktar} disabled={yukleniyor}>{yukleniyor ? 'İçe aktarılıyor...' : `${satirlar.length} kaydı içe aktar`}</Buton>
+        </>
+      )}
+      {sonuc && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ color: 'var(--yesil)', fontWeight: 600, marginBottom: 8 }}>✓ {sonuc.basarili_sayisi} kayıt başarıyla eklendi.</div>
+          {sonuc.hatali_satirlar.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ color: 'var(--kirmizi)', fontWeight: 600, marginBottom: 6 }}>✗ {sonuc.hatali_satirlar.length} satırda hata oluştu:</div>
+              <ul style={{ fontSize: 12.5, color: 'var(--metin-ikincil)' }}>
+                {sonuc.hatali_satirlar.map((h) => <li key={h.satir_no}>Satır {h.satir_no} ({h.ad}): {h.hata}</li>)}
+              </ul>
+            </div>
+          )}
+          <Buton onClick={onTamamlandi}>Kapat ve listeyi yenile</Buton>
+        </div>
+      )}
+    </Kart>
+  );
+}
+
 export default function OzMalSayfasi() {
   const [demirbaslar, setDemirbaslar] = useState([]);
   const [ekipmanlar, setEkipmanlar] = useState([]);
@@ -297,6 +433,7 @@ export default function OzMalSayfasi() {
   const [duzenlenen, setDuzenlenen] = useState(null);
   const [satisAcikId, setSatisAcikId] = useState(null);
   const [aramaMetni, setAramaMetni] = useState('');
+  const [iceAktarAcik, setIceAktarAcik] = useState(false);
   const siralama = useSiralama();
   const cariler = useCariler();
 
@@ -341,6 +478,19 @@ export default function OzMalSayfasi() {
 
   const toplamDeger = birlesikListe.filter((k) => k.durum !== 'SATILDI' && k.durum !== 'HURDA').reduce((acc, k) => acc + k.maliyet_try, 0);
 
+  function excelIndirYap() {
+    const veri = birlesikListe.map((k) => ({
+      'Kaynak': k.kaynak === 'EKIPMAN' ? 'Stok (Ekipman)' : 'Demirbaş',
+      'Kategori': KATEGORI_METIN[k.kategori] || k.kategori,
+      'Ad / Tanım': k.ad,
+      'Tanımlayıcı No': k.tanimlayici || '',
+      'Durum': DURUM_METIN[k.durum] || k.durum,
+      'Kirada/Konum': k.kiraci_unvan || k.konum || '',
+      'Maliyet (TL)': k.maliyet_try,
+    }));
+    excelIndir(veri, 'oz_mal_demirbas_listesi', 'Öz Mal');
+  }
+
   function yeniAc() {
     setDuzenlenen(null);
     setFormAcik(true);
@@ -382,9 +532,26 @@ export default function OzMalSayfasi() {
       <SayfaBasligi
         baslik="Öz Mal / Demirbaş"
         aciklama="Şirket araçları, gayrimenkul, ofis ekipmanı ve kendi kullanımımız/kiralamamız için ayırdığımız ürünler — tek ekrandan takip"
-        eylem={!formAcik && <Buton onClick={yeniAc}>+ Yeni Demirbaş</Buton>}
+        eylem={!formAcik && (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={excelIndirYap} style={{ padding: '10px 16px', borderRadius: 8, border: '1px solid var(--kenarlik-koyu)', background: 'white', cursor: 'pointer' }}>
+              Excel İndir
+            </button>
+            <Buton variant="ikincil" onClick={() => setIceAktarAcik((a) => !a)}>
+              {iceAktarAcik ? "İçe Aktarmayı Kapat" : "Excel'den İçe Aktar"}
+            </Buton>
+            <Buton onClick={yeniAc}>+ Yeni Demirbaş</Buton>
+          </div>
+        )}
       />
       <HataMesaji>{hata}</HataMesaji>
+
+      {iceAktarAcik && (
+        <DemirbasIceAktarPaneli
+          onKapat={() => setIceAktarAcik(false)}
+          onTamamlandi={() => { setIceAktarAcik(false); yukle(); }}
+        />
+      )}
 
       <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
         <Kart style={{ flex: '1 1 200px' }}>
