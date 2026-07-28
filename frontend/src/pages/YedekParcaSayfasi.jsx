@@ -194,6 +194,126 @@ function bosParcaFormu() {
   return { ad: '', birim: 'ADET', birim_fiyat_try: '', min_stok_seviyesi: '0', notlar: '', sifre: '' };
 }
 
+function HareketDuzenleFormu({ parca, hareket, cariler, urunSecenekleri, onTamamlandi, onVazgec }) {
+  const [form, setForm] = useState({
+    tarih: hareket.tarih, yon: hareket.yon,
+    miktar: String(hareket.miktar), birim_fiyat: hareket.birim_fiyat_orijinal != null ? String(hareket.birim_fiyat_orijinal) : '',
+    para_birimi: hareket.para_birimi || 'TRY', kur: String(hareket.kur || 1),
+    ilgili_cari_id: hareket.ilgili_cari_id ? String(hareket.ilgili_cari_id) : '',
+    ilgili_stok_seri_no_id: hareket.ilgili_stok_seri_no_id ? String(hareket.ilgili_stok_seri_no_id) : '',
+    aciklama: hareket.aciklama || '',
+    odeme_yontemi: hareket.odeme_yontemi || 'NAKIT',
+    banka_hesap_id: hareket.banka_hesap_id ? String(hareket.banka_hesap_id) : '',
+    sifre: '',
+  });
+  const [bankaHesaplari, setBankaHesaplari] = useState([]);
+  const [hata, setHata] = useState(null);
+  const [kaydediliyor, setKaydediliyor] = useState(false);
+
+  useEffect(() => {
+    api.get('/banka-bakiyeleri').then((r) => setBankaHesaplari(r.data)).catch(() => {});
+  }, []);
+
+  async function kaydet(e) {
+    e.preventDefault();
+    setHata(null);
+    setKaydediliyor(true);
+    try {
+      const dolduruldu = !!form.birim_fiyat;
+      await api.put(`/yedek-parcalar/hareketler/${hareket.id}`, {
+        sifre: form.sifre,
+        tarih: form.tarih, yon: form.yon, miktar: Number(form.miktar),
+        birim_fiyat_orijinal: form.birim_fiyat ? Number(form.birim_fiyat) : null,
+        para_birimi: form.para_birimi, kur: Number(form.kur || 1),
+        ilgili_cari_id: form.ilgili_cari_id ? Number(form.ilgili_cari_id) : null,
+        aciklama: form.aciklama || null,
+        odeme_yontemi: dolduruldu ? form.odeme_yontemi : null,
+        banka_hesap_id: dolduruldu && form.odeme_yontemi === 'BANKA' ? Number(form.banka_hesap_id) : null,
+        ilgili_stok_seri_no_id: form.ilgili_stok_seri_no_id ? Number(form.ilgili_stok_seri_no_id) : null,
+      });
+      onTamamlandi();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setKaydediliyor(false);
+    }
+  }
+
+  return (
+    <tr>
+      <td colSpan={11} style={{ padding: 0 }}>
+        <div style={{ padding: 14, background: 'var(--amber-acik, #fdf0d5)' }}>
+          <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 10 }}>Hareketi Düzenle</div>
+          <HataMesaji>{hata}</HataMesaji>
+          <form onSubmit={kaydet} style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+            <Alan etiket="Yön">
+              <select value={form.yon} onChange={(e) => setForm((f) => ({ ...f, yon: e.target.value }))} style={girdiStili}>
+                <option value="GIRIS">Giriş (Satınalma)</option>
+                <option value="CIKIS">Çıkış (Kullanım/Satış)</option>
+              </select>
+            </Alan>
+            <Alan etiket="Tarih">
+              <input required type="date" value={form.tarih} onChange={(e) => setForm((f) => ({ ...f, tarih: e.target.value }))} style={girdiStili} />
+            </Alan>
+            <Alan etiket="Miktar">
+              <input required type="number" step="0.01" value={form.miktar} onChange={(e) => setForm((f) => ({ ...f, miktar: e.target.value }))} style={girdiStili} />
+            </Alan>
+            <Alan etiket={form.yon === 'GIRIS' ? 'Alış fiyatı' : 'Satış fiyatı (boşsa sarf sayılır)'}>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input type="number" step="0.01" value={form.birim_fiyat} onChange={(e) => setForm((f) => ({ ...f, birim_fiyat: e.target.value }))} style={{ ...girdiStili, flex: 1 }} />
+                <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={{ ...girdiStili, width: 70 }}>
+                  <option value="TRY">TL</option>
+                  <option value="USD">USD</option>
+                  <option value="EUR">EUR</option>
+                </select>
+              </div>
+            </Alan>
+            {form.para_birimi !== 'TRY' && (
+              <Alan etiket="Kur">
+                <input type="number" step="0.0001" value={form.kur} onChange={(e) => setForm((f) => ({ ...f, kur: e.target.value }))} style={girdiStili} />
+              </Alan>
+            )}
+            {form.birim_fiyat && (
+              <>
+                <Alan etiket="Ödeme yöntemi">
+                  <select value={form.odeme_yontemi} onChange={(e) => setForm((f) => ({ ...f, odeme_yontemi: e.target.value }))} style={girdiStili}>
+                    <option value="NAKIT">Nakit</option>
+                    <option value="BANKA">Banka</option>
+                  </select>
+                </Alan>
+                {form.odeme_yontemi === 'BANKA' && (
+                  <Alan etiket="Banka hesabı">
+                    <select required value={form.banka_hesap_id} onChange={(e) => setForm((f) => ({ ...f, banka_hesap_id: e.target.value }))} style={girdiStili}>
+                      <option value="">Seçin...</option>
+                      {bankaHesaplari.map((h) => <option key={h.banka_hesap_id} value={h.banka_hesap_id}>{h.banka_adi} — {h.hesap_adi || h.para_birimi}</option>)}
+                    </select>
+                  </Alan>
+                )}
+              </>
+            )}
+            <Alan etiket="İlgili cari">
+              <AramaliSecici secenekler={cariler} deger={form.ilgili_cari_id} onDegistir={(v) => setForm((f) => ({ ...f, ilgili_cari_id: v }))} etiketFn={(c) => c.unvan} />
+            </Alan>
+            <Alan etiket="İlgili ürün">
+              <AramaliSecici secenekler={urunSecenekleri} deger={form.ilgili_stok_seri_no_id} onDegistir={(v) => setForm((f) => ({ ...f, ilgili_stok_seri_no_id: v }))} etiketFn={(u) => u.etiket} />
+            </Alan>
+            <Alan etiket="Açıklama">
+              <input value={form.aciklama} onChange={(e) => setForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
+            </Alan>
+            <Alan etiket="Şifreniz (onay için zorunlu)">
+              <input required type="password" value={form.sifre} onChange={(e) => setForm((f) => ({ ...f, sifre: e.target.value }))} style={girdiStili} placeholder="Giriş şifreniz" />
+            </Alan>
+            <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 8 }}>
+              <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Kaydediliyor...' : 'Değişiklikleri Kaydet'}</Buton>
+              <Buton type="button" variant="ikincil" onClick={onVazgec}>Vazgeç</Buton>
+            </div>
+          </form>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 function HareketlerPaneli({ parca, cariler, onKapat, onDegisti }) {
   const [hareketler, setHareketler] = useState(null);
   const [formAcik, setFormAcik] = useState(false);
@@ -204,18 +324,32 @@ function HareketlerPaneli({ parca, cariler, onKapat, onDegisti }) {
   });
   const [bankaHesaplari, setBankaHesaplari] = useState([]);
   const [urunSecenekleri, setUrunSecenekleri] = useState([]);
+  const [kiraciHaritasi, setKiraciHaritasi] = useState({}); // stok_seri_no_id -> kiraci_cari_id
+  const [tumUrunleriGoster, setTumUrunleriGoster] = useState(false);
   const [hata, setHata] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
+  const [duzenlenenHareketId, setDuzenlenenHareketId] = useState(null);
 
   useEffect(() => {
     api.get('/banka-bakiyeleri').then((r) => setBankaHesaplari(r.data)).catch(() => {});
-    Promise.all([api.get('/stok-seri-no'), api.get('/stok-kartlari')]).then(([u, k]) => {
+    Promise.all([api.get('/stok-seri-no'), api.get('/stok-kartlari'), api.get('/kiralama-sozlesmeleri')]).then(([u, k, kira]) => {
       const kartHaritasi = {};
       k.data.forEach((kart) => { kartHaritasi[kart.id] = kart; });
       setUrunSecenekleri(u.data.map((urun) => {
         const kart = kartHaritasi[urun.stok_karti_id];
-        return { ...urun, etiket: kart ? `${kart.marka} ${kart.model} (${urun.seri_no})` : urun.seri_no };
+        return { ...urun, etiket: kart ? `${kart.marka} ${kart.model} — Seri No: ${urun.seri_no}` : `Seri No: ${urun.seri_no}` };
       }));
+      // Kiralik urunler icin de "bu carinin elinde" filtresine dahil olsun diye
+      // kiraci_cari_id -> stok_seri_no_id iliskisini cikariyoruz.
+      const kHaritasi = {};
+      (kira.data || []).forEach((sozlesme) => {
+        (sozlesme.kalemler || []).forEach((kalem) => {
+          (kalem.stok_seri_no_idleri || []).forEach((seriId) => {
+            kHaritasi[seriId] = sozlesme.kiraci_cari_id;
+          });
+        });
+      });
+      setKiraciHaritasi(kHaritasi);
     }).catch(() => {});
   }, []);
 
@@ -340,10 +474,39 @@ function HareketlerPaneli({ parca, cariler, onKapat, onDegisti }) {
               </>
             )}
             <Alan etiket="İlgili cari (opsiyonel)">
-              <AramaliSecici secenekler={cariler} deger={form.ilgili_cari_id} onDegistir={(v) => setForm((f) => ({ ...f, ilgili_cari_id: v }))} etiketFn={(c) => c.unvan} />
+              <AramaliSecici secenekler={cariler} deger={form.ilgili_cari_id} onDegistir={(v) => setForm((f) => ({ ...f, ilgili_cari_id: v, ilgili_stok_seri_no_id: '' }))} etiketFn={(c) => c.unvan} />
             </Alan>
-            <Alan etiket="İlgili ürün (opsiyonel — örn. garanti kapsamında hangi forklifte takıldı)">
-              <AramaliSecici secenekler={urunSecenekleri} deger={form.ilgili_stok_seri_no_id} onDegistir={(v) => setForm((f) => ({ ...f, ilgili_stok_seri_no_id: v }))} etiketFn={(u) => u.etiket} />
+            <Alan etiket={form.ilgili_cari_id ? "İlgili ürün — bu carinin elindeki ürünler (satılmış/kiralık)" : "İlgili ürün (opsiyonel — örn. garanti kapsamında hangi forklifte takıldı)"}>
+              {(() => {
+                const cariUrunleri = form.ilgili_cari_id
+                  ? urunSecenekleri.filter((u) => (
+                      String(u.musteri_cari_id) === String(form.ilgili_cari_id)
+                      || String(kiraciHaritasi[u.id]) === String(form.ilgili_cari_id)
+                    ))
+                  : urunSecenekleri;
+                const gosterilecekler = (form.ilgili_cari_id && !tumUrunleriGoster) ? cariUrunleri : urunSecenekleri;
+                return (
+                  <>
+                    <AramaliSecici
+                      secenekler={gosterilecekler}
+                      deger={form.ilgili_stok_seri_no_id}
+                      onDegistir={(v) => setForm((f) => ({ ...f, ilgili_stok_seri_no_id: v }))}
+                      etiketFn={(u) => u.etiket}
+                    />
+                    {form.ilgili_cari_id && (
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--metin-ikincil)', marginTop: 4, cursor: 'pointer' }}>
+                        <input type="checkbox" checked={tumUrunleriGoster} onChange={(e) => setTumUrunleriGoster(e.target.checked)} />
+                        Bu cariyle sınırlama, tüm ürünleri göster
+                      </label>
+                    )}
+                    {form.ilgili_cari_id && !tumUrunleriGoster && cariUrunleri.length === 0 && (
+                      <div style={{ fontSize: 11.5, color: 'var(--kirmizi)', marginTop: 4 }}>
+                        Bu cariye ait ürün bulunamadı — yukarıdaki kutuyu işaretleyip tüm ürünlerden arayabilirsiniz.
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </Alan>
             <Alan etiket="Açıklama (örn. 'garanti kapsamında bedelsiz değişim')">
               <input value={form.aciklama} onChange={(e) => setForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
@@ -373,31 +536,51 @@ function HareketlerPaneli({ parca, cariler, onKapat, onDegisti }) {
           </thead>
           <tbody>
             {hareketler.map((h) => (
-              <tr key={h.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
-                <td style={{ padding: '8px 12px' }}>{tarihFormat(h.tarih)}</td>
-                <td style={{ padding: '8px 12px' }}>
-                  <Etiket ton={h.yon === 'GIRIS' ? 'yesil' : 'kirmizi'}>{h.yon === 'GIRIS' ? 'Giriş' : 'Çıkış'}</Etiket>
-                </td>
-                <td style={{ padding: '8px 12px', fontWeight: 500 }}>{h.miktar} {parca.birim}</td>
-                <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>
-                  {h.birim_fiyat_orijinal != null ? paraFormat(h.birim_fiyat_orijinal, h.para_birimi) : '—'}
-                </td>
-                <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>
-                  {h.para_birimi !== 'TRY' && h.birim_fiyat_try != null ? paraFormat(h.birim_fiyat_try) : (h.para_birimi === 'TRY' ? '—' : '—')}
-                </td>
-                <td style={{ padding: '8px 12px', fontWeight: 500, color: h.kar_try != null ? (Number(h.kar_try) >= 0 ? 'var(--yesil)' : 'var(--kirmizi)') : 'var(--metin-soluk)' }}>
-                  {h.kar_try != null ? paraFormat(h.kar_try) : '—'}
-                </td>
-                <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>
-                  {h.odeme_yontemi === 'NAKIT' ? 'Nakit' : h.odeme_yontemi === 'BANKA' ? 'Banka' : '—'}
-                </td>
-                <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{h.ilgili_cari_unvan || '—'}</td>
-                <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{h.ilgili_urun_bilgisi || '—'}</td>
-                <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{h.aciklama || '—'}</td>
-                <td style={{ padding: '8px 12px' }}>
-                  <button onClick={() => sil(h.id)} style={eylemChipStili('kirmizi')}>Sil</button>
-                </td>
-              </tr>
+              <Fragment key={h.id}>
+                <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                  <td style={{ padding: '8px 12px' }}>{tarihFormat(h.tarih)}</td>
+                  <td style={{ padding: '8px 12px' }}>
+                    <Etiket ton={h.yon === 'GIRIS' ? 'yesil' : 'kirmizi'}>{h.yon === 'GIRIS' ? 'Giriş' : 'Çıkış'}</Etiket>
+                  </td>
+                  <td style={{ padding: '8px 12px', fontWeight: 500 }}>{h.miktar} {parca.birim}</td>
+                  <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>
+                    {h.birim_fiyat_orijinal != null ? paraFormat(h.birim_fiyat_orijinal, h.para_birimi) : '—'}
+                  </td>
+                  <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>
+                    {h.para_birimi !== 'TRY' && h.birim_fiyat_try != null ? paraFormat(h.birim_fiyat_try) : (h.para_birimi === 'TRY' ? '—' : '—')}
+                  </td>
+                  <td style={{ padding: '8px 12px', fontWeight: 500, color: h.kar_try != null ? (Number(h.kar_try) >= 0 ? 'var(--yesil)' : 'var(--kirmizi)') : 'var(--metin-soluk)' }}>
+                    {h.kar_try != null ? paraFormat(h.kar_try) : '—'}
+                  </td>
+                  <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>
+                    {h.odeme_yontemi === 'NAKIT' ? 'Nakit' : h.odeme_yontemi === 'BANKA' ? 'Banka' : '—'}
+                  </td>
+                  <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{h.ilgili_cari_unvan || '—'}</td>
+                  <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{h.ilgili_urun_bilgisi || '—'}</td>
+                  <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{h.aciklama || '—'}</td>
+                  <td style={{ padding: '8px 12px' }}>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button
+                        onClick={() => setDuzenlenenHareketId((mevcut) => (mevcut === h.id ? null : h.id))}
+                        style={eylemChipStili('lacivert')}
+                      >
+                        {duzenlenenHareketId === h.id ? 'Kapat' : 'Düzenle'}
+                      </button>
+                      <button onClick={() => sil(h.id)} style={eylemChipStili('kirmizi')}>Sil</button>
+                    </div>
+                  </td>
+                </tr>
+                {duzenlenenHareketId === h.id && (
+                  <HareketDuzenleFormu
+                    parca={parca}
+                    hareket={h}
+                    cariler={cariler}
+                    urunSecenekleri={urunSecenekleri}
+                    onTamamlandi={() => { setDuzenlenenHareketId(null); yukle(); onDegisti(); }}
+                    onVazgec={() => setDuzenlenenHareketId(null)}
+                  />
+                )}
+              </Fragment>
             ))}
           </tbody>
         </table>
