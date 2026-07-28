@@ -428,7 +428,7 @@ function CariFormu({ duzenlenenCari, onKaydedildi, onVazgec }) {
 
 const HAREKET_YON_METIN = { GIRIS: 'Giriş', CIKIS: 'Çıkış' };
 
-function CariOzetKarti({ cari }) {
+function CariOzetKarti({ cari, onKapat }) {
   const [ozet, setOzet] = useState(null);
   const [hata, setHata] = useState(null);
   const [detayAcik, setDetayAcik] = useState(false);
@@ -441,7 +441,10 @@ function CariOzetKarti({ cari }) {
 
   return (
     <Kart style={{ marginBottom: 16, border: '1px solid var(--lacivert)' }}>
-      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>{cari.unvan} — Alacak/Borç Özeti</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ fontSize: 14, fontWeight: 600 }}>{cari.unvan} — Alacak/Borç Özeti</div>
+        {onKapat && <Buton variant="ikincil" onClick={onKapat}>Kapat</Buton>}
+      </div>
       {!ozet ? (
         <div style={{ color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
       ) : (
@@ -595,6 +598,9 @@ export default function CarilerSayfasi() {
   const [iceAktarAcik, setIceAktarAcik] = useState(false);
   const siralama = useSiralama();
 
+  const [ozetHaritasi, setOzetHaritasi] = useState({});
+  const [usdKur, setUsdKur] = useState(null);
+
   function listeyiYukle() {
     setYukleniyor(true);
     api.get('/cariler', { params: arama ? { arama } : {} })
@@ -603,7 +609,11 @@ export default function CarilerSayfasi() {
       .finally(() => setYukleniyor(false));
   }
 
-  useEffect(() => { listeyiYukle(); }, []); // eslint-disable-line
+  useEffect(() => {
+    listeyiYukle();
+    api.get('/cariler/ozet-listesi').then((r) => setOzetHaritasi(r.data)).catch(() => {});
+    api.get('/kur/USD').then((r) => setUsdKur(Number(r.data.kur))).catch(() => {});
+  }, []); // eslint-disable-line
 
   function yeniCariAc() {
     setDuzenlenenCari(null);
@@ -663,10 +673,7 @@ export default function CarilerSayfasi() {
       )}
 
       {seciliCari && (
-        <>
-          <CariOzetKarti cari={seciliCari} />
-          <CariHareketleri cari={seciliCari} onKapat={() => setSeciliCari(null)} />
-        </>
+        <CariOzetKarti cari={seciliCari} onKapat={() => setSeciliCari(null)} />
       )}
 
       <Kart style={{ padding: 0 }}>
@@ -698,7 +705,9 @@ export default function CarilerSayfasi() {
               </tr>
             </thead>
             <tbody>
-              {siralama.sirala(cariler, (item, alan) => item[alan]).map((c) => (
+              {siralama.sirala(cariler, (item, alan) => (
+                alan === 'bakiye_try' || alan === 'bakiye_usd' ? (ozetHaritasi[item.id] || 0) : item[alan]
+              )).map((c) => (
                 <tr key={c.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
                   <td style={{ padding: '12px 16px', fontWeight: 500 }}>{c.unvan}</td>
                   <td style={{ padding: '12px 16px' }}>
@@ -706,11 +715,15 @@ export default function CarilerSayfasi() {
                   </td>
                   <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>{c.vergi_no || '—'}</td>
                   <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>{c.telefon || '—'}</td>
-                  <td style={{ padding: '12px 16px' }}>{paraFormat(c.bakiye_try, 'TRY')}</td>
-                  <td style={{ padding: '12px 16px' }}>{paraFormat(c.bakiye_usd, 'USD')}</td>
+                  <td style={{ padding: '12px 16px', fontWeight: 500, color: (ozetHaritasi[c.id] || 0) >= 0 ? 'var(--yesil)' : 'var(--kirmizi)' }}>
+                    {paraFormat(ozetHaritasi[c.id] || 0, 'TRY')}
+                  </td>
+                  <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>
+                    {usdKur ? paraFormat((ozetHaritasi[c.id] || 0) / usdKur, 'USD') : '—'}
+                  </td>
                   <td style={{ padding: '12px 16px' }}>
                     <div style={{ display: 'flex', gap: 6 }}>
-                      <button onClick={() => setSeciliCari(c)} style={eylemChipStili('lacivert')}>Hareketler</button>
+                      <button onClick={() => setSeciliCari(c)} style={eylemChipStili('lacivert')}>Alacak/Borç</button>
                       <button onClick={() => duzenle(c)} style={eylemChipStili('lacivert')}>Düzenle</button>
                       <button onClick={() => cariyiSil(c)} style={eylemChipStili('kirmizi')}>Sil</button>
                     </div>
