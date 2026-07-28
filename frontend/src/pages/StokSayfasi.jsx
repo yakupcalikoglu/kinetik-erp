@@ -1280,8 +1280,10 @@ export default function StokSayfasi() {
                           {u.durum !== 'SATILDI' && u.durum !== 'HURDA' && (
                             <button onClick={() => setHurdaAcikId(u.id)} style={eylemChipStili('kirmizi')}>Hurdaya Çıkar</button>
                           )}
-                          {u.durum === 'SATILDI' ? (
-                            <button onClick={() => satisiGeriAl(u)} style={eylemChipStili('kirmizi')}>Satışı Geri Al</button>
+                          {(u.durum === 'SATILDI' || u.durum === 'HURDA') ? (
+                            <button onClick={() => satisiGeriAl(u)} style={eylemChipStili('kirmizi')}>
+                              {u.durum === 'HURDA' ? 'Hurdayı Geri Al' : 'Satışı Geri Al'}
+                            </button>
                           ) : (
                             <button onClick={() => urunuSil(u)} style={eylemChipStili('kirmizi')}>Sil</button>
                           )}
