@@ -58,6 +58,7 @@ def demirbas_olustur(
         sirket_id=sirket_id, kategori=istek.kategori, ad=istek.ad,
         tanimlayici_no=istek.tanimlayici_no, konum=istek.konum, durum=istek.durum,
         kiraci_cari_id=istek.kiraci_cari_id, maliyet_try=maliyet_try,
+        maliyet_orijinal=istek.maliyet_orijinal, para_birimi=istek.para_birimi,
         alim_tarihi=istek.alim_tarihi, notlar=istek.notlar,
     )
     db.add(yeni)
