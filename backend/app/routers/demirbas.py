@@ -1,5 +1,6 @@
 import json
 from datetime import date
+from decimal import Decimal as _Decimal
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import select
@@ -36,6 +37,21 @@ def _demirbas_getir_veya_404(db: Session, demirbas_id: int, sirket_id: int) -> D
     return kayit
 
 
+def _guncel_deger_hesapla(kayit: Demirbas) -> None:
+    """
+    amortisman_orani (yillik %) ve alim_tarihi doluysa, gecen sure kadar
+    deger kaybini uygulayarak guncel_deger_try'yi hesaplar. Deger hicbir
+    zaman negatife dusmez (0'da durur). Bilgi eksikse (amortisman veya
+    tarih yoksa) guncel_deger_try = maliyet_try olarak birebir gosterilir.
+    """
+    if not kayit.amortisman_orani or not kayit.alim_tarihi:
+        kayit.guncel_deger_try = kayit.maliyet_try
+        return
+    gecen_yil = (date.today() - kayit.alim_tarihi).days / 365.25
+    kayip_orani = min(_Decimal(str(kayit.amortisman_orani)) * _Decimal(str(gecen_yil)) / _Decimal("100"), _Decimal("1"))
+    kayit.guncel_deger_try = kayit.maliyet_try * (_Decimal("1") - kayip_orani)
+
+
 def _cari_unvan_ekle(db: Session, kayitlar: list[Demirbas]) -> None:
     cari_ids = [k.kiraci_cari_id for k in kayitlar if k.kiraci_cari_id]
     cari_haritasi = {}
@@ -60,12 +76,14 @@ def demirbas_olustur(
         tanimlayici_no=istek.tanimlayici_no, konum=istek.konum, durum=istek.durum,
         kiraci_cari_id=istek.kiraci_cari_id, maliyet_try=maliyet_try,
         maliyet_orijinal=istek.maliyet_orijinal, para_birimi=istek.para_birimi,
+        amortisman_orani=istek.amortisman_orani,
         alim_tarihi=istek.alim_tarihi, notlar=istek.notlar,
     )
     db.add(yeni)
     db.commit()
     db.refresh(yeni)
     _cari_unvan_ekle(db, [yeni])
+    _guncel_deger_hesapla(yeni)
     return yeni
 
 
@@ -118,6 +136,8 @@ def demirbaslari_listele(
     sorgu = select(Demirbas).where(Demirbas.sirket_id == sirket_id).order_by(Demirbas.id.desc())
     kayitlar = list(db.execute(sorgu).scalars())
     _cari_unvan_ekle(db, kayitlar)
+    for k in kayitlar:
+        _guncel_deger_hesapla(k)
     return kayitlar
 
 
@@ -136,12 +156,13 @@ def demirbas_duzenle(
     alan_adlari = {
         "kategori": "Kategori", "ad": "Ad", "tanimlayici_no": "Tanımlayıcı No", "konum": "Konum",
         "durum": "Durum", "kiraci_cari_id": "Kiracı", "maliyet_try": "Maliyet", "alim_tarihi": "Alım Tarihi",
-        "notlar": "Notlar",
+        "amortisman_orani": "Amortisman Oranı", "notlar": "Notlar",
     }
     yeni_degerler = {
         "kategori": istek.kategori, "ad": istek.ad, "tanimlayici_no": istek.tanimlayici_no,
         "konum": istek.konum, "durum": istek.durum, "kiraci_cari_id": istek.kiraci_cari_id,
-        "maliyet_try": istek.maliyet_try, "alim_tarihi": istek.alim_tarihi, "notlar": istek.notlar,
+        "maliyet_try": istek.maliyet_try, "alim_tarihi": istek.alim_tarihi,
+        "amortisman_orani": istek.amortisman_orani, "notlar": istek.notlar,
     }
     degisiklikler = {}
     for alan, etiket in alan_adlari.items():
@@ -156,6 +177,7 @@ def demirbas_duzenle(
     db.commit()
     db.refresh(kayit)
     _cari_unvan_ekle(db, [kayit])
+    _guncel_deger_hesapla(kayit)
     return kayit
 
 
@@ -203,6 +225,7 @@ def demirbas_satisini_geri_al(
     db.commit()
     db.refresh(kayit)
     _cari_unvan_ekle(db, [kayit])
+    _guncel_deger_hesapla(kayit)
     return kayit
 
 
@@ -242,4 +265,5 @@ def demirbas_satisi_yap(
     db.commit()
     db.refresh(kayit)
     _cari_unvan_ekle(db, [kayit])
+    _guncel_deger_hesapla(kayit)
     return kayit
