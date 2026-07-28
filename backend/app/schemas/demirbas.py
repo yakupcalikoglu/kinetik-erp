@@ -37,6 +37,24 @@ class DemirbasSatisIstegi(BaseModel):
     aciklama: str | None = None
 
 
+class DemirbasTopluIceAktarSatiri(BaseModel):
+    kategori: str | None = None
+    ad: str | None = None
+    tanimlayici_no: str | None = None
+    konum: str | None = None
+    maliyet_try: Decimal | None = None
+    alim_tarihi: date | None = None
+
+
+class DemirbasTopluIceAktarIstegi(BaseModel):
+    satirlar: list[DemirbasTopluIceAktarSatiri]
+
+
+class DemirbasTopluIceAktarSonucu(BaseModel):
+    basarili_sayisi: int
+    hatali_satirlar: list[dict]
+
+
 class DemirbasYanit(BaseModel):
     id: int
     kategori: str
