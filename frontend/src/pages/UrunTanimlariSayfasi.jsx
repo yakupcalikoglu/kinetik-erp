@@ -44,7 +44,7 @@ import {
 } from '../components/Ortak';
 
 function bosForm() {
-  return { marka: '', model: '', birim: 'ADET', birim_agirlik_kg: '', aciklama: '', mense_ulke: '', gtip_kodu: '' };
+  return { marka: '', model: '', birim: 'ADET', birim_agirlik_kg: '', aciklama: '', mense_ulke: '', gtip_kodu: '', standart_alt_metin: '' };
 }
 
 const ALAN_ESLESTIRME = {
@@ -211,6 +211,7 @@ function UrunTanimiFormu({ duzenlenenKart, onKaydedildi, onVazgec }) {
         aciklama: duzenlenenKart.aciklama || '',
         mense_ulke: duzenlenenKart.mense_ulke || '',
         gtip_kodu: duzenlenenKart.gtip_kodu || '',
+        standart_alt_metin: duzenlenenKart.standart_alt_metin || '',
       }
     : bosForm()
   );
@@ -285,6 +286,14 @@ function UrunTanimiFormu({ duzenlenenKart, onKaydedildi, onVazgec }) {
         </div>
         <Alan etiket="Açıklama">
           <input value={form.aciklama} onChange={(e) => setForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
+        </Alan>
+        <Alan etiket="Standart alt metin (opsiyonel) — Proforma/Fatura'da bu modelden kalem eklenince Notlar'a otomatik önerilir">
+          <textarea
+            value={form.standart_alt_metin}
+            onChange={(e) => setForm((f) => ({ ...f, standart_alt_metin: e.target.value }))}
+            style={{ ...girdiStili, minHeight: 70, resize: 'vertical', fontFamily: 'inherit' }}
+            placeholder="Örn: Bu ürün 2 yıl garanti kapsamındadır. Teslimat X gün içinde yapılır."
+          />
         </Alan>
         <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
           <Buton type="submit" disabled={kaydediliyor}>
