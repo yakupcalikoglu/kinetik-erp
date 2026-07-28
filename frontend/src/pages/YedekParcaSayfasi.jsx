@@ -67,9 +67,15 @@ function HareketlerPaneli({ parca, cariler, onKapat, onDegisti }) {
   const [form, setForm] = useState({
     tarih: new Date().toISOString().slice(0, 10), yon: 'GIRIS', miktar: '',
     birim_fiyat: '', para_birimi: 'TRY', kur: '1', ilgili_cari_id: '', aciklama: '',
+    odeme_yontemi: 'NAKIT', banka_hesap_id: '',
   });
+  const [bankaHesaplari, setBankaHesaplari] = useState([]);
   const [hata, setHata] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
+
+  useEffect(() => {
+    api.get('/banka-bakiyeleri').then((r) => setBankaHesaplari(r.data)).catch(() => {});
+  }, []);
 
   function yukle() {
     api.get(`/yedek-parcalar/${parca.id}/hareketler`).then((r) => setHareketler(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
@@ -89,15 +95,21 @@ function HareketlerPaneli({ parca, cariler, onKapat, onDegisti }) {
     setHata(null);
     setKaydediliyor(true);
     try {
+      const dolduruldu = !!form.birim_fiyat;
       await api.post(`/yedek-parcalar/${parca.id}/hareketler`, {
         tarih: form.tarih, yon: form.yon, miktar: Number(form.miktar),
         birim_fiyat_orijinal: form.birim_fiyat ? Number(form.birim_fiyat) : null,
         para_birimi: form.para_birimi, kur: Number(form.kur || 1),
         ilgili_cari_id: form.ilgili_cari_id ? Number(form.ilgili_cari_id) : null,
         aciklama: form.aciklama || null,
+        odeme_yontemi: dolduruldu ? form.odeme_yontemi : null,
+        banka_hesap_id: dolduruldu && form.odeme_yontemi === 'BANKA' ? Number(form.banka_hesap_id) : null,
       });
       setFormAcik(false);
-      setForm({ tarih: new Date().toISOString().slice(0, 10), yon: 'GIRIS', miktar: '', birim_fiyat: '', para_birimi: 'TRY', kur: '1', ilgili_cari_id: '', aciklama: '' });
+      setForm({
+        tarih: new Date().toISOString().slice(0, 10), yon: 'GIRIS', miktar: '', birim_fiyat: '',
+        para_birimi: 'TRY', kur: '1', ilgili_cari_id: '', aciklama: '', odeme_yontemi: 'NAKIT', banka_hesap_id: '',
+      });
       yukle();
       onDegisti();
     } catch (err) {
@@ -145,27 +157,41 @@ function HareketlerPaneli({ parca, cariler, onKapat, onDegisti }) {
             <Alan etiket={`Miktar (${parca.birim})`}>
               <input required type="number" step="0.01" value={form.miktar} onChange={(e) => setForm((f) => ({ ...f, miktar: e.target.value }))} style={girdiStili} />
             </Alan>
-            {form.yon === 'GIRIS' && (
+            <Alan etiket={form.yon === 'GIRIS' ? 'Alış fiyatı (opsiyonel — güncel fiyatı günceller)' : 'Satış fiyatı (opsiyonel — boşsa sadece kullanım/sarf sayılır)'}>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input type="number" step="0.01" value={form.birim_fiyat} onChange={(e) => setForm((f) => ({ ...f, birim_fiyat: e.target.value }))} style={{ ...girdiStili, flex: 1 }} />
+                <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={{ ...girdiStili, width: 80 }}>
+                  <option value="TRY">TL</option>
+                  <option value="USD">USD</option>
+                  <option value="EUR">EUR</option>
+                </select>
+              </div>
+            </Alan>
+            {form.para_birimi !== 'TRY' && (
+              <Alan etiket={`Kur (${form.para_birimi} → TL) — otomatik, değiştirilebilir`}>
+                <input type="number" step="0.0001" value={form.kur} onChange={(e) => setForm((f) => ({ ...f, kur: e.target.value }))} style={girdiStili} />
+              </Alan>
+            )}
+            {tlKarsiligi != null && (
+              <div style={{ fontSize: 12, color: 'var(--metin-ikincil)', alignSelf: 'end', paddingBottom: 8 }}>
+                Toplam ≈ {paraFormat(tlKarsiligi)}
+              </div>
+            )}
+            {form.birim_fiyat && (
               <>
-                <Alan etiket="Birim fiyat (opsiyonel — güncel fiyatı günceller)">
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <input type="number" step="0.01" value={form.birim_fiyat} onChange={(e) => setForm((f) => ({ ...f, birim_fiyat: e.target.value }))} style={{ ...girdiStili, flex: 1 }} />
-                    <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={{ ...girdiStili, width: 80 }}>
-                      <option value="TRY">TL</option>
-                      <option value="USD">USD</option>
-                      <option value="EUR">EUR</option>
-                    </select>
-                  </div>
+                <Alan etiket={`Ödeme yöntemi (${form.yon === 'GIRIS' ? 'kasadan çıkar' : 'kasaya girer'})`}>
+                  <select value={form.odeme_yontemi} onChange={(e) => setForm((f) => ({ ...f, odeme_yontemi: e.target.value }))} style={girdiStili}>
+                    <option value="NAKIT">Nakit (Ana Kasa)</option>
+                    <option value="BANKA">Banka</option>
+                  </select>
                 </Alan>
-                {form.para_birimi !== 'TRY' && (
-                  <Alan etiket={`Kur (${form.para_birimi} → TL) — otomatik, değiştirilebilir`}>
-                    <input type="number" step="0.0001" value={form.kur} onChange={(e) => setForm((f) => ({ ...f, kur: e.target.value }))} style={girdiStili} />
+                {form.odeme_yontemi === 'BANKA' && (
+                  <Alan etiket="Banka hesabı">
+                    <select required value={form.banka_hesap_id} onChange={(e) => setForm((f) => ({ ...f, banka_hesap_id: e.target.value }))} style={girdiStili}>
+                      <option value="">Seçin...</option>
+                      {bankaHesaplari.map((h) => <option key={h.banka_hesap_id} value={h.banka_hesap_id}>{h.banka_adi} — {h.hesap_adi || h.para_birimi}</option>)}
+                    </select>
                   </Alan>
-                )}
-                {tlKarsiligi != null && form.para_birimi !== 'TRY' && (
-                  <div style={{ fontSize: 12, color: 'var(--metin-ikincil)', alignSelf: 'end', paddingBottom: 8 }}>
-                    Toplam ≈ {paraFormat(tlKarsiligi)}
-                  </div>
                 )}
               </>
             )}
@@ -176,6 +202,11 @@ function HareketlerPaneli({ parca, cariler, onKapat, onDegisti }) {
               <input value={form.aciklama} onChange={(e) => setForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
             </Alan>
           </div>
+          {!form.birim_fiyat && (
+            <div style={{ fontSize: 12, color: 'var(--metin-ikincil)', marginTop: 8 }}>
+              Fiyat girilmediği için bu hareket Kasa/Banka'ya yansımayacak — sadece stok miktarını değiştirecek.
+            </div>
+          )}
           <Buton type="submit" disabled={kaydediliyor} style={{ marginTop: 10 }}>{kaydediliyor ? 'Kaydediliyor...' : 'Kaydet'}</Buton>
         </form>
       )}
@@ -188,7 +219,7 @@ function HareketlerPaneli({ parca, cariler, onKapat, onDegisti }) {
         <table style={{ width: '100%', background: 'white' }}>
           <thead>
             <tr>
-              {['Tarih', 'Yön', 'Miktar', 'Birim Fiyat', 'TL Karşılığı', 'Cari', 'Açıklama', ''].map((b) => (
+              {['Tarih', 'Yön', 'Miktar', 'Birim Fiyat', 'TL Karşılığı', 'Kâr', 'Ödeme', 'Cari', 'Açıklama', ''].map((b) => (
                 <th key={b} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 12, color: 'var(--metin-ikincil)' }}>{b}</th>
               ))}
             </tr>
@@ -206,6 +237,12 @@ function HareketlerPaneli({ parca, cariler, onKapat, onDegisti }) {
                 </td>
                 <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>
                   {h.para_birimi !== 'TRY' && h.birim_fiyat_try != null ? paraFormat(h.birim_fiyat_try) : (h.para_birimi === 'TRY' ? '—' : '—')}
+                </td>
+                <td style={{ padding: '8px 12px', fontWeight: 500, color: h.kar_try != null ? (Number(h.kar_try) >= 0 ? 'var(--yesil)' : 'var(--kirmizi)') : 'var(--metin-soluk)' }}>
+                  {h.kar_try != null ? paraFormat(h.kar_try) : '—'}
+                </td>
+                <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>
+                  {h.odeme_yontemi === 'NAKIT' ? 'Nakit' : h.odeme_yontemi === 'BANKA' ? 'Banka' : '—'}
                 </td>
                 <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{h.ilgili_cari_unvan || '—'}</td>
                 <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{h.aciklama || '—'}</td>
