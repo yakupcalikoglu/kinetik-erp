@@ -1,9 +1,142 @@
 import { useEffect, useState, Fragment } from 'react';
+import * as XLSX from 'xlsx';
 import { api, hataMesajiCikar } from '../api/client';
 import {
   Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat, eylemChipStili,
 } from '../components/Ortak';
 import AramaliSecici from '../components/AramaliSecici';
+import { excelIndir } from '../utils/disaAktarma';
+
+const YP_ALAN_ESLESTIRME = {
+  ad: ['ad', 'parça adı', 'parca adi', 'name'],
+  birim: ['birim', 'unit'],
+  baslangic_miktari: ['miktar', 'mevcut miktar', 'stok', 'adet'],
+  birim_fiyat_try: ['birim fiyat', 'fiyat', 'birim fiyat (tl)'],
+  min_stok_seviyesi: ['min stok', 'minimum stok', 'min stok seviyesi'],
+};
+
+function ypNormallestir(s) {
+  return (s || '').toString().trim().toLocaleLowerCase('tr');
+}
+
+function ypSutunEslestir(basliklar) {
+  const harita = {};
+  for (const [alan, adaylar] of Object.entries(YP_ALAN_ESLESTIRME)) {
+    const bulunan = basliklar.find((b) => adaylar.includes(ypNormallestir(b)));
+    if (bulunan) harita[alan] = bulunan;
+  }
+  return harita;
+}
+
+function YedekParcaIceAktarPaneli({ onKapat, onTamamlandi }) {
+  const [satirlar, setSatirlar] = useState([]);
+  const [hata, setHata] = useState(null);
+  const [yukleniyor, setYukleniyor] = useState(false);
+  const [sonuc, setSonuc] = useState(null);
+
+  function dosyaSecildi(e) {
+    const dosya = e.target.files?.[0];
+    if (!dosya) return;
+    setHata(null);
+    setSonuc(null);
+    setSatirlar([]);
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const kitap = XLSX.read(evt.target.result, { type: 'array' });
+        const sayfa = kitap.Sheets[kitap.SheetNames[0]];
+        const veri = XLSX.utils.sheet_to_json(sayfa, { defval: '' });
+        if (veri.length === 0) { setHata('Dosyada veri bulunamadı.'); return; }
+        const basliklar = Object.keys(veri[0]);
+        const harita = ypSutunEslestir(basliklar);
+        if (!harita.ad) {
+          setHata("Ad sütunu bulunamadı. Excel dosyasında bu bilgiyi içeren bir sütun olmalı (örn. 'Ad').");
+          return;
+        }
+        const donusturulmus = veri
+          .map((satir) => ({
+            ad: harita.ad ? String(satir[harita.ad] || '').trim() : '',
+            birim: harita.birim ? String(satir[harita.birim] || 'ADET').trim().toUpperCase() : 'ADET',
+            baslangic_miktari: harita.baslangic_miktari ? Number(satir[harita.baslangic_miktari] || 0) : 0,
+            birim_fiyat_try: harita.birim_fiyat_try ? Number(satir[harita.birim_fiyat_try] || 0) : 0,
+            min_stok_seviyesi: harita.min_stok_seviyesi ? Number(satir[harita.min_stok_seviyesi] || 0) : 0,
+          }))
+          .filter((s) => s.ad);
+        setSatirlar(donusturulmus);
+      } catch (err) {
+        setHata('Dosya okunamadı. Geçerli bir Excel (.xlsx/.xls) dosyası olduğundan emin olun.');
+      }
+    };
+    reader.readAsArrayBuffer(dosya);
+  }
+
+  async function iceAktar() {
+    setYukleniyor(true);
+    setHata(null);
+    try {
+      const { data } = await api.post('/yedek-parcalar/toplu-ice-aktar', { satirlar });
+      setSonuc(data);
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setYukleniyor(false);
+    }
+  }
+
+  return (
+    <Kart style={{ marginBottom: 20 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div style={{ fontSize: 14.5, fontWeight: 600 }}>Excel'den Yedek Parça İçe Aktar</div>
+        <Buton variant="ikincil" onClick={onKapat}>Kapat</Buton>
+      </div>
+      <HataMesaji>{hata}</HataMesaji>
+      <div style={{ fontSize: 12.5, color: 'var(--metin-ikincil)', marginBottom: 12 }}>
+        Excel dosyanızda: <strong>Ad</strong> (zorunlu), Birim, Mevcut Miktar (varsa başlangıç stoğu olarak kaydedilir — kasaya hiçbir hareket yansımaz), Birim Fiyat, Min Stok bulunabilir.
+      </div>
+      <input type="file" accept=".xlsx,.xls" onChange={dosyaSecildi} style={{ marginBottom: 16 }} />
+      {satirlar.length > 0 && !sonuc && (
+        <>
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>{satirlar.length} satır bulundu — önizleme (ilk 10):</div>
+          <table style={{ marginBottom: 16 }}>
+            <thead>
+              <tr style={{ background: 'var(--zemin)' }}>
+                {['Ad', 'Birim', 'Başlangıç Miktarı', 'Birim Fiyat (TL)', 'Min Stok'].map((b) => (
+                  <th key={b} style={{ textAlign: 'left', padding: '6px 10px', fontSize: 12, color: 'var(--metin-ikincil)' }}>{b}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {satirlar.slice(0, 10).map((s, i) => (
+                <tr key={i} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                  <td style={{ padding: '6px 10px' }}>{s.ad}</td>
+                  <td style={{ padding: '6px 10px' }}>{s.birim}</td>
+                  <td style={{ padding: '6px 10px' }}>{s.baslangic_miktari}</td>
+                  <td style={{ padding: '6px 10px' }}>{paraFormat(s.birim_fiyat_try)}</td>
+                  <td style={{ padding: '6px 10px' }}>{s.min_stok_seviyesi}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <Buton onClick={iceAktar} disabled={yukleniyor}>{yukleniyor ? 'İçe aktarılıyor...' : `${satirlar.length} kaydı içe aktar`}</Buton>
+        </>
+      )}
+      {sonuc && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ color: 'var(--yesil)', fontWeight: 600, marginBottom: 8 }}>✓ {sonuc.basarili_sayisi} kayıt başarıyla eklendi.</div>
+          {sonuc.hatali_satirlar.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ color: 'var(--kirmizi)', fontWeight: 600, marginBottom: 6 }}>✗ {sonuc.hatali_satirlar.length} satırda hata oluştu:</div>
+              <ul style={{ fontSize: 12.5, color: 'var(--metin-ikincil)' }}>
+                {sonuc.hatali_satirlar.map((h) => <li key={h.satir_no}>Satır {h.satir_no} ({h.ad}): {h.hata}</li>)}
+              </ul>
+            </div>
+          )}
+          <Buton onClick={onTamamlandi}>Kapat ve listeyi yenile</Buton>
+        </div>
+      )}
+    </Kart>
+  );
+}
 
 function tarihFormat(iso) {
   if (!iso || typeof iso !== 'string' || !iso.includes('-')) return iso || '—';
@@ -281,6 +414,7 @@ export default function YedekParcaSayfasi() {
   const [duzenlenen, setDuzenlenen] = useState(null);
   const [form, setForm] = useState(bosParcaFormu());
   const [hareketAcikId, setHareketAcikId] = useState(null);
+  const [iceAktarAcik, setIceAktarAcik] = useState(false);
   const siralama = useSiralama();
   const cariler = useCariler();
 
@@ -352,9 +486,36 @@ export default function YedekParcaSayfasi() {
       <SayfaBasligi
         baslik="Yedek Parça / Sarf Malzeme"
         aciklama="Seri no'suz, adet/miktar bazında takip edilen küçük parçalar (lastik, akü, hidrolik yağ vb.)"
-        eylem={!formAcik && <Buton onClick={yeniAc}>+ Yeni parça</Buton>}
+        eylem={!formAcik && (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={() => excelIndir(
+                liste.map((p) => ({
+                  'Ad': p.ad, 'Birim': p.birim, 'Mevcut Miktar': Number(p.mevcut_miktar),
+                  'Birim Fiyat (TL)': Number(p.birim_fiyat_try), 'Min Stok': Number(p.min_stok_seviyesi || 0),
+                  'Toplam Değer (TL)': Number(p.mevcut_miktar) * Number(p.birim_fiyat_try),
+                })),
+                'yedek_parca_listesi', 'Yedek Parça',
+              )}
+              style={{ padding: '10px 16px', borderRadius: 8, border: '1px solid var(--kenarlik-koyu)', background: 'white', cursor: 'pointer' }}
+            >
+              Excel İndir
+            </button>
+            <Buton variant="ikincil" onClick={() => setIceAktarAcik((a) => !a)}>
+              {iceAktarAcik ? 'İçe Aktarmayı Kapat' : "Excel'den İçe Aktar"}
+            </Buton>
+            <Buton onClick={yeniAc}>+ Yeni parça</Buton>
+          </div>
+        )}
       />
       <HataMesaji>{hata}</HataMesaji>
+
+      {iceAktarAcik && (
+        <YedekParcaIceAktarPaneli
+          onKapat={() => setIceAktarAcik(false)}
+          onTamamlandi={() => { setIceAktarAcik(false); yukle(); }}
+        />
+      )}
 
       <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
         <Kart style={{ flex: '1 1 200px' }}>
