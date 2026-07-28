@@ -8,6 +8,7 @@ from app.core.deps import aktif_sirket_id_getir, izin_gerektir, aktif_kullanici_
 from app.models.auth import Kullanici
 from app.models.yedek_parca import YedekParca, YedekParcaHareketi, YedekParcaHareketYon
 from app.models.cari import CariHesap
+from app.models.stok import StokSeriNo, StokKarti
 from app.models.denetim import DuzenlemeKaydi
 from app.core.security import sifre_dogrula
 from app.schemas.yedek_parca import (
@@ -26,6 +27,14 @@ def _degisiklikleri_kaydet(db: Session, sirket_id: int, kullanici_id: int, tablo
         sirket_id=sirket_id, kullanici_id=kullanici_id, tablo_adi=tablo_adi,
         kayit_id=kayit_id, degisiklikler=json.dumps(degisiklikler, ensure_ascii=False, default=str),
     ))
+
+
+def _urun_bilgisi_getir(db: Session, stok_seri_no_id: int) -> str | None:
+    urun = db.get(StokSeriNo, stok_seri_no_id)
+    if urun is None:
+        return None
+    kart = db.get(StokKarti, urun.stok_karti_id)
+    return f"{kart.marka} {kart.model} ({urun.seri_no})" if kart else urun.seri_no
 
 
 def _parca_getir_veya_404(db: Session, parca_id: int, sirket_id: int) -> YedekParca:
@@ -147,7 +156,8 @@ def yedek_parca_hareketi_ekle(
         birim_fiyat_orijinal=istek.birim_fiyat_orijinal, para_birimi=istek.para_birimi, kur=istek.kur,
         birim_fiyat_try=birim_fiyat_try, maliyet_birim_fiyat_try=maliyet_birim_fiyat_try,
         odeme_yontemi=istek.odeme_yontemi, banka_hesap_id=istek.banka_hesap_id,
-        ilgili_cari_id=istek.ilgili_cari_id, aciklama=istek.aciklama,
+        ilgili_cari_id=istek.ilgili_cari_id, ilgili_stok_seri_no_id=istek.ilgili_stok_seri_no_id,
+        aciklama=istek.aciklama,
     )
     db.add(yeni)
     db.flush()
@@ -179,6 +189,8 @@ def yedek_parca_hareketi_ekle(
     if yeni.ilgili_cari_id:
         cari = db.get(CariHesap, yeni.ilgili_cari_id)
         yeni.ilgili_cari_unvan = cari.unvan if cari else None
+    if yeni.ilgili_stok_seri_no_id:
+        yeni.ilgili_urun_bilgisi = _urun_bilgisi_getir(db, yeni.ilgili_stok_seri_no_id)
     return yeni
 
 
@@ -201,8 +213,20 @@ def yedek_parca_hareketlerini_listele(
         cari_haritasi = {
             c.id: c.unvan for c in db.execute(select(CariHesap).where(CariHesap.id.in_(cari_ids))).scalars()
         }
+    urun_ids = [s.ilgili_stok_seri_no_id for s in sonuclar if s.ilgili_stok_seri_no_id]
+    urun_haritasi = {}
+    if urun_ids:
+        urunler = list(db.execute(select(StokSeriNo).where(StokSeriNo.id.in_(urun_ids))).scalars())
+        kart_haritasi = {
+            k.id: k for k in db.execute(select(StokKarti).where(StokKarti.id.in_({u.stok_karti_id for u in urunler}))).scalars()
+        }
+        for u in urunler:
+            kart = kart_haritasi.get(u.stok_karti_id)
+            urun_haritasi[u.id] = f"{kart.marka} {kart.model} ({u.seri_no})" if kart else u.seri_no
+
     for s in sonuclar:
         s.ilgili_cari_unvan = cari_haritasi.get(s.ilgili_cari_id)
+        s.ilgili_urun_bilgisi = urun_haritasi.get(s.ilgili_stok_seri_no_id)
         if s.maliyet_birim_fiyat_try is not None and s.birim_fiyat_try is not None:
             s.kar_try = (s.birim_fiyat_try - s.maliyet_birim_fiyat_try) * s.miktar
     return sonuclar
