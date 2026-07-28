@@ -369,15 +369,17 @@ def stok_seri_no_sil(
     db: Session = Depends(get_db),
 ):
     """
-    Bir urun kaydini siler. Satis gecmisini korumak icin SATILDI durumundaki
-    urunler silinemez - once (varsa) ilgili satis kaydi incelenmelidir.
-    Bagli maliyet kalemleri de birlikte silinir.
+    Bir urun kaydini siler. Satis/hurda gecmisini korumak (ve olasi asili
+    kalmis Kasa/Banka hareketlerini onlemek) icin SATILDI veya HURDA
+    durumundaki urunler silinemez - once ilgili "Satisi/Hurdayi Geri Al"
+    islemi yapilmalidir. Bagli maliyet kalemleri de birlikte silinir.
     """
     kayit = _seri_no_getir_veya_404(db, seri_id, sirket_id)
-    if kayit.durum == StokDurum.SATILDI:
+    if kayit.durum in (StokDurum.SATILDI, StokDurum.HURDA):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            "Satılmış bir ürün silinemez (satış geçmişi korunur)."
+            "Satılmış veya hurdaya çıkarılmış bir ürün doğrudan silinemez (geçmiş korunur). "
+            "Önce ürünün 'Satışı/Hurdayı Geri Al' işlemini yapın."
         )
 
     for kalem in list(db.execute(
@@ -642,8 +644,8 @@ def stok_satisini_geri_al(
     Urun her durumda DEPODA'ya doner, satis bilgileri temizlenir.
     """
     kayit = _seri_no_getir_veya_404(db, seri_id, sirket_id)
-    if kayit.durum != StokDurum.SATILDI:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bu ürün zaten satılmış durumda değil.")
+    if kayit.durum not in (StokDurum.SATILDI, StokDurum.HURDA):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bu ürün satılmış veya hurdaya çıkarılmış durumda değil.")
 
     from app.models.banka import KasaHareketi, BankaHareketi
     from app.models.finansal import Cek, CekGecmis, CekDurum
