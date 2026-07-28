@@ -320,6 +320,8 @@ export default function OzMalSayfasi() {
       kaynak: 'DEMIRBAS', id: d.id, kategori: d.kategori, ad: d.ad,
       tanimlayici: d.tanimlayici_no, konum: d.konum, durum: d.durum,
       kiraci_unvan: d.kiraci_unvan, maliyet_try: Number(d.maliyet_try),
+      maliyet_orijinal: d.maliyet_orijinal != null ? Number(d.maliyet_orijinal) : null,
+      para_birimi: d.para_birimi || 'TRY',
       ham: d,
     })),
     ...ekipmanlar.map((u) => {
@@ -435,7 +437,14 @@ export default function OzMalSayfasi() {
                     <td style={{ padding: '12px 16px', fontFamily: 'var(--font-mono)', color: 'var(--metin-ikincil)' }}>{k.tanimlayici || '—'}</td>
                     <td style={{ padding: '12px 16px' }}><Etiket ton={DURUM_TON[k.durum] || 'notr'}>{DURUM_METIN[k.durum] || k.durum}</Etiket></td>
                     <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>{k.kiraci_unvan || k.konum || '—'}</td>
-                    <td style={{ padding: '12px 16px' }}>{paraFormat(k.maliyet_try)}</td>
+                    <td style={{ padding: '12px 16px' }}>
+                      {paraFormat(k.maliyet_try)}
+                      {k.para_birimi && k.para_birimi !== 'TRY' && k.maliyet_orijinal != null && (
+                        <div style={{ fontSize: 11, color: 'var(--metin-ikincil)' }}>
+                          ({paraFormat(k.maliyet_orijinal, k.para_birimi)} girildi)
+                        </div>
+                      )}
+                    </td>
                     <td style={{ padding: '12px 16px' }}>
                       <Etiket ton={k.kaynak === 'EKIPMAN' ? 'amber' : 'notr'}>{k.kaynak === 'EKIPMAN' ? 'Stok (Ekipman)' : 'Demirbaş'}</Etiket>
                     </td>
