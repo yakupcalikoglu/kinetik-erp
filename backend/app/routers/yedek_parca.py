@@ -13,7 +13,7 @@ from app.models.denetim import DuzenlemeKaydi
 from app.core.security import sifre_dogrula
 from app.schemas.yedek_parca import (
     YedekParcaOlusturIstegi, YedekParcaDuzenleIstegi, YedekParcaYanit,
-    YedekParcaHareketOlusturIstegi, YedekParcaHareketYanit,
+    YedekParcaHareketOlusturIstegi, YedekParcaHareketYanit, YedekParcaHareketDuzenleIstegi,
     YedekParcaTopluIceAktarIstegi, YedekParcaTopluIceAktarSonucu,
 )
 from app.services.para_hareketi import para_hareketi_olustur
@@ -279,6 +279,104 @@ def yedek_parca_hareketlerini_listele(
         if s.maliyet_birim_fiyat_try is not None and s.birim_fiyat_try is not None:
             s.kar_try = (s.birim_fiyat_try - s.maliyet_birim_fiyat_try) * s.miktar
     return sonuclar
+
+
+@router.put("/hareketler/{hareket_id}", response_model=YedekParcaHareketYanit,
+            dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
+def yedek_parca_hareketi_duzenle(
+    hareket_id: int, istek: YedekParcaHareketDuzenleIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    kullanici: Kullanici = Depends(aktif_kullanici_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Mevcut bir hareketi (yanlislikla girilmis fiyat/miktar gibi) duzenler.
+    Once ESKI etkiyi geri alir (stok miktarini ve varsa Kasa/Banka
+    hareketini), sonra YENI degerlerle tekrar uygular. Sifre onayi
+    zorunludur.
+    """
+    from app.models.banka import KasaHareketi, BankaHareketi
+
+    if not sifre_dogrula(istek.sifre, kullanici.sifre_hash):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Şifre yanlış, düzenleme yapılamadı.")
+
+    hareket = db.get(YedekParcaHareketi, hareket_id)
+    if hareket is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Hareket bulunamadı.")
+    kayit = db.get(YedekParca, hareket.yedek_parca_id)
+    if kayit is None or kayit.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Hareket bulunamadı.")
+
+    # 1) ESKI stok etkisini geri al
+    if hareket.yon == YedekParcaHareketYon.GIRIS:
+        kayit.mevcut_miktar = kayit.mevcut_miktar - hareket.miktar
+    else:
+        kayit.mevcut_miktar = kayit.mevcut_miktar + hareket.miktar
+
+    # 2) ESKI Kasa/Banka hareketini sil (varsa)
+    if hareket.odeme_yontemi:
+        for kh in db.execute(select(KasaHareketi).where(KasaHareketi.kaynak_tablo == "YEDEK_PARCA_HAREKET", KasaHareketi.kaynak_id == hareket.id)).scalars():
+            db.delete(kh)
+        for bh in db.execute(select(BankaHareketi).where(BankaHareketi.kaynak_tablo == "YEDEK_PARCA_HAREKET", BankaHareketi.kaynak_id == hareket.id)).scalars():
+            db.delete(bh)
+    db.flush()
+
+    # 3) YENI degerleri dogrula (CIKIS ise yeterli stok var mi)
+    if istek.yon == YedekParcaHareketYon.CIKIS and istek.miktar > kayit.mevcut_miktar:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Yetersiz stok. Mevcut: {kayit.mevcut_miktar} {kayit.birim}")
+    if istek.odeme_yontemi and istek.odeme_yontemi not in ("NAKIT", "BANKA"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "odeme_yontemi 'NAKIT' veya 'BANKA' olmalıdır.")
+
+    birim_fiyat_try = (istek.birim_fiyat_orijinal * istek.kur) if istek.birim_fiyat_orijinal is not None else None
+    satis_mi = istek.yon == YedekParcaHareketYon.CIKIS and istek.birim_fiyat_orijinal is not None
+    maliyet_birim_fiyat_try = kayit.birim_fiyat_try if satis_mi else None
+
+    hareket.tarih = istek.tarih
+    hareket.yon = istek.yon
+    hareket.miktar = istek.miktar
+    hareket.birim_fiyat_orijinal = istek.birim_fiyat_orijinal
+    hareket.para_birimi = istek.para_birimi
+    hareket.kur = istek.kur
+    hareket.birim_fiyat_try = birim_fiyat_try
+    hareket.maliyet_birim_fiyat_try = maliyet_birim_fiyat_try
+    hareket.odeme_yontemi = istek.odeme_yontemi
+    hareket.banka_hesap_id = istek.banka_hesap_id
+    hareket.ilgili_cari_id = istek.ilgili_cari_id
+    hareket.ilgili_stok_seri_no_id = istek.ilgili_stok_seri_no_id
+    hareket.aciklama = istek.aciklama
+
+    # 4) YENI stok etkisini uygula
+    if istek.yon == YedekParcaHareketYon.GIRIS:
+        kayit.mevcut_miktar = kayit.mevcut_miktar + istek.miktar
+        if birim_fiyat_try:
+            kayit.birim_fiyat_try = birim_fiyat_try
+    else:
+        kayit.mevcut_miktar = kayit.mevcut_miktar - istek.miktar
+
+    # 5) YENI Kasa/Banka hareketini olustur (varsa)
+    if istek.odeme_yontemi and istek.birim_fiyat_orijinal is not None:
+        tutar_toplam_orijinal = istek.miktar * istek.birim_fiyat_orijinal
+        yon_kasa = "CIKIS" if istek.yon == YedekParcaHareketYon.GIRIS else "GIRIS"
+        eylem_metni = "alımı" if istek.yon == YedekParcaHareketYon.GIRIS else "satışı"
+        para_hareketi_olustur(
+            db, sirket_id, kullanici.id, yon_kasa, tutar_toplam_orijinal,
+            istek.odeme_yontemi, istek.banka_hesap_id,
+            aciklama=f"Yedek parça {eylem_metni} (düzenlendi) - {kayit.ad} ({istek.miktar} {kayit.birim})" + (f" - {istek.aciklama}" if istek.aciklama else ""),
+            kaynak_tablo="YEDEK_PARCA_HAREKET", kaynak_id=hareket.id,
+            cari_id=istek.ilgili_cari_id, para_birimi=istek.para_birimi, kur=istek.kur,
+        )
+
+    db.commit()
+    db.refresh(hareket)
+
+    if hareket.maliyet_birim_fiyat_try is not None and hareket.birim_fiyat_try is not None:
+        hareket.kar_try = (hareket.birim_fiyat_try - hareket.maliyet_birim_fiyat_try) * hareket.miktar
+    if hareket.ilgili_cari_id:
+        cari = db.get(CariHesap, hareket.ilgili_cari_id)
+        hareket.ilgili_cari_unvan = cari.unvan if cari else None
+    if hareket.ilgili_stok_seri_no_id:
+        hareket.ilgili_urun_bilgisi = _urun_bilgisi_getir(db, hareket.ilgili_stok_seri_no_id)
+    return hareket
 
 
 @router.delete("/hareketler/{hareket_id}", dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
