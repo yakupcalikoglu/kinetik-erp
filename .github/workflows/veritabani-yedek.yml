@@ -12,10 +12,15 @@ jobs:
       - name: Repoyu checkout et
         uses: actions/checkout@v4
 
-      - name: PostgreSQL istemcisini kur
+      - name: PostgreSQL 17 istemcisini kur
         run: |
           sudo apt-get update
-          sudo apt-get install -y postgresql-client
+          sudo apt-get install -y wget ca-certificates gnupg lsb-release
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo wget --quiet -O /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          sudo sh -c 'echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
 
       - name: Veritabanini yedekle
         env:
@@ -23,7 +28,7 @@ jobs:
         run: |
           mkdir -p yedekler
           TARIH=$(date +%Y-%m-%d)
-          pg_dump "$DATABASE_URL" --no-owner --no-privileges > "yedekler/yedek_${TARIH}.sql"
+          /usr/lib/postgresql/17/bin/pg_dump "$DATABASE_URL" --no-owner --no-privileges > "yedekler/yedek_${TARIH}.sql"
           gzip "yedekler/yedek_${TARIH}.sql"
 
       - name: Eski yedekleri temizle (son 12 haftayi tut)
