@@ -4,6 +4,7 @@ import { api, hataMesajiCikar } from '../api/client';
 import {
   Kart, SayfaBasligi, Buton, Etiket, Alan, girdiStili, BosDurum, HataMesaji, paraFormat, eylemChipStili,
 } from '../components/Ortak';
+import { useNavigate } from 'react-router-dom';
 import AramaliSecici from '../components/AramaliSecici';
 
 // Herhangi bir listeyi bir sutuna gore tiklanabilir sekilde siralamak icin
@@ -885,11 +886,21 @@ function BakimMiniFormu({ cari, onTamamlandi, onVazgec }) {
 const HAREKET_TUR_METIN = { SATIS: 'Satış', KIRALAMA: 'Kiralama', BAKIM: 'Bakım', TAKSITLI_SATIS: 'Taksitli Satış', CEK: 'Çek', SIPARIS: 'Sipariş' };
 const HAREKET_TUR_TON = { SATIS: 'yesil', KIRALAMA: 'amber', BAKIM: 'notr', TAKSITLI_SATIS: 'amber', CEK: 'notr', SIPARIS: 'notr' };
 
+const CARI_HAREKET_YOL_HARITASI = {
+  STOK_SATIS: '/stok',
+  KIRALAMA_SOZLESME: '/finansal?sekme=kiralama',
+  BAKIM_KAYDI: '/finansal?sekme=bakim',
+  TAKSITLI_SATIS_PLANI: '/finansal?sekme=taksit',
+  CEKLER: '/finansal?sekme=cek',
+  SIPARIS: '/siparisler',
+};
+
 function CariHareketleri({ cari, onKapat }) {
   const [hareketler, setHareketler] = useState([]);
   const [yukleniyor, setYukleniyor] = useState(true);
   const [hata, setHata] = useState(null);
   const [yeniHareketTipi, setYeniHareketTipi] = useState(null);
+  const navigate = useNavigate();
 
   function yukle() {
     setYukleniyor(true);
@@ -940,15 +951,24 @@ function CariHareketleri({ cari, onKapat }) {
               </tr>
             </thead>
             <tbody>
-              {hareketler.map((h, i) => (
-                <tr key={i} style={{ borderTop: '1px solid var(--kenarlik)' }}>
-                  <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{tarihFormat(h.tarih)}</td>
-                  <td style={{ padding: '8px 12px' }}><Etiket ton={HAREKET_TUR_TON[h.tur] || 'notr'}>{HAREKET_TUR_METIN[h.tur] || h.tur}</Etiket></td>
-                  <td style={{ padding: '8px 12px' }}>{h.aciklama}</td>
-                  <td style={{ padding: '8px 12px', fontWeight: 500 }}>{h.tutar_try > 0 ? paraFormat(h.tutar_try) : '—'}</td>
-                  <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{h.durum || '—'}</td>
-                </tr>
-              ))}
+              {hareketler.map((h, i) => {
+                const yol = CARI_HAREKET_YOL_HARITASI[h.kaynak_tablo];
+                return (
+                  <tr
+                    key={i}
+                    onClick={() => yol && navigate(yol)}
+                    style={{ borderTop: '1px solid var(--kenarlik)', cursor: yol ? 'pointer' : 'default' }}
+                    onMouseEnter={(e) => { if (yol) e.currentTarget.style.background = 'var(--zemin)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                  >
+                    <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{tarihFormat(h.tarih)}</td>
+                    <td style={{ padding: '8px 12px' }}><Etiket ton={HAREKET_TUR_TON[h.tur] || 'notr'}>{HAREKET_TUR_METIN[h.tur] || h.tur}</Etiket></td>
+                    <td style={{ padding: '8px 12px' }}>{h.aciklama}</td>
+                    <td style={{ padding: '8px 12px', fontWeight: 500 }}>{h.tutar_try > 0 ? paraFormat(h.tutar_try) : '—'}</td>
+                    <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{h.durum || '—'}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
