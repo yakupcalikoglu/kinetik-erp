@@ -134,6 +134,8 @@ const KAYNAK_YOL_HARITASI = {
   STOK_SATIS: '/stok',
   CEKLER: '/finansal?sekme=cek',
   SIPARIS_ODEME: '/siparisler',
+  DEMIRBAS_SATIS: '/oz-mal',
+  YEDEK_PARCA_HAREKET: '/yedek-parcalar',
 };
 
 function KaynakDetayi({ kaynakTablo, kaynakId, onIslemTamamlandi }) {
