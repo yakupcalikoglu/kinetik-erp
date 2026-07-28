@@ -429,6 +429,124 @@ function CariFormu({ duzenlenenCari, onKaydedildi, onVazgec }) {
 
 const HAREKET_YON_METIN = { GIRIS: 'Giriş', CIKIS: 'Çıkış' };
 
+const CARI_TIP_METIN = { MUSTERI: 'Müşteri', TEDARIKCI: 'Tedarikçi', DIGER: 'Diğer' };
+
+function CariBilgileriKarti({ cari }) {
+  return (
+    <Kart style={{ marginBottom: 16 }}>
+      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 10 }}>{cari.unvan}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10, fontSize: 12.5 }}>
+        <div>
+          <div style={{ color: 'var(--metin-ikincil)', marginBottom: 2 }}>Tip</div>
+          <div>{CARI_TIP_METIN[cari.tip] || cari.tip}</div>
+        </div>
+        <div>
+          <div style={{ color: 'var(--metin-ikincil)', marginBottom: 2 }}>Vergi No</div>
+          <div>{cari.vergi_no || '—'}</div>
+        </div>
+        <div>
+          <div style={{ color: 'var(--metin-ikincil)', marginBottom: 2 }}>Vergi Dairesi</div>
+          <div>{cari.vergi_dairesi || '—'}</div>
+        </div>
+        <div>
+          <div style={{ color: 'var(--metin-ikincil)', marginBottom: 2 }}>Telefon</div>
+          <div>{cari.telefon || '—'}</div>
+        </div>
+        <div>
+          <div style={{ color: 'var(--metin-ikincil)', marginBottom: 2 }}>E-posta</div>
+          <div>{cari.email || '—'}</div>
+        </div>
+        <div style={{ gridColumn: '1 / -1' }}>
+          <div style={{ color: 'var(--metin-ikincil)', marginBottom: 2 }}>Adres</div>
+          <div>{cari.adres || '—'}</div>
+        </div>
+      </div>
+    </Kart>
+  );
+}
+
+function AlimMiniFormu({ cari, onTamamlandi, onVazgec }) {
+  const [stokKartlari, setStokKartlari] = useState([]);
+  const [form, setForm] = useState({
+    siparis_no: '', stok_karti_id: '', miktar: 1, birim_fiyat: '', para_birimi: 'TRY',
+    kaynak: 'YURTICI_ALIM', siparis_tarihi: new Date().toISOString().slice(0, 10),
+  });
+  const [hata, setHata] = useState(null);
+  const [kaydediliyor, setKaydediliyor] = useState(false);
+
+  useEffect(() => {
+    api.get('/stok-kartlari').then((r) => setStokKartlari(r.data)).catch(() => {});
+  }, []);
+
+  async function kaydet(e) {
+    e.preventDefault();
+    setHata(null);
+    setKaydediliyor(true);
+    try {
+      await api.post('/siparisler', {
+        siparis_no: form.siparis_no, tedarikci_cari_id: cari.id, kaynak: form.kaynak,
+        siparis_tarihi: form.siparis_tarihi, para_birimi: form.para_birimi,
+        urunler: [{
+          stok_karti_id: Number(form.stok_karti_id), miktar: Number(form.miktar),
+          birim_fiyat: Number(form.birim_fiyat), para_birimi: form.para_birimi,
+        }],
+      });
+      onTamamlandi();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setKaydediliyor(false);
+    }
+  }
+
+  return (
+    <div style={{ padding: 14, background: 'var(--zemin)', borderRadius: 8, marginTop: 10 }}>
+      <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 10 }}>Yeni Alım (Sipariş) — {cari.unvan}</div>
+      <HataMesaji>{hata}</HataMesaji>
+      <form onSubmit={kaydet} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        <Alan etiket="Sipariş no">
+          <input required value={form.siparis_no} onChange={(e) => setForm((f) => ({ ...f, siparis_no: e.target.value }))} placeholder="SIP-2026-001" style={girdiStili} />
+        </Alan>
+        <Alan etiket="Kaynak">
+          <select value={form.kaynak} onChange={(e) => setForm((f) => ({ ...f, kaynak: e.target.value }))} style={girdiStili}>
+            <option value="YURTICI_ALIM">Yurtiçi Alım</option>
+            <option value="ITHALAT">İthalat</option>
+          </select>
+        </Alan>
+        <Alan etiket="Ürün tanımı">
+          <select required value={form.stok_karti_id} onChange={(e) => setForm((f) => ({ ...f, stok_karti_id: e.target.value }))} style={girdiStili}>
+            <option value="">Seçin...</option>
+            {stokKartlari.map((k) => <option key={k.id} value={k.id}>{k.marka} {k.model}</option>)}
+          </select>
+        </Alan>
+        <Alan etiket="Miktar">
+          <input required type="number" min="1" value={form.miktar} onChange={(e) => setForm((f) => ({ ...f, miktar: e.target.value }))} style={girdiStili} />
+        </Alan>
+        <Alan etiket="Birim fiyat">
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input required type="number" step="0.01" value={form.birim_fiyat} onChange={(e) => setForm((f) => ({ ...f, birim_fiyat: e.target.value }))} style={{ ...girdiStili, flex: 1 }} />
+            <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={{ ...girdiStili, width: 80 }}>
+              <option value="TRY">TL</option>
+              <option value="USD">USD</option>
+              <option value="EUR">EUR</option>
+            </select>
+          </div>
+        </Alan>
+        <Alan etiket="Sipariş tarihi">
+          <input required type="date" value={form.siparis_tarihi} onChange={(e) => setForm((f) => ({ ...f, siparis_tarihi: e.target.value }))} style={girdiStili} />
+        </Alan>
+        <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 8 }}>
+          <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Kaydediliyor...' : 'Siparişi Oluştur'}</Buton>
+          <Buton type="button" variant="ikincil" onClick={onVazgec}>Vazgeç</Buton>
+        </div>
+      </form>
+      <div style={{ fontSize: 11.5, color: 'var(--metin-ikincil)', marginTop: 8 }}>
+        Not: Çok kalemli/karmaşık siparişler için Siparişler sayfasını kullanın. Teslim alma ve ödeme takibi de oradan yapılır.
+      </div>
+    </div>
+  );
+}
+
 function CariOzetKarti({ cari, onKapat }) {
   const [ozet, setOzet] = useState(null);
   const [hata, setHata] = useState(null);
@@ -795,11 +913,13 @@ function CariHareketleri({ cari, onKapat }) {
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+        <button onClick={() => setYeniHareketTipi((t) => (t === 'ALIM' ? null : 'ALIM'))} style={eylemChipStili(yeniHareketTipi === 'ALIM' ? 'lacivert' : 'notr')}>+ Alım</button>
         <button onClick={() => setYeniHareketTipi((t) => (t === 'SATIS' ? null : 'SATIS'))} style={eylemChipStili(yeniHareketTipi === 'SATIS' ? 'lacivert' : 'notr')}>+ Satış</button>
         <button onClick={() => setYeniHareketTipi((t) => (t === 'KIRALAMA' ? null : 'KIRALAMA'))} style={eylemChipStili(yeniHareketTipi === 'KIRALAMA' ? 'lacivert' : 'notr')}>+ Kiralama</button>
         <button onClick={() => setYeniHareketTipi((t) => (t === 'BAKIM' ? null : 'BAKIM'))} style={eylemChipStili(yeniHareketTipi === 'BAKIM' ? 'lacivert' : 'notr')}>+ Bakım</button>
       </div>
 
+      {yeniHareketTipi === 'ALIM' && <AlimMiniFormu cari={cari} onTamamlandi={tamamlandi} onVazgec={() => setYeniHareketTipi(null)} />}
       {yeniHareketTipi === 'SATIS' && <SatisMiniFormu cari={cari} onTamamlandi={tamamlandi} onVazgec={() => setYeniHareketTipi(null)} />}
       {yeniHareketTipi === 'KIRALAMA' && <KiralamaMiniFormu cari={cari} onTamamlandi={tamamlandi} onVazgec={() => setYeniHareketTipi(null)} />}
       {yeniHareketTipi === 'BAKIM' && <BakimMiniFormu cari={cari} onTamamlandi={tamamlandi} onVazgec={() => setYeniHareketTipi(null)} />}
@@ -925,6 +1045,7 @@ export default function CarilerSayfasi() {
 
       {seciliCari && (
         <>
+          <CariBilgileriKarti cari={seciliCari} />
           <CariOzetKarti cari={seciliCari} />
           <CariHareketleri cari={seciliCari} onKapat={() => setSeciliCari(null)} />
         </>
