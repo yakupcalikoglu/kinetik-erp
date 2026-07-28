@@ -14,6 +14,7 @@ from app.core.security import sifre_dogrula
 from app.services.para_hareketi import para_hareketi_olustur
 from app.schemas.demirbas import (
     DemirbasOlusturIstegi, DemirbasDuzenleIstegi, DemirbasSatisIstegi, DemirbasYanit,
+    DemirbasTopluIceAktarIstegi, DemirbasTopluIceAktarSonucu,
 )
 
 router = APIRouter(prefix="/demirbaslar", tags=["Demirbaş"])
@@ -66,6 +67,47 @@ def demirbas_olustur(
     db.refresh(yeni)
     _cari_unvan_ekle(db, [yeni])
     return yeni
+
+
+@router.post("/toplu-ice-aktar", response_model=DemirbasTopluIceAktarSonucu,
+             dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
+def demirbas_toplu_ice_aktar(
+    istek: DemirbasTopluIceAktarIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
+):
+    """
+    Excel'den toplu demirbas ekler. Her satir AYRI AYRI commit edilir -
+    bir satirda hata olsa bile digerleri etkilenmez, hatali olanlar
+    'hatali_satirlar' listesinde geri bildirilir. maliyet_try TL cinsinden
+    dogrudan kabul edilir (dovizli girisler icin normal "Yeni Demirbas"
+    formu kullanilmalidir).
+    """
+    basarili = 0
+    hatalar = []
+    gecerli_kategoriler = {"ARAC", "GAYRIMENKUL", "OFIS_EKIPMANI", "DIGER"}
+
+    for i, satir in enumerate(istek.satirlar, start=1):
+        try:
+            if not satir.ad or not satir.ad.strip():
+                raise ValueError("Ad boş olamaz.")
+            kategori = (satir.kategori or "DIGER").strip().upper()
+            if kategori not in gecerli_kategoriler:
+                kategori = "DIGER"
+            yeni = Demirbas(
+                sirket_id=sirket_id, kategori=kategori, ad=satir.ad.strip(),
+                tanimlayici_no=satir.tanimlayici_no, konum=satir.konum,
+                durum="KULLANIMDA", maliyet_try=satir.maliyet_try or 0,
+                maliyet_orijinal=satir.maliyet_try or 0, para_birimi="TRY",
+                alim_tarihi=satir.alim_tarihi,
+            )
+            db.add(yeni)
+            db.commit()
+            basarili += 1
+        except Exception as e:
+            db.rollback()
+            hatalar.append({"satir_no": i, "ad": satir.ad, "hata": str(e)})
+
+    return DemirbasTopluIceAktarSonucu(basarili_sayisi=basarili, hatali_satirlar=hatalar)
 
 
 @router.get("", response_model=list[DemirbasYanit],
