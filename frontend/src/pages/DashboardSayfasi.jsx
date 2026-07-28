@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Wallet2, Landmark, Boxes, KeyRound, CalendarClock, Briefcase } from 'lucide-react';
+import { Wallet2, Landmark, Boxes, KeyRound, CalendarClock, Briefcase, Wrench } from 'lucide-react';
 import { api, hataMesajiCikar } from '../api/client';
 import { Kart, SayfaBasligi, HataMesaji, BosDurum, paraFormat, Etiket } from '../components/Ortak';
 
@@ -228,6 +228,46 @@ function StokKutusu({ navigate }) {
   );
 }
 
+// -------------------------------------------------------------- Yedek Parça (min stok altı)
+function YedekParcaKutusu({ navigate }) {
+  const [parcalar, setParcalar] = useState(null);
+  const [hata, setHata] = useState(null);
+
+  useEffect(() => {
+    api.get('/yedek-parcalar').then((r) => setParcalar(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
+  }, []);
+
+  const minAltindakiler = parcalar
+    ? parcalar.filter((p) => p.min_stok_seviyesi && Number(p.mevcut_miktar) < Number(p.min_stok_seviyesi))
+    : [];
+
+  return (
+    <TiklanabilirKart baslik="Yedek Parça / Sarf" Simge={Wrench} onClick={() => navigate('/yedek-parcalar')} vurgu={minAltindakiler.length > 0}>
+      {hata ? <HataMesaji>{hata}</HataMesaji> : !parcalar ? (
+        <div style={{ color: 'var(--metin-soluk)', fontSize: 13 }}>Yükleniyor...</div>
+      ) : minAltindakiler.length === 0 ? (
+        <div style={{ fontSize: 13, color: 'var(--yesil)' }}>✓ Tüm parçalar minimum stok seviyesinin üzerinde</div>
+      ) : (
+        <>
+          <div style={{ fontSize: 13, color: 'var(--kirmizi)', fontWeight: 600, marginBottom: 6 }}>
+            ⚠ {minAltindakiler.length} parça minimum stok seviyesinin altında
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {minAltindakiler.slice(0, 4).map((p) => (
+              <div key={p.id} style={{ fontSize: 12, color: 'var(--metin-ikincil)' }}>
+                {p.ad}: {p.mevcut_miktar} / min {p.min_stok_seviyesi} {p.birim}
+              </div>
+            ))}
+            {minAltindakiler.length > 4 && (
+              <div style={{ fontSize: 11.5, color: 'var(--metin-soluk)' }}>+ {minAltindakiler.length - 4} tane daha</div>
+            )}
+          </div>
+        </>
+      )}
+    </TiklanabilirKart>
+  );
+}
+
 // -------------------------------------------------------------- Kiralık Ürünler
 function KiralikUrunlerKutusu({ navigate }) {
   const [liste, setListe] = useState(null);
@@ -320,6 +360,7 @@ export default function DashboardSayfasi() {
         <AnaKasaKutusu navigate={navigate} />
         <BankalarKutusu navigate={navigate} />
         <StokKutusu navigate={navigate} />
+        <YedekParcaKutusu navigate={navigate} />
         <KiralikUrunlerKutusu navigate={navigate} />
         <OdemeAlacakKutusu navigate={navigate} />
       </div>
