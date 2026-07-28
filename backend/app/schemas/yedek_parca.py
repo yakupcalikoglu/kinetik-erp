@@ -34,6 +34,24 @@ class YedekParcaYanit(BaseModel):
         from_attributes = True
 
 
+class YedekParcaTopluIceAktarSatiri(BaseModel):
+    ad: str | None = None
+    birim: str = "ADET"
+    baslangic_miktari: Decimal = Decimal("0")
+    birim_fiyat_try: Decimal = Decimal("0")
+    min_stok_seviyesi: Decimal = Decimal("0")
+    notlar: str | None = None
+
+
+class YedekParcaTopluIceAktarIstegi(BaseModel):
+    satirlar: list[YedekParcaTopluIceAktarSatiri]
+
+
+class YedekParcaTopluIceAktarSonucu(BaseModel):
+    basarili_sayisi: int
+    hatali_satirlar: list[dict]
+
+
 class YedekParcaHareketOlusturIstegi(BaseModel):
     tarih: date
     yon: YedekParcaHareketYon
