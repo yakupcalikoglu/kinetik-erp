@@ -15,6 +15,7 @@ from app.schemas.cari import (
     VergiNoSorguIstegi, VergiNoSorguYaniti, CariOlusturIstegi,
     CariGuncelleIstegi, CariYanit, CariHareketYanit, CariBakiyeYanit,
     CariTopluIceAktarIstegi, CariTopluIceAktarSonucu, CariOzetYaniti, CariOzetKalemi,
+    CariHareketSatiri,
 )
 from app.services import uyumsoft_mock
 
@@ -521,3 +522,95 @@ async def cari_ozet(
         toplam_alacak_try=toplam_alacak, toplam_borc_try=toplam_borc,
         net_try=toplam_alacak - toplam_borc,
     )
+
+
+@router.get("/{cari_id}/tum-hareketler", response_model=list[CariHareketSatiri],
+            dependencies=[Depends(izin_gerektir("CARI_GORUNTULE"))])
+def cari_tum_hareketler(
+    cari_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
+):
+    """
+    Bu carinin GERCEK GECMISINI (satis, kiralama, bakim, taksitli satis,
+    cek, siparis) TEK bir kronolojik listede toplar. Cari detay panelinde
+    "bu musteriyle simdiye kadar ne is yaptik" sorusuna cevap verir.
+    """
+    from app.models.stok import StokSeriNo, StokKarti, Siparis
+    from app.models.finansal import TaksitliSatisPlani, KiralamaSozlesme, Cek, CekTip, BakimKaydi, BakimTip
+
+    satirlar: list[CariHareketSatiri] = []
+
+    # 1) Stok satislari (bu cari MUSTERI ise)
+    urunler = list(db.execute(
+        select(StokSeriNo).where(StokSeriNo.sirket_id == sirket_id, StokSeriNo.musteri_cari_id == cari_id, StokSeriNo.satis_tarihi.isnot(None))
+    ).scalars())
+    for u in urunler:
+        kart = db.get(StokKarti, u.stok_karti_id)
+        urun_adi = f"{kart.marka} {kart.model}" if kart else ""
+        satirlar.append(CariHareketSatiri(
+            tarih=u.satis_tarihi, tur="SATIS",
+            aciklama=f"Satış — {urun_adi} ({u.seri_no})",
+            tutar_try=u.satis_fiyati_try or 0, durum=u.durum,
+            kaynak_tablo="STOK_SATIS", kaynak_id=u.id,
+        ))
+
+    # 2) Kiralama sozlesmeleri (bu cari KIRACI ise)
+    sozlesmeler = list(db.execute(
+        select(KiralamaSozlesme).where(KiralamaSozlesme.sirket_id == sirket_id, KiralamaSozlesme.kiraci_cari_id == cari_id)
+    ).scalars())
+    for s in sozlesmeler:
+        satirlar.append(CariHareketSatiri(
+            tarih=s.baslangic_tarihi, tur="KIRALAMA",
+            aciklama=f"Kiralama sözleşmesi — aylık {s.aylik_kira_tutari} {s.para_birimi if isinstance(s.para_birimi, str) else s.para_birimi.value}",
+            tutar_try=s.aylik_kira_tutari if (s.para_birimi == 'TRY' or (hasattr(s.para_birimi, 'value') and s.para_birimi.value == 'TRY')) else 0,
+            durum=s.durum, kaynak_tablo="KIRALAMA_SOZLESME", kaynak_id=s.id,
+        ))
+
+    # 3) Bakim kayitlari
+    bakimlar = list(db.execute(
+        select(BakimKaydi).where(BakimKaydi.sirket_id == sirket_id, BakimKaydi.ilgili_cari_id == cari_id)
+    ).scalars())
+    for b in bakimlar:
+        urun = db.get(StokSeriNo, b.stok_seri_no_id)
+        kart = db.get(StokKarti, urun.stok_karti_id) if urun else None
+        urun_bilgisi = f"{kart.marka} {kart.model} ({urun.seri_no})" if kart and urun else (urun.seri_no if urun else "")
+        satirlar.append(CariHareketSatiri(
+            tarih=b.tarih, tur="BAKIM",
+            aciklama=f"Bakım ({'Gelir' if b.tip == BakimTip.GELIR else 'Gider'}) — {urun_bilgisi}" + (f" — {b.aciklama}" if b.aciklama else ""),
+            tutar_try=b.tutar, kaynak_tablo="BAKIM_KAYDI", kaynak_id=b.id,
+        ))
+
+    # 4) Taksitli satis planlari
+    planlar = list(db.execute(
+        select(TaksitliSatisPlani).where(TaksitliSatisPlani.sirket_id == sirket_id, TaksitliSatisPlani.musteri_cari_id == cari_id)
+    ).scalars())
+    for p in planlar:
+        satirlar.append(CariHareketSatiri(
+            tarih=p.baslangic_tarihi, tur="TAKSITLI_SATIS",
+            aciklama=f"Taksitli satış planı — {p.taksit_sayisi} taksit",
+            tutar_try=0, kaynak_tablo="TAKSITLI_SATIS_PLANI", kaynak_id=p.id,
+        ))
+
+    # 5) Cekler
+    cekler = list(db.execute(select(Cek).where(Cek.sirket_id == sirket_id, Cek.cari_id == cari_id)).scalars())
+    for c in cekler:
+        pb = c.para_birimi.value if hasattr(c.para_birimi, "value") else c.para_birimi
+        satirlar.append(CariHareketSatiri(
+            tarih=c.alinma_verilme_tarihi, tur="CEK",
+            aciklama=f"Çek {c.cek_no or ('#' + str(c.id))} ({'Alınan' if c.tip == CekTip.ALINAN else 'Verilen'})",
+            tutar_try=c.tutar if pb == "TRY" else 0, durum=c.durum.value if hasattr(c.durum, "value") else c.durum,
+            kaynak_tablo="CEKLER", kaynak_id=c.id,
+        ))
+
+    # 6) Siparisler (bu cari TEDARIKCI ise)
+    siparisler = list(db.execute(
+        select(Siparis).where(Siparis.sirket_id == sirket_id, Siparis.tedarikci_cari_id == cari_id)
+    ).scalars())
+    for s in siparisler:
+        satirlar.append(CariHareketSatiri(
+            tarih=s.siparis_tarihi, tur="SIPARIS",
+            aciklama=f"Sipariş {s.siparis_no}",
+            tutar_try=0, durum=s.durum, kaynak_tablo="SIPARIS", kaynak_id=s.id,
+        ))
+
+    satirlar.sort(key=lambda s: s.tarih or date.min, reverse=True)
+    return satirlar
