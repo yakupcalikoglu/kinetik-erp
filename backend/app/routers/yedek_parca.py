@@ -14,6 +14,7 @@ from app.schemas.yedek_parca import (
     YedekParcaOlusturIstegi, YedekParcaDuzenleIstegi, YedekParcaYanit,
     YedekParcaHareketOlusturIstegi, YedekParcaHareketYanit,
 )
+from app.services.para_hareketi import para_hareketi_olustur
 
 router = APIRouter(prefix="/yedek-parcalar", tags=["Yedek Parça / Sarf Malzeme"])
 
@@ -108,13 +109,25 @@ def yedek_parca_sil(
              dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
 def yedek_parca_hareketi_ekle(
     parca_id: int, istek: YedekParcaHareketOlusturIstegi,
-    sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    kullanici: Kullanici = Depends(aktif_kullanici_getir),
+    db: Session = Depends(get_db),
 ):
     """
     Bir yedek parcaya giris (satinalma) ya da cikis (kullanim/satis) hareketi
-    ekler ve mevcut_miktar'i buna gore gunceller. GIRIS hareketinde
-    birim_fiyat_try verilirse, parcanin guncel referans fiyati da bu deger
-    ile guncellenir (en son alis fiyatini yansitir).
+    ekler ve mevcut_miktar'i buna gore gunceller.
+
+    - GIRIS: birim_fiyat_orijinal ALIS fiyatidir. Parcanin guncel referans
+      fiyati (birim_fiyat_try) bu alisla guncellenir.
+    - CIKIS + birim_fiyat_orijinal DOLU: bu bir SATIS'tir. O anki referans
+      maliyet (kayit.birim_fiyat_try) ile satis fiyati karsilastirilarak
+      kar/zarar hesaplanip kalici olarak saklanir (maliyet_birim_fiyat_try).
+    - CIKIS + birim_fiyat_orijinal BOS: sadece kullanim/sarf - mali etkisi
+      yoktur, sadece stok duser.
+
+    odeme_yontemi doldurulursa (NAKIT/BANKA), Kasa/Banka'ya GERCEK bir
+    hareket yansitilir: GIRIS(alis) -> para CIKISI, CIKIS+satis -> para
+    GIRISI.
     """
     kayit = _parca_getir_veya_404(db, parca_id, sirket_id)
     if istek.yon == YedekParcaHareketYon.CIKIS and istek.miktar > kayit.mevcut_miktar:
@@ -122,15 +135,22 @@ def yedek_parca_hareketi_ekle(
             status.HTTP_400_BAD_REQUEST,
             f"Yetersiz stok. Mevcut: {kayit.mevcut_miktar} {kayit.birim}"
         )
+    if istek.odeme_yontemi and istek.odeme_yontemi not in ("NAKIT", "BANKA"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "odeme_yontemi 'NAKIT' veya 'BANKA' olmalıdır.")
 
     birim_fiyat_try = (istek.birim_fiyat_orijinal * istek.kur) if istek.birim_fiyat_orijinal is not None else None
+    satis_mi = istek.yon == YedekParcaHareketYon.CIKIS and istek.birim_fiyat_orijinal is not None
+    maliyet_birim_fiyat_try = kayit.birim_fiyat_try if satis_mi else None
 
     yeni = YedekParcaHareketi(
         yedek_parca_id=parca_id, tarih=istek.tarih, yon=istek.yon, miktar=istek.miktar,
         birim_fiyat_orijinal=istek.birim_fiyat_orijinal, para_birimi=istek.para_birimi, kur=istek.kur,
-        birim_fiyat_try=birim_fiyat_try, ilgili_cari_id=istek.ilgili_cari_id, aciklama=istek.aciklama,
+        birim_fiyat_try=birim_fiyat_try, maliyet_birim_fiyat_try=maliyet_birim_fiyat_try,
+        odeme_yontemi=istek.odeme_yontemi, banka_hesap_id=istek.banka_hesap_id,
+        ilgili_cari_id=istek.ilgili_cari_id, aciklama=istek.aciklama,
     )
     db.add(yeni)
+    db.flush()
 
     if istek.yon == YedekParcaHareketYon.GIRIS:
         kayit.mevcut_miktar = kayit.mevcut_miktar + istek.miktar
@@ -139,9 +159,23 @@ def yedek_parca_hareketi_ekle(
     else:
         kayit.mevcut_miktar = kayit.mevcut_miktar - istek.miktar
 
+    if istek.odeme_yontemi and istek.birim_fiyat_orijinal is not None:
+        tutar_toplam_orijinal = istek.miktar * istek.birim_fiyat_orijinal
+        yon_kasa = "CIKIS" if istek.yon == YedekParcaHareketYon.GIRIS else "GIRIS"
+        eylem_metni = "alımı" if istek.yon == YedekParcaHareketYon.GIRIS else "satışı"
+        para_hareketi_olustur(
+            db, sirket_id, kullanici.id, yon_kasa, tutar_toplam_orijinal,
+            istek.odeme_yontemi, istek.banka_hesap_id,
+            aciklama=f"Yedek parça {eylem_metni} - {kayit.ad} ({istek.miktar} {kayit.birim})" + (f" - {istek.aciklama}" if istek.aciklama else ""),
+            kaynak_tablo="YEDEK_PARCA_HAREKET", kaynak_id=yeni.id,
+            cari_id=istek.ilgili_cari_id, para_birimi=istek.para_birimi, kur=istek.kur,
+        )
+
     db.commit()
     db.refresh(yeni)
 
+    if yeni.maliyet_birim_fiyat_try is not None and yeni.birim_fiyat_try is not None:
+        yeni.kar_try = (yeni.birim_fiyat_try - yeni.maliyet_birim_fiyat_try) * yeni.miktar
     if yeni.ilgili_cari_id:
         cari = db.get(CariHesap, yeni.ilgili_cari_id)
         yeni.ilgili_cari_unvan = cari.unvan if cari else None
@@ -169,6 +203,8 @@ def yedek_parca_hareketlerini_listele(
         }
     for s in sonuclar:
         s.ilgili_cari_unvan = cari_haritasi.get(s.ilgili_cari_id)
+        if s.maliyet_birim_fiyat_try is not None and s.birim_fiyat_try is not None:
+            s.kar_try = (s.birim_fiyat_try - s.maliyet_birim_fiyat_try) * s.miktar
     return sonuclar
 
 
