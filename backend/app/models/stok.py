@@ -73,6 +73,11 @@ class StokKarti(Base):
     birim_agirlik_kg = Column(Numeric(10, 2))
     mense_ulke = Column(String(100))
     gtip_kodu = Column(String(20))
+    # Bu urun modeli icin standart bir alt yazi/not sablonu (orn. garanti
+    # sartlari, teslimat kosullari). Proforma/Fatura olustururken bu
+    # modelden kalem eklenince, bu metin otomatik olarak Notlar alanina
+    # onerilir - kullanici isterse duzenler/cikartir.
+    standart_alt_metin = Column(Text)
     olusturma_tarihi = Column(DateTime, server_default=func.now())
 
 
