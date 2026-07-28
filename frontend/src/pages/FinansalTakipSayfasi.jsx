@@ -2473,6 +2473,105 @@ function bosKiralamaFormu() {
   };
 }
 
+function KiralamaSonlandirmaFormu({ sozlesme, onKaydedildi, onVazgec }) {
+  const [form, setForm] = useState({
+    son_donem_tutari: '0', donem_basi: sozlesme.baslangic_tarihi || new Date().toISOString().slice(0, 10),
+    donem_sonu: new Date().toISOString().slice(0, 10), odeme_yontemi: 'NAKIT', banka_hesap_id: '', aciklama: '',
+  });
+  const [bankaHesaplari, setBankaHesaplari] = useState([]);
+  const [hata, setHata] = useState(null);
+  const [kaydediliyor, setKaydediliyor] = useState(false);
+
+  useEffect(() => {
+    api.get('/banka-bakiyeleri').then((r) => setBankaHesaplari(r.data)).catch(() => {});
+  }, []);
+
+  async function kaydet(e) {
+    e.preventDefault();
+    setHata(null);
+    setKaydediliyor(true);
+    try {
+      const tutar = Number(form.son_donem_tutari || 0);
+      await api.put(`/kiralama-sozlesmeleri/${sozlesme.id}/sonlandir`, {
+        son_donem_tutari: tutar,
+        donem_basi: form.donem_basi,
+        donem_sonu: form.donem_sonu,
+        odeme_yontemi: tutar > 0 ? form.odeme_yontemi : null,
+        banka_hesap_id: tutar > 0 && form.odeme_yontemi === 'BANKA' ? Number(form.banka_hesap_id) : null,
+        aciklama: form.aciklama || null,
+      });
+      onKaydedildi();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setKaydediliyor(false);
+    }
+  }
+
+  return (
+    <tr>
+      <td colSpan={8} style={{ padding: 0 }}>
+        <div style={{ padding: 16, background: 'var(--kirmizi-acik, #fde2e2)' }}>
+          <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 10 }}>
+            {sozlesme.sozlesme_no || `#${sozlesme.id}`} — Sözleşmeyi Sonlandır
+          </div>
+          <div style={{ fontSize: 12.5, color: 'var(--metin-ikincil)', marginBottom: 10 }}>
+            Ay tamamlanmadan sonlandırıyorsan, geçen günlere karşılık gelen orantılı kira bedelini burada gir —
+            hem tahsilat kaydedilir hem sözleşme kapanır. Hiç ek tahsilat yoksa tutarı 0 bırakabilirsin.
+          </div>
+          <HataMesaji>{hata}</HataMesaji>
+          <form onSubmit={kaydet} style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <div style={{ minWidth: 140 }}>
+              <Alan etiket="Dönem başı">
+                <input type="date" value={form.donem_basi} onChange={(e) => setForm((f) => ({ ...f, donem_basi: e.target.value }))} style={girdiStili} />
+              </Alan>
+            </div>
+            <div style={{ minWidth: 140 }}>
+              <Alan etiket="Dönem sonu (sonlandırma tarihi)">
+                <input type="date" value={form.donem_sonu} onChange={(e) => setForm((f) => ({ ...f, donem_sonu: e.target.value }))} style={girdiStili} />
+              </Alan>
+            </div>
+            <div style={{ minWidth: 160 }}>
+              <Alan etiket={`Son dönem tahsilatı (${sozlesme.para_birimi}, 0 olabilir)`}>
+                <input type="number" step="0.01" value={form.son_donem_tutari} onChange={(e) => setForm((f) => ({ ...f, son_donem_tutari: e.target.value }))} style={girdiStili} />
+              </Alan>
+            </div>
+            {Number(form.son_donem_tutari) > 0 && (
+              <>
+                <div style={{ minWidth: 140 }}>
+                  <Alan etiket="Ödeme yöntemi">
+                    <select value={form.odeme_yontemi} onChange={(e) => setForm((f) => ({ ...f, odeme_yontemi: e.target.value }))} style={girdiStili}>
+                      <option value="NAKIT">Nakit (Ana Kasa)</option>
+                      <option value="BANKA">Banka</option>
+                    </select>
+                  </Alan>
+                </div>
+                {form.odeme_yontemi === 'BANKA' && (
+                  <div style={{ minWidth: 200 }}>
+                    <Alan etiket="Banka hesabı">
+                      <select required value={form.banka_hesap_id} onChange={(e) => setForm((f) => ({ ...f, banka_hesap_id: e.target.value }))} style={girdiStili}>
+                        <option value="">Seçin...</option>
+                        {bankaHesaplari.map((h) => <option key={h.banka_hesap_id} value={h.banka_hesap_id}>{h.banka_adi} — {h.hesap_adi || h.para_birimi}</option>)}
+                      </select>
+                    </Alan>
+                  </div>
+                )}
+              </>
+            )}
+            <div style={{ minWidth: 180 }}>
+              <Alan etiket="Not (opsiyonel)">
+                <input value={form.aciklama} onChange={(e) => setForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
+              </Alan>
+            </div>
+            <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'İşleniyor...' : 'Sonlandırmayı Onayla'}</Buton>
+            <Buton type="button" variant="ikincil" onClick={onVazgec}>Vazgeç</Buton>
+          </form>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 function KiralamaSekmesi() {
   const kurlar = useKurlar();
   const siralama = useSiralama();
@@ -2487,6 +2586,7 @@ function KiralamaSekmesi() {
   const urunTanimlari = useUrunTanimlari();
   const tumUrunSecenekleri = useUrunSecenekleri();
   const [seciliSozlesme, setSeciliSozlesme] = useState(null);
+  const [sonlandirmaAcikId, setSonlandirmaAcikId] = useState(null);
   const [odemeler, setOdemeler] = useState(null);
   const [odemeForm, setOdemeForm] = useState({ donem_basi: '', donem_sonu: '', tutar: '' });
   const [odemeAcikId, setOdemeAcikId] = useState(null);
@@ -2578,14 +2678,6 @@ function KiralamaSekmesi() {
       const { data } = await api.get(`/kiralama-sozlesmeleri/${sozlesmeId}/odemeler`);
       setSeciliSozlesme(sozlesmeId);
       setOdemeler(data);
-    } catch (err) { setHata(hataMesajiCikar(err)); }
-  }
-
-  async function sozlesmeyiSonlandir(sozlesmeId) {
-    if (!window.confirm('Bu sözleşmeyi sonlandırmak istediğinize emin misiniz? Ürün(ler) otomatik olarak "Depoda" durumuna dönecek.')) return;
-    try {
-      await api.put(`/kiralama-sozlesmeleri/${sozlesmeId}/sonlandir`);
-      yukle();
     } catch (err) { setHata(hataMesajiCikar(err)); }
   }
 
@@ -2747,6 +2839,7 @@ function KiralamaSekmesi() {
           <thead>
             <tr style={{ background: 'var(--zemin)' }}>
               <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>Ürünler</th>
+              <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>Sahiplik</th>
               <SiraliBaslik alanAdi="kiraci_unvan" siralama={siralama}>Kiracı</SiraliBaslik>
               <SiraliBaslik alanAdi="aylik_kira_tutari" siralama={siralama}>Aylık Kira</SiraliBaslik>
               <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>TL Karşılığı</th>
@@ -2758,12 +2851,18 @@ function KiralamaSekmesi() {
             {siralama.sirala(
               filtreCariId ? liste.filter((k) => String(k.kiraci_cari_id) === String(filtreCariId)) : liste,
               (item, alan) => (alan === 'kiraci_unvan' ? (item.kiraci_unvan || cariGoster(item.kiraci_cari_id, cariHaritasi)) : item[alan])
-            ).map((k) => (
-              <tr key={k.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+            ).map((k) => {
+              const ozMalVar = (k.kalemler || []).some((kl) => kl.oz_mal_mi);
+              return (
+              <Fragment key={k.id}>
+              <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
                 <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>
                   {(k.kalemler || []).map((kl) => (
                     `${kl.miktar}x ${kl.urun_adi || '#' + kl.stok_karti_id}${(kl.seri_numaralari || []).length > 0 ? ` (${kl.seri_numaralari.join(', ')})` : ''}`
                   )).join(' · ') || '—'}
+                </td>
+                <td style={{ padding: '10px 16px' }}>
+                  <Etiket ton={ozMalVar ? 'amber' : 'notr'}>{ozMalVar ? 'Öz Mal' : 'Ticari'}</Etiket>
                 </td>
                 <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{k.kiraci_unvan || cariGoster(k.kiraci_cari_id, cariHaritasi)}</td>
                 <td style={{ padding: '10px 16px' }}>{paraFormat(k.aylik_kira_tutari, k.para_birimi)}</td>
@@ -2783,7 +2882,12 @@ function KiralamaSekmesi() {
                       <>
                         <button onClick={() => duzenlemeyeBasla(k)} style={eylemChipStili('lacivert')}>Düzenle</button>
                         <button onClick={() => odemeleriGoster(k.id)} style={eylemChipStili('lacivert')}>Ödemeler</button>
-                        <button onClick={() => sozlesmeyiSonlandir(k.id)} style={eylemChipStili('kirmizi')}>Sonlandır</button>
+                        <button
+                          onClick={() => setSonlandirmaAcikId((mevcut) => (mevcut === k.id ? null : k.id))}
+                          style={eylemChipStili('kirmizi')}
+                        >
+                          {sonlandirmaAcikId === k.id ? 'Kapat' : 'Sonlandır'}
+                        </button>
                       </>
                     )}
                     {k.durum !== 'AKTIF' && (
@@ -2792,7 +2896,16 @@ function KiralamaSekmesi() {
                   </div>
                 </td>
               </tr>
-            ))}
+              {sonlandirmaAcikId === k.id && (
+                <KiralamaSonlandirmaFormu
+                  sozlesme={k}
+                  onKaydedildi={() => { setSonlandirmaAcikId(null); yukle(); }}
+                  onVazgec={() => setSonlandirmaAcikId(null)}
+                />
+              )}
+              </Fragment>
+              );
+            })}
           </tbody>
         </table>
       </Kart>
