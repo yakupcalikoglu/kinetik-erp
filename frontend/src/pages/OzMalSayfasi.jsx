@@ -353,6 +353,16 @@ export default function OzMalSayfasi() {
     setDuzenlenen(kayit.ham);
     setFormAcik(true);
   }
+  async function satisiGeriAl(kayit) {
+    if (!window.confirm(`${kayit.ad} için satışı geri almak istediğinize emin misiniz? Kasaya/Bankaya işlenen tutar silinecek.`)) return;
+    try {
+      await api.put(`/demirbaslar/${kayit.id}/satisi-geri-al`);
+      yukle();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    }
+  }
+
   async function sil(kayit) {
     if (kayit.kaynak === 'EKIPMAN') {
       window.alert("Bu bir ekipman kaydı (Stok modülünden geliyor) — silmek için Stok sayfasını kullanın.");
@@ -454,7 +464,11 @@ export default function OzMalSayfasi() {
                         {k.kaynak === 'DEMIRBAS' && k.durum !== 'SATILDI' && k.durum !== 'HURDA' && (
                           <button onClick={() => setSatisAcikId(k.id)} style={eylemChipStili('yesil')}>Sat</button>
                         )}
-                        <button onClick={() => sil(k)} style={eylemChipStili('kirmizi')}>Sil</button>
+                        {k.kaynak === 'DEMIRBAS' && k.durum === 'SATILDI' ? (
+                          <button onClick={() => satisiGeriAl(k)} style={eylemChipStili('kirmizi')}>Satışı Geri Al</button>
+                        ) : (
+                          <button onClick={() => sil(k)} style={eylemChipStili('kirmizi')}>Sil</button>
+                        )}
                       </div>
                     </td>
                   </tr>
