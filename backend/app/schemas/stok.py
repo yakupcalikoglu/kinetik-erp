@@ -14,6 +14,7 @@ class StokKartiOlusturIstegi(BaseModel):
     birim_agirlik_kg: Decimal | None = None
     mense_ulke: str | None = None
     gtip_kodu: str | None = None
+    standart_alt_metin: str | None = None
 
 
 class StokKartiYanit(BaseModel):
@@ -25,6 +26,7 @@ class StokKartiYanit(BaseModel):
     birim_agirlik_kg: Decimal | None
     mense_ulke: str | None
     gtip_kodu: str | None
+    standart_alt_metin: str | None = None
 
     class Config:
         from_attributes = True
