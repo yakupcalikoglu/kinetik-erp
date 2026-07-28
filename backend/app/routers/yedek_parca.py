@@ -212,7 +212,14 @@ def yedek_parca_hareketlerini_listele(
 def yedek_parca_hareketi_sil(
     hareket_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
 ):
-    """Yanlislikla girilmis bir hareketi siler ve mevcut_miktar'i geri alir."""
+    """
+    Yanlislikla girilmis bir hareketi siler, mevcut_miktar'i geri alir VE
+    (eger bu harekete bagli bir odeme/tahsilat yapildiysa) ilgili
+    Kasa/Banka hareketini de siler - aksi halde para hareketi asili
+    kalir (stok geri alinir ama kasa/banka yanlis kalir).
+    """
+    from app.models.banka import KasaHareketi, BankaHareketi
+
     hareket = db.get(YedekParcaHareketi, hareket_id)
     if hareket is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Hareket bulunamadı.")
@@ -224,6 +231,16 @@ def yedek_parca_hareketi_sil(
         kayit.mevcut_miktar = kayit.mevcut_miktar - hareket.miktar
     else:
         kayit.mevcut_miktar = kayit.mevcut_miktar + hareket.miktar
+
+    if hareket.odeme_yontemi:
+        for kh in db.execute(
+            select(KasaHareketi).where(KasaHareketi.kaynak_tablo == "YEDEK_PARCA_HAREKET", KasaHareketi.kaynak_id == hareket.id)
+        ).scalars():
+            db.delete(kh)
+        for bh in db.execute(
+            select(BankaHareketi).where(BankaHareketi.kaynak_tablo == "YEDEK_PARCA_HAREKET", BankaHareketi.kaynak_id == hareket.id)
+        ).scalars():
+            db.delete(bh)
 
     db.delete(hareket)
     db.commit()
