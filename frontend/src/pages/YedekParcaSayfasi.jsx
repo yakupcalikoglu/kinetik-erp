@@ -120,7 +120,7 @@ function HareketlerPaneli({ parca, cariler, onKapat, onDegisti }) {
   }
 
   async function sil(id) {
-    if (!window.confirm('Bu hareketi silmek istediğinize emin misiniz? Stok miktarı geri alınacak.')) return;
+    if (!window.confirm('Bu hareketi silmek istediğinize emin misiniz? Stok miktarı ve varsa ilişkili Kasa/Banka hareketi geri alınacak.')) return;
     try {
       await api.delete(`/yedek-parcalar/hareketler/${id}`);
       yukle();
