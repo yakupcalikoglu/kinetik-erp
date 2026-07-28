@@ -2853,13 +2853,19 @@ function KiralamaSekmesi() {
               (item, alan) => (alan === 'kiraci_unvan' ? (item.kiraci_unvan || cariGoster(item.kiraci_cari_id, cariHaritasi)) : item[alan])
             ).map((k) => {
               const ozMalVar = (k.kalemler || []).some((kl) => kl.oz_mal_mi);
+              const suresiDolmus = k.durum === 'AKTIF' && k.bitis_tarihi && k.bitis_tarihi < new Date().toISOString().slice(0, 10);
               return (
               <Fragment key={k.id}>
-              <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
+              <tr style={{ borderTop: '1px solid var(--kenarlik)', background: suresiDolmus ? 'var(--kirmizi-acik, #fde2e2)' : 'transparent' }}>
                 <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>
                   {(k.kalemler || []).map((kl) => (
                     `${kl.miktar}x ${kl.urun_adi || '#' + kl.stok_karti_id}${(kl.seri_numaralari || []).length > 0 ? ` (${kl.seri_numaralari.join(', ')})` : ''}`
                   )).join(' · ') || '—'}
+                  {suresiDolmus && (
+                    <div style={{ fontSize: 11, color: 'var(--kirmizi)', fontWeight: 600, marginTop: 2 }}>
+                      ⚠ Sözleşme süresi {tarihFormat(k.bitis_tarihi)}'de doldu — sonlandırmayı unutma
+                    </div>
+                  )}
                 </td>
                 <td style={{ padding: '10px 16px' }}>
                   <Etiket ton={ozMalVar ? 'amber' : 'notr'}>{ozMalVar ? 'Öz Mal' : 'Ticari'}</Etiket>
