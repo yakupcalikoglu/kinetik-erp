@@ -58,4 +58,9 @@ class YedekParcaHareketi(Base):
     # Bos birakilirsa (orn. sarf/kullanim cikisi) hicbir mali hareket olusmaz.
     odeme_yontemi = Column(String(10))  # "NAKIT" | "BANKA" | None
     banka_hesap_id = Column(BigInteger, ForeignKey("banka_hesaplari.id"))
+    # Bu parcanin HANGI urune (forklift vb.) takildigini/kullanildigini
+    # izlemek icin - ozellikle bedelsiz (garanti kapsami) verme durumunda
+    # onemli: "hangi musterinin hangi seri nolu urunune garanti kapsaminda
+    # takildi" bilgisini kalici olarak saklar.
+    ilgili_stok_seri_no_id = Column(BigInteger, ForeignKey("stok_seri_no.id"))
     olusturma_tarihi = Column(DateTime, server_default=func.now())
