@@ -63,7 +63,7 @@ function bosDemirbasFormu() {
   return {
     kategori: 'ARAC', ad: '', tanimlayici_no: '', konum: '', durum: 'KULLANIMDA',
     kiraci_cari_id: '', maliyet_orijinal: '', para_birimi: 'TRY', kur: '1',
-    alim_tarihi: new Date().toISOString().slice(0, 10), notlar: '',
+    alim_tarihi: new Date().toISOString().slice(0, 10), amortisman_orani: '', notlar: '',
   };
 }
 
@@ -74,6 +74,7 @@ function DemirbasFormu({ duzenlenen, cariler, onKaydedildi, onVazgec }) {
         kategori: duzenlenen.kategori, ad: duzenlenen.ad, tanimlayici_no: duzenlenen.tanimlayici_no || '',
         konum: duzenlenen.konum || '', durum: duzenlenen.durum, kiraci_cari_id: duzenlenen.kiraci_cari_id || '',
         maliyet_try: String(duzenlenen.maliyet_try), alim_tarihi: duzenlenen.alim_tarihi || '',
+        amortisman_orani: duzenlenen.amortisman_orani != null ? String(duzenlenen.amortisman_orani) : '',
         notlar: duzenlenen.notlar || '', sifre: '',
       }
     : bosDemirbasFormu()
@@ -97,6 +98,7 @@ function DemirbasFormu({ duzenlenen, cariler, onKaydedildi, onVazgec }) {
           tanimlayici_no: form.tanimlayici_no || null, konum: form.konum || null,
           durum: form.durum, kiraci_cari_id: form.kiraci_cari_id ? Number(form.kiraci_cari_id) : null,
           maliyet_try: Number(form.maliyet_try), alim_tarihi: form.alim_tarihi || null,
+          amortisman_orani: form.amortisman_orani ? Number(form.amortisman_orani) : null,
           notlar: form.notlar || null,
         });
       } else {
@@ -105,7 +107,8 @@ function DemirbasFormu({ duzenlenen, cariler, onKaydedildi, onVazgec }) {
           tanimlayici_no: form.tanimlayici_no || null, konum: form.konum || null,
           durum: form.durum, kiraci_cari_id: form.kiraci_cari_id ? Number(form.kiraci_cari_id) : null,
           maliyet_orijinal: Number(form.maliyet_orijinal), para_birimi: form.para_birimi, kur: Number(form.kur || 1),
-          alim_tarihi: form.alim_tarihi || null, notlar: form.notlar || null,
+          alim_tarihi: form.alim_tarihi || null, amortisman_orani: form.amortisman_orani ? Number(form.amortisman_orani) : null,
+          notlar: form.notlar || null,
         });
       }
       onKaydedildi();
@@ -157,6 +160,9 @@ function DemirbasFormu({ duzenlenen, cariler, onKaydedildi, onVazgec }) {
           )}
           <Alan etiket="Alım tarihi">
             <input type="date" value={form.alim_tarihi} onChange={(e) => setForm((f) => ({ ...f, alim_tarihi: e.target.value }))} style={girdiStili} />
+          </Alan>
+          <Alan etiket="Yıllık amortisman oranı (%, opsiyonel)">
+            <input type="number" step="0.1" placeholder="Örn: 20" value={form.amortisman_orani} onChange={(e) => setForm((f) => ({ ...f, amortisman_orani: e.target.value }))} style={girdiStili} />
           </Alan>
           {duzenlemeModu ? (
             <Alan etiket="Maliyet (TL)">
@@ -459,6 +465,8 @@ export default function OzMalSayfasi() {
       kiraci_unvan: d.kiraci_unvan, maliyet_try: Number(d.maliyet_try),
       maliyet_orijinal: d.maliyet_orijinal != null ? Number(d.maliyet_orijinal) : null,
       para_birimi: d.para_birimi || 'TRY',
+      guncel_deger_try: d.guncel_deger_try != null ? Number(d.guncel_deger_try) : null,
+      amortisman_orani: d.amortisman_orani,
       ham: d,
     })),
     ...ekipmanlar.map((u) => {
@@ -476,7 +484,9 @@ export default function OzMalSayfasi() {
     ? birlesikListe.filter((k) => `${k.ad} ${k.tanimlayici || ''}`.toLowerCase().includes(aramaMetni.toLowerCase()))
     : birlesikListe;
 
-  const toplamDeger = birlesikListe.filter((k) => k.durum !== 'SATILDI' && k.durum !== 'HURDA').reduce((acc, k) => acc + k.maliyet_try, 0);
+  const toplamDeger = birlesikListe
+    .filter((k) => k.durum !== 'SATILDI' && k.durum !== 'HURDA')
+    .reduce((acc, k) => acc + (k.kaynak === 'DEMIRBAS' ? (k.guncel_deger_try ?? k.maliyet_try) : k.maliyet_try), 0);
 
   function excelIndirYap() {
     const veri = birlesikListe.map((k) => ({
@@ -601,6 +611,7 @@ export default function OzMalSayfasi() {
                 <SiraliBaslik alanAdi="durum" siralama={siralama}>Durum</SiraliBaslik>
                 <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>Kirada/Konum</th>
                 <SiraliBaslik alanAdi="maliyet_try" siralama={siralama}>Maliyet</SiraliBaslik>
+                <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>Güncel Değer</th>
                 <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>Kaynak</th>
                 <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>İşlem</th>
               </tr>
@@ -621,6 +632,16 @@ export default function OzMalSayfasi() {
                           ({paraFormat(k.maliyet_orijinal, k.para_birimi)} girildi)
                         </div>
                       )}
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      {k.kaynak === 'DEMIRBAS' ? (
+                        <>
+                          {paraFormat(k.guncel_deger_try ?? k.maliyet_try)}
+                          {k.amortisman_orani > 0 && (
+                            <div style={{ fontSize: 11, color: 'var(--metin-ikincil)' }}>(yıllık %{k.amortisman_orani} amortisman)</div>
+                          )}
+                        </>
+                      ) : '—'}
                     </td>
                     <td style={{ padding: '12px 16px' }}>
                       <Etiket ton={k.kaynak === 'EKIPMAN' ? 'amber' : 'notr'}>{k.kaynak === 'EKIPMAN' ? 'Stok (Ekipman)' : 'Demirbaş'}</Etiket>
