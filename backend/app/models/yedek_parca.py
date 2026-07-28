@@ -49,4 +49,13 @@ class YedekParcaHareketi(Base):
     birim_fiyat_try = Column(Numeric(18, 2))
     ilgili_cari_id = Column(BigInteger, ForeignKey("cari_hesaplar.id"))
     aciklama = Column(String(300))
+    # SADECE satis cikislarinda doldurulur: o anki (satis anindaki) referans
+    # maliyet - parcanin GENEL birim_fiyat_try'si zamanla degisse bile, bu
+    # satisin karini dogru/sabit hesaplayabilmek icin anlik olarak saklanir.
+    maliyet_birim_fiyat_try = Column(Numeric(18, 2))
+    # Odeme entegrasyonu: doldurulursa Kasa/Banka'ya gercek bir hareket
+    # yansitilir (GIRIS=alis->para CIKISI, CIKIS+satis_fiyati var->para GIRISI).
+    # Bos birakilirsa (orn. sarf/kullanim cikisi) hicbir mali hareket olusmaz.
+    odeme_yontemi = Column(String(10))  # "NAKIT" | "BANKA" | None
+    banka_hesap_id = Column(BigInteger, ForeignKey("banka_hesaplari.id"))
     olusturma_tarihi = Column(DateTime, server_default=func.now())
