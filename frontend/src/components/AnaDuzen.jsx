@@ -9,7 +9,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { api, hataMesajiCikar } from '../api/client';
 
-const ARAMA_TUR_METIN = { CARI: 'Cari', SIPARIS: 'Sipariş', STOK: 'Stok', URUN_TANIMI: 'Ürün Tanımı' };
+const ARAMA_TUR_METIN = { CARI: 'Cari', SIPARIS: 'Sipariş', STOK: 'Stok', URUN_TANIMI: 'Ürün Tanımı', DEMIRBAS: 'Demirbaş', YEDEK_PARCA: 'Yedek Parça' };
 
 function GenelArama() {
   const [sorgu, setSorgu] = useState('');
