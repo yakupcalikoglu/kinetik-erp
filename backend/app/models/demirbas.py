@@ -44,6 +44,10 @@ class Demirbas(Base):
     # GERCEK deger olarak gosterilebilir.
     maliyet_orijinal = Column(Numeric(18, 2))
     para_birimi = Column(String(10), nullable=False, default="TRY")
+    # Yillik amortisman orani (%) - orn. 20.00 = yilda maliyetin %20'si kadar
+    # deger kaybi. Doldurulmazsa "guncel deger" hesaplamasi yapilmaz (maliyet
+    # aynen gosterilir).
+    amortisman_orani = Column(Numeric(5, 2))
     alim_tarihi = Column(Date)
     satis_fiyati_try = Column(Numeric(18, 2))
     satis_tarihi = Column(Date)
