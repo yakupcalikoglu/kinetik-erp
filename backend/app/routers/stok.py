@@ -17,7 +17,8 @@ from app.schemas.stok import (StokKartiOlusturIstegi, StokKartiYanit,
                                StokMaliyetKalemiYanit, TopluDurumGuncelleIstegi,
                                StokSeriNoDuzenleIstegi, StokSeriNoDuzenleSifreliIstegi,
                                StokKartiTopluIceAktarIstegi, StokKartiTopluIceAktarSonucu,
-                               OzMalIlkKayitIstegi, HurdayaCikarIstegi)
+                               OzMalIlkKayitIstegi, HurdayaCikarIstegi,
+                               UrunOzetYaniti, UrunOzetDurumSatiri, UrunOzetSatisSatiri)
 from app.services.para_hareketi import para_hareketi_olustur
 from app.models.denetim import DuzenlemeKaydi
 from app.core.security import sifre_dogrula
@@ -139,6 +140,75 @@ def stok_kartlarini_listele(
 ):
     sorgu = select(StokKarti).where(StokKarti.sirket_id == sirket_id)
     return list(db.execute(sorgu).scalars())
+
+
+@router.get("/stok-kartlari/{stok_karti_id}/ozet", response_model=UrunOzetYaniti,
+            dependencies=[Depends(izin_gerektir("STOK_GORUNTULE"))])
+def urun_ozet(
+    stok_karti_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
+):
+    """
+    Bir urun MODELININ (marka/model) simdiye kadarki TUM performansini
+    tek yerde ozetler: kac tanesi hangi durumda, satilanlarin kar/zarari,
+    ortalama kar marji, bakim gelir/gideri. "Bu modeli almaya devam etmeli
+    miyim" sorusuna tek ekrandan cevap verir.
+    """
+    from app.models.finansal import BakimKaydi, BakimTip
+
+    kart = db.get(StokKarti, stok_karti_id)
+    if kart is None or kart.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ürün tanımı bulunamadı.")
+
+    urunler = list(db.execute(select(StokSeriNo).where(StokSeriNo.stok_karti_id == stok_karti_id, StokSeriNo.sirket_id == sirket_id)).scalars())
+
+    durum_sayaci: dict[str, int] = {}
+    for u in urunler:
+        durum_sayaci[u.durum.value if hasattr(u.durum, "value") else u.durum] = durum_sayaci.get(u.durum.value if hasattr(u.durum, "value") else u.durum, 0) + 1
+
+    cari_haritasi = {}
+    musteri_ids = [u.musteri_cari_id for u in urunler if u.musteri_cari_id]
+    if musteri_ids:
+        from app.models.cari import CariHesap
+        cari_haritasi = {c.id: c.unvan for c in db.execute(select(CariHesap).where(CariHesap.id.in_(musteri_ids))).scalars()}
+
+    satislar = []
+    toplam_kar = Decimal("0")
+    toplam_satis_fiyati = Decimal("0")
+    for u in urunler:
+        if u.durum != StokDurum.SATILDI:
+            continue
+        toplam_maliyet = (
+            u.satinalma_maliyeti_try + u.nakliye_maliyeti_try + u.gumruk_maliyeti_try +
+            u.antrepo_maliyeti_try + u.millilestirme_maliyeti_try + u.leasing_maliyeti_try + u.diger_maliyet_try
+        )
+        kar = (u.satis_fiyati_try - toplam_maliyet) if u.satis_fiyati_try is not None else None
+        satislar.append(UrunOzetSatisSatiri(
+            seri_no=u.seri_no, satis_tarihi=u.satis_tarihi, musteri_unvan=cari_haritasi.get(u.musteri_cari_id),
+            satis_fiyati_try=u.satis_fiyati_try, toplam_maliyet_try=toplam_maliyet, kar_zarar_try=kar,
+        ))
+        if kar is not None:
+            toplam_kar += kar
+            toplam_satis_fiyati += u.satis_fiyati_try or Decimal("0")
+
+    satislar.sort(key=lambda s: s.satis_tarihi or date.min, reverse=True)
+    ortalama_kar_marji = (toplam_kar / toplam_satis_fiyati * 100) if toplam_satis_fiyati > 0 else None
+
+    seri_ids = [u.id for u in urunler]
+    bakim_geliri = Decimal("0")
+    bakim_gideri = Decimal("0")
+    if seri_ids:
+        for b in db.execute(select(BakimKaydi).where(BakimKaydi.stok_seri_no_id.in_(seri_ids))).scalars():
+            if b.tip == BakimTip.GELIR:
+                bakim_geliri += b.tutar
+            else:
+                bakim_gideri += b.tutar
+
+    return UrunOzetYaniti(
+        marka=kart.marka, model=kart.model, toplam_adet=len(urunler),
+        durum_dagilimi=[UrunOzetDurumSatiri(durum=d, adet=a) for d, a in durum_sayaci.items()],
+        satislar=satislar, toplam_satis_adedi=len(satislar), toplam_kar_zarar_try=toplam_kar,
+        ortalama_kar_marji_yuzde=ortalama_kar_marji, bakim_geliri_toplam=bakim_geliri, bakim_gideri_toplam=bakim_gideri,
+    )
 
 
 @router.get("/stok-seri-no", response_model=list[StokSeriNoYanit],
