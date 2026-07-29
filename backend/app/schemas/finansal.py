@@ -261,6 +261,7 @@ class KiralamaOlusturIstegi(BaseModel):
     baslangic_tarihi: date
     bitis_tarihi: date | None = None
     para_birimi: ParaBirimi
+    referans_kur: Decimal = Decimal("1")  # doviz raporlarda sabit TL karsiligi icin - elle girilebilir
     depozito: Decimal = Decimal("0")
     notlar: str | None = None
     kalemler: list[KiralamaKalemIstegi]
@@ -272,6 +273,7 @@ class KiralamaDuzenleIstegi(BaseModel):
     baslangic_tarihi: date
     bitis_tarihi: date | None = None
     para_birimi: ParaBirimi
+    referans_kur: Decimal = Decimal("1")
     depozito: Decimal = Decimal("0")
     notlar: str | None = None
     kalemler: list[KiralamaKalemIstegi]
@@ -285,6 +287,7 @@ class KiralamaYanit(BaseModel):
     bitis_tarihi: date | None
     aylik_kira_tutari: Decimal
     para_birimi: ParaBirimi
+    referans_kur: Decimal = Decimal("1")
     depozito: Decimal
     durum: str
     kalemler: list[KiralamaKalemYanit] = []
