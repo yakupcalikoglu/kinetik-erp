@@ -149,6 +149,33 @@ class MaliyetKalemiDuzenleIstegi(BaseModel):
     referans_usd_kuru: Decimal | None = None
 
 
+class UrunOzetDurumSatiri(BaseModel):
+    durum: str
+    adet: int
+
+
+class UrunOzetSatisSatiri(BaseModel):
+    seri_no: str
+    satis_tarihi: date | None
+    musteri_unvan: str | None = None
+    satis_fiyati_try: Decimal | None
+    toplam_maliyet_try: Decimal
+    kar_zarar_try: Decimal | None
+
+
+class UrunOzetYaniti(BaseModel):
+    marka: str | None
+    model: str | None
+    toplam_adet: int
+    durum_dagilimi: list[UrunOzetDurumSatiri]
+    satislar: list[UrunOzetSatisSatiri]
+    toplam_satis_adedi: int
+    toplam_kar_zarar_try: Decimal
+    ortalama_kar_marji_yuzde: Decimal | None
+    bakim_geliri_toplam: Decimal
+    bakim_gideri_toplam: Decimal
+
+
 class KarRaporuYanit(BaseModel):
     seri_no: str
     toplam_maliyet_try: Decimal
