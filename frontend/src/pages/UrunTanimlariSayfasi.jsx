@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Fragment } from 'react';
 import * as XLSX from 'xlsx';
 import { api, hataMesajiCikar } from '../api/client';
 
@@ -200,6 +200,105 @@ function IceAktarPaneli({ onKapat, onTamamlandi }) {
   );
 }
 
+const URUN360_DURUM_METIN = {
+  DEPODA: 'Depoda', SIPARISTE: 'Siparişte', YOLDA: 'Yolda', GUMRUKTE: 'Gümrükte',
+  ANTREPODA: 'Antrepoda', SATILDI: 'Satıldı', KIRADA: 'Kirada', BAKIMDA: 'Bakımda', HURDA: 'Hurda',
+};
+
+function tarihFormatUrun360(iso) {
+  if (!iso || typeof iso !== 'string' || !iso.includes('-')) return iso || '—';
+  const [yil, ay, gun] = iso.slice(0, 10).split('-');
+  return `${gun}/${ay}/${yil}`;
+}
+
+function Urun360Paneli({ kart, onKapat }) {
+  const [ozet, setOzet] = useState(null);
+  const [hata, setHata] = useState(null);
+
+  useEffect(() => {
+    api.get(`/stok-kartlari/${kart.id}/ozet`).then((r) => setOzet(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
+  }, [kart.id]);
+
+  return (
+    <Kart style={{ marginBottom: 20 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ fontSize: 15, fontWeight: 600 }}>{kart.marka} {kart.model} — Ürün Performansı</div>
+        <Buton variant="ikincil" onClick={onKapat}>Kapat</Buton>
+      </div>
+      <HataMesaji>{hata}</HataMesaji>
+      {!ozet ? (
+        <div style={{ color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
+      ) : (
+        <>
+          <div style={{ display: 'flex', gap: 24, marginBottom: 16, flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontSize: 11.5, color: 'var(--metin-ikincil)' }}>Toplam Adet (bugüne kadar)</div>
+              <div style={{ fontSize: 19, fontWeight: 700 }}>{ozet.toplam_adet}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11.5, color: 'var(--metin-ikincil)' }}>Satılan Adet</div>
+              <div style={{ fontSize: 19, fontWeight: 700 }}>{ozet.toplam_satis_adedi}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11.5, color: 'var(--metin-ikincil)' }}>Toplam Kâr/Zarar</div>
+              <div style={{ fontSize: 19, fontWeight: 700, color: Number(ozet.toplam_kar_zarar_try) >= 0 ? 'var(--yesil)' : 'var(--kirmizi)' }}>
+                {paraFormat(ozet.toplam_kar_zarar_try)}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11.5, color: 'var(--metin-ikincil)' }}>Ortalama Kâr Marjı</div>
+              <div style={{ fontSize: 19, fontWeight: 700 }}>
+                {ozet.ortalama_kar_marji_yuzde != null ? `%${Number(ozet.ortalama_kar_marji_yuzde).toFixed(1)}` : '—'}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11.5, color: 'var(--metin-ikincil)' }}>Bakım (Net)</div>
+              <div style={{ fontSize: 19, fontWeight: 700 }}>{paraFormat(ozet.bakim_geliri_toplam - ozet.bakim_gideri_toplam)}</div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+            {ozet.durum_dagilimi.map((d) => (
+              <Etiket key={d.durum} ton={d.durum === 'SATILDI' ? 'yesil' : d.durum === 'KIRADA' ? 'amber' : d.durum === 'HURDA' ? 'kirmizi' : 'notr'}>
+                {URUN360_DURUM_METIN[d.durum] || d.durum}: {d.adet}
+              </Etiket>
+            ))}
+          </div>
+
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Satış Geçmişi</div>
+          {ozet.satislar.length === 0 ? (
+            <div style={{ fontSize: 12.5, color: 'var(--metin-soluk)' }}>Bu modelden henüz satış yapılmamış.</div>
+          ) : (
+            <table>
+              <thead>
+                <tr style={{ background: 'var(--zemin)' }}>
+                  {['Seri No', 'Satış Tarihi', 'Müşteri', 'Satış Fiyatı', 'Maliyet', 'Kâr/Zarar'].map((b) => (
+                    <th key={b} style={{ textAlign: 'left', padding: '6px 10px', fontSize: 12, color: 'var(--metin-ikincil)' }}>{b}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {ozet.satislar.map((s) => (
+                  <tr key={s.seri_no} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                    <td style={{ padding: '6px 10px', fontFamily: 'var(--font-mono)' }}>{s.seri_no}</td>
+                    <td style={{ padding: '6px 10px', color: 'var(--metin-ikincil)' }}>{tarihFormatUrun360(s.satis_tarihi)}</td>
+                    <td style={{ padding: '6px 10px', color: 'var(--metin-ikincil)' }}>{s.musteri_unvan || '—'}</td>
+                    <td style={{ padding: '6px 10px' }}>{s.satis_fiyati_try != null ? paraFormat(s.satis_fiyati_try) : '—'}</td>
+                    <td style={{ padding: '6px 10px', color: 'var(--metin-ikincil)' }}>{paraFormat(s.toplam_maliyet_try)}</td>
+                    <td style={{ padding: '6px 10px', fontWeight: 500, color: s.kar_zarar_try != null && Number(s.kar_zarar_try) >= 0 ? 'var(--yesil)' : 'var(--kirmizi)' }}>
+                      {s.kar_zarar_try != null ? paraFormat(s.kar_zarar_try) : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </>
+      )}
+    </Kart>
+  );
+}
+
 function UrunTanimiFormu({ duzenlenenKart, onKaydedildi, onVazgec }) {
   const duzenlemeModu = !!duzenlenenKart;
   const [form, setForm] = useState(() => duzenlenenKart
@@ -313,6 +412,7 @@ export default function UrunTanimlariSayfasi() {
   const [hata, setHata] = useState(null);
   const [formAcik, setFormAcik] = useState(false);
   const [duzenlenenKart, setDuzenlenenKart] = useState(null);
+  const [detayAcikId, setDetayAcikId] = useState(null);
   const [arama, setArama] = useState('');
   const [iceAktarAcik, setIceAktarAcik] = useState(false);
   const siralama = useSiralama();
@@ -435,25 +535,37 @@ export default function UrunTanimlariSayfasi() {
               {siralama.sirala(gosterilecekler, (item, alan) => (
                 alan === '_envanter' ? (envanterSayilari[item.id] || 0) : item[alan]
               )).map((k) => (
-                <tr key={k.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
-                  <td style={{ padding: '10px 16px', fontFamily: 'var(--font-mono)', color: 'var(--metin-ikincil)' }}>{k.id}</td>
-                  <td style={{ padding: '10px 16px', fontWeight: 500 }}>{k.marka}</td>
-                  <td style={{ padding: '10px 16px' }}>{k.model}</td>
-                  <td style={{ padding: '10px 16px' }}>{k.birim}</td>
-                  <td style={{ padding: '10px 16px' }}>
-                    <Etiket ton={envanterSayilari[k.id] > 0 ? 'yesil' : 'notr'}>
-                      {envanterSayilari[k.id] || 0} {k.birim}
-                    </Etiket>
-                  </td>
-                  <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{k.mense_ulke || '—'}</td>
-                  <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{k.gtip_kodu || '—'}</td>
-                  <td style={{ padding: '10px 16px' }}>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <button onClick={() => duzenle(k)} style={eylemChipStili('lacivert')}>Düzenle</button>
-                      <button onClick={() => sil(k)} style={eylemChipStili('kirmizi')}>Sil</button>
-                    </div>
-                  </td>
-                </tr>
+                <Fragment key={k.id}>
+                  <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                    <td style={{ padding: '10px 16px', fontFamily: 'var(--font-mono)', color: 'var(--metin-ikincil)' }}>{k.id}</td>
+                    <td style={{ padding: '10px 16px', fontWeight: 500 }}>{k.marka}</td>
+                    <td style={{ padding: '10px 16px' }}>{k.model}</td>
+                    <td style={{ padding: '10px 16px' }}>{k.birim}</td>
+                    <td style={{ padding: '10px 16px' }}>
+                      <Etiket ton={envanterSayilari[k.id] > 0 ? 'yesil' : 'notr'}>
+                        {envanterSayilari[k.id] || 0} {k.birim}
+                      </Etiket>
+                    </td>
+                    <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{k.mense_ulke || '—'}</td>
+                    <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{k.gtip_kodu || '—'}</td>
+                    <td style={{ padding: '10px 16px' }}>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button onClick={() => setDetayAcikId((mevcut) => (mevcut === k.id ? null : k.id))} style={eylemChipStili('yesil')}>
+                          {detayAcikId === k.id ? 'Kapat' : 'Detay'}
+                        </button>
+                        <button onClick={() => duzenle(k)} style={eylemChipStili('lacivert')}>Düzenle</button>
+                        <button onClick={() => sil(k)} style={eylemChipStili('kirmizi')}>Sil</button>
+                      </div>
+                    </td>
+                  </tr>
+                  {detayAcikId === k.id && (
+                    <tr>
+                      <td colSpan={8} style={{ padding: '0 16px 12px' }}>
+                        <Urun360Paneli kart={k} onKapat={() => setDetayAcikId(null)} />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
             </tbody>
           </table>
