@@ -576,6 +576,7 @@ def kiralama_olustur(
         bitis_tarihi=istek.bitis_tarihi,
         aylik_kira_tutari=aylik_kira_tutari,
         para_birimi=istek.para_birimi,
+        referans_kur=istek.referans_kur,
         depozito=istek.depozito,
         notlar=istek.notlar,
     )
@@ -636,12 +637,13 @@ def kiralama_sozlesmesi_duzenle(
     yeni_aylik_kira = sum((k.miktar * k.birim_fiyat for k in istek.kalemler), Decimal("0"))
     alan_adlari = {
         "kiraci_cari_id": "Kiracı", "baslangic_tarihi": "Başlangıç Tarihi", "bitis_tarihi": "Bitiş Tarihi",
-        "para_birimi": "Para Birimi", "depozito": "Depozito", "notlar": "Notlar", "aylik_kira_tutari": "Aylık Kira Tutarı",
+        "para_birimi": "Para Birimi", "referans_kur": "Referans Kur", "depozito": "Depozito", "notlar": "Notlar",
+        "aylik_kira_tutari": "Aylık Kira Tutarı",
     }
     yeni_degerler = {
         "kiraci_cari_id": istek.kiraci_cari_id, "baslangic_tarihi": istek.baslangic_tarihi,
-        "bitis_tarihi": istek.bitis_tarihi, "para_birimi": istek.para_birimi, "depozito": istek.depozito,
-        "notlar": istek.notlar, "aylik_kira_tutari": yeni_aylik_kira,
+        "bitis_tarihi": istek.bitis_tarihi, "para_birimi": istek.para_birimi, "referans_kur": istek.referans_kur,
+        "depozito": istek.depozito, "notlar": istek.notlar, "aylik_kira_tutari": yeni_aylik_kira,
     }
     degisiklikler = {}
     for alan, etiket in alan_adlari.items():
