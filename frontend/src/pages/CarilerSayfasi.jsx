@@ -719,7 +719,7 @@ function KiralamaMiniFormu({ cari, onTamamlandi, onVazgec }) {
   const [stokKartlari, setStokKartlari] = useState([]);
   const [urunler, setUrunler] = useState([]);
   const [form, setForm] = useState({
-    stok_karti_id: '', stok_seri_no_id: '', aylik_kira_tutari: '', para_birimi: 'TRY',
+    stok_karti_id: '', stok_seri_no_id: '', aylik_kira_tutari: '', para_birimi: 'TRY', referans_kur: '1',
     baslangic_tarihi: new Date().toISOString().slice(0, 10),
   });
   const [hata, setHata] = useState(null);
@@ -728,6 +728,11 @@ function KiralamaMiniFormu({ cari, onTamamlandi, onVazgec }) {
   useEffect(() => {
     api.get('/stok-kartlari').then((r) => setStokKartlari(r.data)).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (form.para_birimi === 'TRY') return;
+    api.get(`/kur/${form.para_birimi}`).then((r) => setForm((f) => ({ ...f, referans_kur: String(r.data.kur) }))).catch(() => {});
+  }, [form.para_birimi]); // eslint-disable-line
 
   useEffect(() => {
     if (!form.stok_karti_id) { setUrunler([]); return; }
@@ -741,7 +746,8 @@ function KiralamaMiniFormu({ cari, onTamamlandi, onVazgec }) {
     setKaydediliyor(true);
     try {
       await api.post('/kiralama-sozlesmeleri', {
-        kiraci_cari_id: cari.id, baslangic_tarihi: form.baslangic_tarihi, para_birimi: form.para_birimi, depozito: 0,
+        kiraci_cari_id: cari.id, baslangic_tarihi: form.baslangic_tarihi, para_birimi: form.para_birimi,
+        referans_kur: Number(form.referans_kur || 1), depozito: 0,
         kalemler: [{
           stok_karti_id: Number(form.stok_karti_id), miktar: 1, birim_fiyat: Number(form.aylik_kira_tutari),
           stok_seri_no_idleri: form.stok_seri_no_id ? [Number(form.stok_seri_no_id)] : [],
@@ -782,6 +788,11 @@ function KiralamaMiniFormu({ cari, onTamamlandi, onVazgec }) {
             </select>
           </div>
         </Alan>
+        {form.para_birimi !== 'TRY' && (
+          <Alan etiket={`Referans kur (${form.para_birimi} → TL)`}>
+            <input type="number" step="0.0001" value={form.referans_kur} onChange={(e) => setForm((f) => ({ ...f, referans_kur: e.target.value }))} style={girdiStili} />
+          </Alan>
+        )}
         <Alan etiket="Başlangıç tarihi">
           <input required type="date" value={form.baslangic_tarihi} onChange={(e) => setForm((f) => ({ ...f, baslangic_tarihi: e.target.value }))} style={girdiStili} />
         </Alan>
