@@ -178,6 +178,11 @@ class KiralamaSozlesme(Base):
     bitis_tarihi = Column(Date)
     aylik_kira_tutari = Column(Numeric(18, 2), nullable=False)
     para_birimi = Column(SAEnum(ParaBirimi, name="para_birimi_t"), nullable=False)
+    # Dovizli kiralamalarda TL karsiligini raporlarda GERCEK/SABIT bir
+    # oranla gostermek icin - kullanici sozlesme olustururken canli kuru
+    # otomatik gorur ama elle degistirebilir, boylece raporlar canli
+    # kurun gunluk dalgalanmasindan etkilenmez.
+    referans_kur = Column(Numeric(18, 6), default=1)
     depozito = Column(Numeric(18, 2), default=0)
     durum = Column(String(20), default="AKTIF")
     notlar = Column(Text)
