@@ -561,7 +561,7 @@ def cari_tum_hareketler(
         satirlar.append(CariHareketSatiri(
             tarih=s.baslangic_tarihi, tur="KIRALAMA",
             aciklama=f"Kiralama sözleşmesi — aylık {s.aylik_kira_tutari} {s.para_birimi if isinstance(s.para_birimi, str) else s.para_birimi.value}",
-            tutar_try=s.aylik_kira_tutari if (s.para_birimi == 'TRY' or (hasattr(s.para_birimi, 'value') and s.para_birimi.value == 'TRY')) else 0,
+            tutar_try=s.aylik_kira_tutari * (s.referans_kur or 1),
             durum=s.durum, kaynak_tablo="KIRALAMA_SOZLESME", kaynak_id=s.id,
         ))
 
