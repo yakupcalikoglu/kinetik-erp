@@ -2468,7 +2468,7 @@ function bosKiralamaKalemi() {
 function bosKiralamaFormu() {
   return {
     kiraci_cari_id: '', baslangic_tarihi: new Date().toISOString().slice(0, 10),
-    bitis_tarihi: '', para_birimi: 'TRY', depozito: '',
+    bitis_tarihi: '', para_birimi: 'TRY', referans_kur: '1', depozito: '',
     kalemler: [bosKiralamaKalemi()],
   };
 }
@@ -2596,6 +2596,11 @@ function KiralamaSekmesi() {
   }
   useEffect(yukle, []);
 
+  useEffect(() => {
+    if (form.para_birimi === 'TRY') return;
+    api.get(`/kur/${form.para_birimi}`).then((r) => setForm((f) => ({ ...f, referans_kur: String(r.data.kur) }))).catch(() => {});
+  }, [form.para_birimi]); // eslint-disable-line
+
   function kalemGuncelle(i, alan, deger) {
     setForm((f) => ({ ...f, kalemler: f.kalemler.map((k, idx) => (idx === i ? { ...k, [alan]: deger } : k)) }));
   }
@@ -2626,6 +2631,7 @@ function KiralamaSekmesi() {
       baslangic_tarihi: sozlesme.baslangic_tarihi,
       bitis_tarihi: sozlesme.bitis_tarihi || '',
       para_birimi: sozlesme.para_birimi,
+      referans_kur: sozlesme.referans_kur ? String(sozlesme.referans_kur) : '1',
       depozito: sozlesme.depozito || '',
       kalemler: (sozlesme.kalemler || []).length > 0
         ? sozlesme.kalemler.map((k) => ({
@@ -2657,6 +2663,7 @@ function KiralamaSekmesi() {
         baslangic_tarihi: form.baslangic_tarihi,
         bitis_tarihi: form.bitis_tarihi || null,
         para_birimi: form.para_birimi,
+        referans_kur: Number(form.referans_kur || 1),
         depozito: form.depozito ? Number(form.depozito) : 0,
         kalemler: form.kalemler.map((k) => ({
           stok_karti_id: Number(k.stok_karti_id), miktar: Number(k.miktar), birim_fiyat: Number(k.birim_fiyat),
@@ -2738,6 +2745,11 @@ function KiralamaSekmesi() {
                   <option value="EUR">EUR</option>
                 </select>
               </Alan>
+              {form.para_birimi !== 'TRY' && (
+                <Alan etiket={`Referans kur (${form.para_birimi} → TL) — raporlarda sabit kullanılır, elle değiştirilebilir`}>
+                  <input type="number" step="0.0001" value={form.referans_kur} onChange={(e) => setForm((f) => ({ ...f, referans_kur: e.target.value }))} style={girdiStili} />
+                </Alan>
+              )}
               <Alan etiket="Depozito (opsiyonel)">
                 <input type="number" step="0.01" value={form.depozito} onChange={(e) => setForm((f) => ({ ...f, depozito: e.target.value }))} style={girdiStili} />
               </Alan>
