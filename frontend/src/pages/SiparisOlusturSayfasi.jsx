@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, hataMesajiCikar } from '../api/client';
-import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji } from '../components/Ortak';
+import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, ParaGirdisi } from '../components/Ortak';
 import AramaliSecici from '../components/AramaliSecici';
 
 function bosUrunSatiri() {
@@ -246,8 +246,8 @@ export default function SiparisOlusturSayfasi() {
                       style={{ ...girdiStili, width: 70 }} />
                   </td>
                   <td style={{ padding: 8 }}>
-                    <input type="number" step="0.01" value={u.birim_fiyat} onChange={(e) => urunGuncelle(i, 'birim_fiyat', e.target.value)}
-                      style={{ ...girdiStili, width: 120 }} />
+                    <ParaGirdisi value={u.birim_fiyat} onChange={(v) => urunGuncelle(i, 'birim_fiyat', v)}
+                      style={{ width: 120 }} />
                   </td>
                   <td style={{ padding: 8 }}>
                     <input type="number" step="0.1" value={u.birim_agirlik_kg} onChange={(e) => urunGuncelle(i, 'birim_agirlik_kg', e.target.value)}
