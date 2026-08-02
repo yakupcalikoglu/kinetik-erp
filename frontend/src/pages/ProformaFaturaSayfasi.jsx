@@ -1,7 +1,7 @@
 import { useEffect, useState, Fragment } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { api, hataMesajiCikar } from '../api/client';
-import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, BosDurum, Etiket, paraFormat, eylemChipStili, Sekmeler } from '../components/Ortak';
+import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, BosDurum, Etiket, paraFormat, eylemChipStili, Sekmeler, ParaGirdisi } from '../components/Ortak';
 import BelgeSablonu from '../components/BelgeSablonu';
 import AramaliSecici from '../components/AramaliSecici';
 
@@ -249,7 +249,7 @@ function ProformaTumunuSatisaCevirFormu({ proforma, onTamamlandi, onVazgec }) {
           {taksitliBenzeri && (
             <>
               <Alan etiket="Peşinat (TL)">
-                <input type="number" step="0.01" value={pesinat} onChange={(e) => setPesinat(e.target.value)} style={girdiStili} />
+                <ParaGirdisi value={pesinat} onChange={(v) => setPesinat(v)} />
               </Alan>
               <Alan etiket="Taksit Sayısı">
                 <input required type="number" min="2" value={taksitSayisi} onChange={(e) => setTaksitSayisi(e.target.value)} style={girdiStili} />
@@ -423,7 +423,7 @@ function SatisaCevirFormu({ proforma, kalem, onTamamlandi, onVazgec }) {
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginTop: 10 }}>
           <Alan etiket="Tutar (TL)">
-            <input required type="number" step="0.01" value={tutar} onChange={(e) => setTutar(e.target.value)} style={girdiStili} />
+            <ParaGirdisi required value={tutar} onChange={(v) => setTutar(v)} />
           </Alan>
           <Alan etiket="Tarih">
             <input required type="date" value={tarih} onChange={(e) => setTarih(e.target.value)} style={girdiStili} />
@@ -441,7 +441,7 @@ function SatisaCevirFormu({ proforma, kalem, onTamamlandi, onVazgec }) {
           {(odemeTipi === 'TAKSITLI' || leasingTaksitli) && (
             <>
               <Alan etiket="Peşinat (TL)">
-                <input type="number" step="0.01" value={pesinat} onChange={(e) => setPesinat(e.target.value)} style={girdiStili} />
+                <ParaGirdisi value={pesinat} onChange={(v) => setPesinat(v)} />
               </Alan>
               <Alan etiket="Taksit Sayısı">
                 <input required type="number" min="2" value={taksitSayisi} onChange={(e) => setTaksitSayisi(e.target.value)} style={girdiStili} />
@@ -888,7 +888,7 @@ export default function ProformaFaturaSayfasi() {
                       <input type="number" min="1" value={k.miktar} onChange={(e) => kalemGuncelle(i, 'miktar', e.target.value)} style={{ ...girdiStili, width: 70 }} />
                     </td>
                     <td style={{ padding: 8 }}>
-                      <input required type="number" step="0.01" value={k.birim_fiyat} onChange={(e) => kalemGuncelle(i, 'birim_fiyat', e.target.value)} style={{ ...girdiStili, width: 130 }} />
+                      <ParaGirdisi required value={k.birim_fiyat} onChange={(v) => kalemGuncelle(i, 'birim_fiyat', v)} style={{ width: 130 }} />
                     </td>
                     <td style={{ padding: 8 }}>
                       <input type="number" value={k.kdv_orani} onChange={(e) => kalemGuncelle(i, 'kdv_orani', e.target.value)} style={{ ...girdiStili, width: 70 }} />
