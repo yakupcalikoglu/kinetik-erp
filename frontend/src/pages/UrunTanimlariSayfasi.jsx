@@ -1,4 +1,5 @@
 import { useEffect, useState, Fragment } from 'react';
+import { useLocation } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { api, hataMesajiCikar } from '../api/client';
 
@@ -413,7 +414,8 @@ export default function UrunTanimlariSayfasi() {
   const [formAcik, setFormAcik] = useState(false);
   const [duzenlenenKart, setDuzenlenenKart] = useState(null);
   const [detayAcikId, setDetayAcikId] = useState(null);
-  const [arama, setArama] = useState('');
+  const location = useLocation();
+  const [arama, setArama] = useState(new URLSearchParams(location.search).get('ara') || '');
   const [iceAktarAcik, setIceAktarAcik] = useState(false);
   const siralama = useSiralama();
 
