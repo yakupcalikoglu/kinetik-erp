@@ -306,9 +306,13 @@ class TopluDurumGuncelleIstegi(BaseModel):
 class SiparisOdemeOlusturIstegi(BaseModel):
     tarih: date
     tutar: Decimal  # siparisin kendi para biriminde (orn. USD)
-    odeme_yontemi: str  # "NAKIT" | "BANKA"
+    odeme_yontemi: str  # "NAKIT" | "BANKA" | "CEK" | "LEASING"
     banka_hesap_id: int | None = None
     kur: Decimal | None = None  # NAKIT + TRY disi para birimi icin zorunlu
+    # odeme_yontemi == "CEK" ise:
+    cek_no: str | None = None
+    cek_banka_adi: str | None = None
+    cek_vade_tarihi: date | None = None
     notlar: str | None = None
 
 
@@ -317,7 +321,9 @@ class SiparisOdemeYanit(BaseModel):
     siparis_id: int
     tarih: date
     tutar: Decimal
+    odeme_yontemi: str | None = None
     notlar: str | None
+    asim_uyarisi: str | None = None  # eger bu odeme toplam siparis tutarini asarsa doldurulur
 
     class Config:
         from_attributes = True
