@@ -479,24 +479,63 @@ def siparis_odemesi_ekle(
     maliyeti hesabina (satinalma_maliyeti_try) DOKUNMAZ - sadece nakit
     cikisini ve tedarikciye olan kalan bakiyeyi takip eder.
     """
+    from app.models.finansal import Cek, CekTip
+
     siparis = _siparis_getir_veya_404(db, siparis_id, sirket_id)
 
+    if istek.odeme_yontemi not in ("NAKIT", "BANKA", "CEK", "LEASING"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "odeme_yontemi 'NAKIT', 'BANKA', 'CEK' veya 'LEASING' olmalıdır.")
+
     yeni = SiparisOdeme(
-        siparis_id=siparis_id, tarih=istek.tarih, tutar=istek.tutar, notlar=istek.notlar,
+        siparis_id=siparis_id, tarih=istek.tarih, tutar=istek.tutar,
+        odeme_yontemi=istek.odeme_yontemi, notlar=istek.notlar,
     )
     db.add(yeni)
     db.flush()
 
-    para_hareketi_olustur(
-        db, sirket_id, kullanici.id, "CIKIS", istek.tutar,
-        istek.odeme_yontemi, istek.banka_hesap_id,
-        aciklama=f"Sipariş ödemesi - {siparis.siparis_no}" + (f" ({istek.notlar})" if istek.notlar else ""),
-        kaynak_tablo="SIPARIS_ODEME", kaynak_id=yeni.id, cari_id=siparis.tedarikci_cari_id,
-        para_birimi=siparis.para_birimi.value, kur=istek.kur,
-    )
+    if istek.odeme_yontemi == "CEK":
+        if not istek.cek_vade_tarihi:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Çek ile ödeme için vade tarihi girilmelidir.")
+        yeni_cek = Cek(
+            sirket_id=sirket_id, tip=CekTip.VERILEN, cek_no=istek.cek_no,
+            banka_adi=istek.cek_banka_adi, cari_id=siparis.tedarikci_cari_id,
+            tutar=istek.tutar, para_birimi=siparis.para_birimi,
+            vade_tarihi=istek.cek_vade_tarihi, alinma_verilme_tarihi=istek.tarih,
+        )
+        db.add(yeni_cek)
+        db.flush()
+        yeni.cek_id = yeni_cek.id
+    elif istek.odeme_yontemi == "LEASING":
+        # Sadece bilgi amacli kayit - gercek odemeyi leasing firmasi tedarikciye
+        # dogrudan yaptigi icin burada Kasa/Banka/Cek hareketi OLUSTURULMAZ.
+        pass
+    else:
+        para_hareketi_olustur(
+            db, sirket_id, kullanici.id, "CIKIS", istek.tutar,
+            istek.odeme_yontemi, istek.banka_hesap_id,
+            aciklama=f"Sipariş ödemesi - {siparis.siparis_no}" + (f" ({istek.notlar})" if istek.notlar else ""),
+            kaynak_tablo="SIPARIS_ODEME", kaynak_id=yeni.id, cari_id=siparis.tedarikci_cari_id,
+            para_birimi=siparis.para_birimi.value, kur=istek.kur,
+        )
+
+    # Fazla odeme uyarisi - engellemiyoruz, sadece bilgilendiriyoruz (bazen
+    # mesru olabilir, orn. fazla odemeyi bir sonraki siparise mahsup etmek).
+    urunler = list(db.execute(select(SiparisDetay).where(SiparisDetay.siparis_id == siparis_id)).scalars())
+    toplam_siparis_tutari = sum((u.miktar * u.birim_fiyat for u in urunler), Decimal("0"))
+    toplam_odenen_simdi = db.execute(
+        select(func.coalesce(func.sum(SiparisOdeme.tutar), 0)).where(SiparisOdeme.siparis_id == siparis_id)
+    ).scalar_one()
+    asim_uyarisi = None
+    if toplam_siparis_tutari > 0 and toplam_odenen_simdi > toplam_siparis_tutari:
+        asim = toplam_odenen_simdi - toplam_siparis_tutari
+        asim_uyarisi = (
+            f"Dikkat: toplam ödenen tutar, sipariş tutarını {asim:,.2f} {siparis.para_birimi.value} aşıyor. "
+            f"Bu siparişe daha önce ödeme girilmiş olabilir, kontrol edin."
+        )
 
     db.commit()
     db.refresh(yeni)
+    yeni.asim_uyarisi = asim_uyarisi
     return yeni
 
 
