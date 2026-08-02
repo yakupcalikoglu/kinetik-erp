@@ -362,6 +362,36 @@ def leasing_odeme_yap(
 
 
 # =================================================================== TAKSİTLİ SATIŞ
+def _taksitli_satis_toplam_odenen_hesapla(db: Session, plan: TaksitliSatisPlani) -> Decimal:
+    taksitler = list(db.execute(select(TaksitDetay).where(TaksitDetay.plan_id == plan.id)).scalars())
+    odenen_taksitler = sum((t.odenen_tutar or Decimal("0")) for t in taksitler)
+    return (plan.pesinat or Decimal("0")) + odenen_taksitler
+
+
+@router.get("/taksitli-satis-planlari", response_model=list[TaksitliSatisYanit],
+            dependencies=[Depends(izin_gerektir("TAKSIT_GORUNTULE"))])
+def taksitli_satis_planlarini_listele(
+    musteri_cari_id: int | None = None,
+    sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
+):
+    sorgu = select(TaksitliSatisPlani).where(TaksitliSatisPlani.sirket_id == sirket_id)
+    if musteri_cari_id:
+        sorgu = sorgu.where(TaksitliSatisPlani.musteri_cari_id == musteri_cari_id)
+    planlar = list(db.execute(sorgu).scalars())
+
+    cari_haritasi = {}
+    musteri_ids = [p.musteri_cari_id for p in planlar]
+    if musteri_ids:
+        cari_haritasi = {c.id: c.unvan for c in db.execute(select(CariHesap).where(CariHesap.id.in_(musteri_ids))).scalars()}
+
+    for p in planlar:
+        p.musteri_unvan = cari_haritasi.get(p.musteri_cari_id)
+        p.kalemler = list(db.execute(select(TaksitliSatisKalemi).where(TaksitliSatisKalemi.plan_id == p.id)).scalars())
+        p.toplam_odenen = _taksitli_satis_toplam_odenen_hesapla(db, p)
+        p.kalan_bakiye = p.toplam_tutar - p.toplam_odenen
+    return planlar
+
+
 @router.post("/taksitli-satis-planlari", response_model=TaksitliSatisYanit,
              dependencies=[Depends(izin_gerektir("TAKSIT_DUZENLE"))])
 def taksitli_satis_olustur(
