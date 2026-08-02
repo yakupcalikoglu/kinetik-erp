@@ -155,7 +155,15 @@ function GenelArama() {
   function sonucaGit(s) {
     setAcik(false);
     setSorgu('');
-    navigate(s.yol);
+    // Siparis sonuclari icin, sipariş no'yu hedef sayfaya query param olarak
+    // tasiyoruz - boylece Siparisler sayfasi acilinca otomatik olarak SADECE
+    // o siparisi gosterecek sekilde filtrelenmis olur (genel arama sonucuna
+    // tiklayip tum listeyle karsilasmak yerine).
+    if (s.tur === 'SIPARIS') {
+      navigate(`${s.yol}?ara=${encodeURIComponent(s.baslik)}`);
+    } else {
+      navigate(s.yol);
+    }
   }
 
   return (
