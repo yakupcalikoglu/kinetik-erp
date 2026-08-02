@@ -266,6 +266,60 @@ def akreditif_kalemi_ekle(
     return _detayli_getir(db, akreditif_id)
 
 
+@router.put("/{akreditif_id}/genel-odeme", response_model=AkreditifKalemYanit,
+            dependencies=[Depends(izin_gerektir("AKREDITIF_DUZENLE"))])
+def akreditif_genel_bakiye_ode(
+    akreditif_id: int,
+    istek: AkreditifKalemOdeIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    kullanici: Kullanici = Depends(aktif_kullanici_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Akreditifin HENUZ HICBIR KALEME DAGITILMAMIS genel bakiyesinden odeme
+    yapar - bunun icin otomatik olarak yeni bir AkreditifKalemi (tip=ODEME)
+    olusturup hemen o tutar kadar odenmis olarak isaretler. Boylece
+    kullanici, Kasa/Banka sayfasindan "Akreditif" secip kalem eklemeden
+    dogrudan genel borca odeme girebilir.
+    """
+    akreditif = db.get(Akreditif, akreditif_id)
+    if akreditif is None or akreditif.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Akreditif bulunamadı.")
+
+    kalemler = list(db.execute(select(AkreditifKalemi).where(AkreditifKalemi.akreditif_id == akreditif.id)).scalars())
+    kalemlere_dagitilmis = sum((k.tutar for k in kalemler), Decimal("0"))
+    genel_kalan = akreditif.tutar - kalemlere_dagitilmis
+    if istek.tutar <= 0:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ödeme tutarı sıfırdan büyük olmalıdır.")
+    if istek.tutar > genel_kalan:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Girilen tutar ({istek.tutar}), kalemlere dağıtılmamış genel bakiyeyi ({genel_kalan}) aşıyor."
+        )
+
+    yeni_kalem = AkreditifKalemi(
+        akreditif_id=akreditif.id, tip=AkreditifKalemTip.ODEME,
+        aciklama="Genel bakiye ödemesi (Kasa/Banka'dan)",
+        tutar=istek.tutar, odenen_tutar=istek.tutar, odendi_mi=True,
+        vade_tarihi=istek.odeme_tarihi, odeme_tarihi=istek.odeme_tarihi,
+    )
+    db.add(yeni_kalem)
+    db.flush()
+
+    para_hareketi_olustur(
+        db, sirket_id, kullanici.id, "CIKIS", istek.tutar,
+        istek.odeme_yontemi, istek.banka_hesap_id,
+        aciklama=f"Akreditif {akreditif.akreditif_no or ''} - Genel bakiye ödemesi",
+        kaynak_tablo="AKREDITIF_KALEMI", kaynak_id=yeni_kalem.id,
+        para_birimi=akreditif.para_birimi, kur=istek.kur,
+    )
+
+    _durumu_yeniden_hesapla(db, akreditif)
+    db.commit()
+    db.refresh(yeni_kalem)
+    return yeni_kalem
+
+
 @kalem_router.put("/{kalem_id}/ode",
                    dependencies=[Depends(izin_gerektir("AKREDITIF_DUZENLE"))])
 def akreditif_kalemi_ode(
