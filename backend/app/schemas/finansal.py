@@ -190,6 +190,8 @@ class TaksitliSatisYanit(BaseModel):
     taksit_sayisi: int
     baslangic_tarihi: date
     kalemler: list[TaksitKalemYanit] = []
+    toplam_odenen: Decimal = Decimal("0")  # backend'de hesaplanir (pesinat + odenen taksitler)
+    kalan_bakiye: Decimal = Decimal("0")   # backend'de hesaplanir
 
     class Config:
         from_attributes = True
