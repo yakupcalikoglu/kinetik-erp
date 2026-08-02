@@ -188,6 +188,7 @@ class SiparisDetay(Base):
     birim_fiyat = Column(Numeric(18, 2), nullable=False)
     para_birimi = Column(SAEnum(ParaBirimi, name="para_birimi_t"), nullable=False)
     birim_agirlik_kg = Column(Numeric(10, 2))
+    kdv_orani = Column(Numeric(5, 2), nullable=False, default=20)
     aciklama = Column(String(300))
 
 
