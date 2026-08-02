@@ -1,8 +1,63 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, hataMesajiCikar } from '../api/client';
-import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, ParaGirdisi } from '../components/Ortak';
+import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, ParaGirdisi, paraFormat, Etiket } from '../components/Ortak';
 import AramaliSecici from '../components/AramaliSecici';
+
+function TedarikciOzetiPaneli({ tedarikciCariId }) {
+  const [ozet, setOzet] = useState(null);
+  const [hata, setHata] = useState(null);
+
+  useEffect(() => {
+    if (!tedarikciCariId) { setOzet(null); return; }
+    api.get(`/cariler/${tedarikciCariId}/tedarikci-ozeti`).then((r) => setOzet(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
+  }, [tedarikciCariId]);
+
+  if (!tedarikciCariId) return null;
+
+  return (
+    <Kart style={{ marginBottom: 16, background: 'var(--zemin)' }}>
+      <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 10 }}>
+        {ozet ? ozet.unvan : ''} — Geçmiş İş Özeti
+      </div>
+      <HataMesaji>{hata}</HataMesaji>
+      {!ozet ? (
+        <div style={{ fontSize: 12.5, color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
+      ) : ozet.toplam_siparis_sayisi === 0 ? (
+        <div style={{ fontSize: 12.5, color: 'var(--metin-soluk)' }}>Bu tedarikçiyle daha önce sipariş geçmişiniz yok.</div>
+      ) : (
+        <>
+          <div style={{ display: 'flex', gap: 24, marginBottom: 12, flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--metin-ikincil)' }}>Toplam Sipariş</div>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>{ozet.toplam_siparis_sayisi}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--metin-ikincil)' }}>Toplam Harcama (≈TL)</div>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>{paraFormat(ozet.toplam_harcama_try)}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--metin-ikincil)' }}>Güncel Kalan Bakiye</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: Number(ozet.kalan_bakiye_try) > 0 ? 'var(--kirmizi)' : 'var(--yesil)' }}>
+                {paraFormat(ozet.kalan_bakiye_try)}
+              </div>
+            </div>
+          </div>
+          {ozet.son_siparisler.length > 0 && (
+            <div style={{ fontSize: 12, color: 'var(--metin-ikincil)' }}>
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>Son siparişler:</div>
+              {ozet.son_siparisler.map((s) => (
+                <div key={s.siparis_no} style={{ marginBottom: 2 }}>
+                  <Etiket ton="notr">{s.tarih}</Etiket> {s.siparis_no} — {s.urun_ozeti} — {paraFormat(s.tutar, s.para_birimi)}
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </Kart>
+  );
+}
 
 function bosUrunSatiri() {
   return { stok_karti_id: '', miktar: 1, birim_fiyat: '', para_birimi: 'USD', birim_agirlik_kg: '', kdv_orani: '20', aciklama: '' };
@@ -168,6 +223,8 @@ export default function SiparisOlusturSayfasi() {
 
       <form onSubmit={kaydet}>
         <HataMesaji>{hata}</HataMesaji>
+
+        {!duzenlemeModu && <TedarikciOzetiPaneli tedarikciCariId={form.tedarikci_cari_id} />}
 
         <Kart style={{ marginBottom: 16 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
