@@ -301,8 +301,8 @@ function KdvOzetiKarti() {
         <Buton variant="ikincil" onClick={() => setFormAcik((a) => !a)}>{formAcik ? 'Kapat' : '+ İndirilecek KDV Ekle'}</Buton>
       </div>
       <div style={{ fontSize: 12.5, color: 'var(--metin-ikincil)', marginBottom: 14 }}>
-        Hesaplanan KDV, satış faturalarınızdan otomatik hesaplanır. İndirilecek KDV (alış faturalarınızdaki KDV) sistemde
-        ayrıca tutulmadığı için elle giriyorsunuz — muhasebecinizden/alış faturalarınızdan aylık toplamı buraya ekleyin.
+        Hesaplanan KDV, satış faturalarınızdan otomatik hesaplanır. İndirilecek KDV artık siparişlerinizin (alım) KDV
+        oranlarından da otomatik hesaplanıyor — sipariş dışı bir gideriniz varsa "+ İndirilecek KDV Ekle" ile ayrıca ekleyebilirsiniz.
       </div>
       <HataMesaji>{hata}</HataMesaji>
 
