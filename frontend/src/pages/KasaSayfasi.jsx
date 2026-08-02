@@ -1,7 +1,7 @@
 import { useEffect, useState, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, hataMesajiCikar } from '../api/client';
-import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat, eylemChipStili, OtomatikTamamlamaGirdisi, Etiket } from '../components/Ortak';
+import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat, eylemChipStili, OtomatikTamamlamaGirdisi, Etiket, ParaGirdisi } from '../components/Ortak';
 
 function tarihFormat(iso) {
   if (!iso || typeof iso !== 'string' || !iso.includes('-')) return iso || '—';
@@ -85,12 +85,14 @@ const BEKLEYEN_ENDPOINT_MAP = {
   SABIT_GIDER: (id) => `/sabit-giderler/${id}/ode`,
   AKREDITIF_KALEMI: (id) => `/akreditif-kalemleri/${id}/ode`,
   AKREDITIF_KALEM_TAKSIT: (id) => `/akreditif-kalem-taksitleri/${id}/ode`,
+  AKREDITIF_GENEL: (id) => `/akreditifler/${id}/genel-odeme`,
 };
 
 const BEKLEYEN_TUR_METIN = {
   LEASING_ODEME: 'Leasing Ödemesi',
   AKREDITIF_KALEMI: 'Akreditif Kalemi',
   AKREDITIF_KALEM_TAKSIT: 'Akreditif Taksiti',
+  AKREDITIF_GENEL: 'Akreditif Genel Bakiye',
   KIRALAMA_ODEME: 'Kiralama Ödemesi (Tahsilat)',
   TAKSIT_DETAY: 'Taksitli Satış Tahsilatı',
   PERSONEL_ODEME: 'Personel Ödemesi',
@@ -203,6 +205,7 @@ function YeniKasaHareketiFormu({ onKaydedildi, onVazgec }) {
   const [bekleyenTur, setBekleyenTur] = useState('');
   const [seciliBekleyenAnahtar, setSeciliBekleyenAnahtar] = useState('');
   const [bekleyenKur, setBekleyenKur] = useState('1');
+  const [bekleyenTutar, setBekleyenTutar] = useState('');
 
   const mevcutTurler = [...new Set(bekleyenler.map((b) => b.kaynak_tablo))];
   const turaGoreFiltrelenmis = bekleyenTur ? bekleyenler.filter((b) => b.kaynak_tablo === bekleyenTur) : [];
@@ -236,6 +239,11 @@ function YeniKasaHareketiFormu({ onKaydedildi, onVazgec }) {
 
   const seciliBekleyen = bekleyenler.find((b) => `${b.kaynak_tablo}:${b.kaynak_id}` === seciliBekleyenAnahtar);
   const bekleyenKurGerekli = baglantiliModu && seciliBekleyen && seciliBekleyen.para_birimi !== 'TRY';
+  const bekleyenKismiOdenebilirMi = seciliBekleyen && (seciliBekleyen.kaynak_tablo === 'AKREDITIF_KALEMI' || seciliBekleyen.kaynak_tablo === 'AKREDITIF_GENEL');
+
+  useEffect(() => {
+    if (seciliBekleyen) setBekleyenTutar(String(seciliBekleyen.tutar));
+  }, [seciliBekleyenAnahtar]); // eslint-disable-line
 
   async function kaydet(e) {
     e.preventDefault();
@@ -249,12 +257,14 @@ function YeniKasaHareketiFormu({ onKaydedildi, onVazgec }) {
           return;
         }
         const endpointFn = BEKLEYEN_ENDPOINT_MAP[seciliBekleyen.kaynak_tablo];
-        await api.put(endpointFn(seciliBekleyen.kaynak_id), {
+        const govde = {
           odeme_tarihi: form.tarih,
           odeme_yontemi: 'NAKIT',
           banka_hesap_id: null,
           kur: bekleyenKurGerekli ? Number(bekleyenKur) : null,
-        });
+        };
+        if (bekleyenKismiOdenebilirMi) govde.tutar = Number(bekleyenTutar);
+        await api.put(endpointFn(seciliBekleyen.kaynak_id), govde);
       } else {
         await api.post('/kasa-hareketleri', {
           ...form,
@@ -319,6 +329,11 @@ function YeniKasaHareketiFormu({ onKaydedildi, onVazgec }) {
                 )}
               </Alan>
             </div>
+            {bekleyenKismiOdenebilirMi && (
+              <Alan etiket={`Ödenecek tutar (${seciliBekleyen.para_birimi}) — kısmi ödeme yapabilirsiniz`}>
+                <ParaGirdisi required value={bekleyenTutar} onChange={(v) => setBekleyenTutar(v)} />
+              </Alan>
+            )}
             <div style={{ display: 'grid', gridTemplateColumns: bekleyenKurGerekli ? '1fr 1fr' : '1fr', gap: 12 }}>
               <Alan etiket="Tarih">
                 <input required type="date" value={form.tarih} onChange={(e) => setForm((f) => ({ ...f, tarih: e.target.value }))} style={girdiStili} />
