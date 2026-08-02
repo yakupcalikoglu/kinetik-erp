@@ -244,7 +244,7 @@ def bekleyen_odemeleri_listele(
         TaksitDetay, TaksitliSatisPlani, Cek, CekDurum,
     )
     from app.models.diger import PersonelOdeme, Personel, SabitGider, SabitGiderKategori
-    from app.models.akreditif import AkreditifKalemi, Akreditif, AkreditifKalemTip
+    from app.models.akreditif import AkreditifKalemi, Akreditif, AkreditifKalemTip, AkreditifDurum
     from app.models.akreditif_taksit import AkreditifKalemTaksiti
 
     # --- Çekler (portföyde bekleyenler; ALINAN -> tahsil edilecek GIRIS, VERILEN -> odenecek CIKIS)
@@ -323,7 +323,9 @@ def bekleyen_odemeleri_listele(
             tutar=g.tutar, para_birimi="TRY", vade_tarihi=g.donem, yon="CIKIS",
         ))
 
-    # --- Akreditif kalemleri (taksitlendirilmemiş, ödenmemiş -> CIKIS)
+    # --- Akreditif kalemleri (taksitlendirilmemis, KISMEN ya da HIC odenmemis -> CIKIS)
+    # NOT: odendi_mi yerine odenen_tutar < tutar kontrol edilir - kismi
+    # odeme yapilmis bir kalem de (kalan bakiyesiyle) hala secilebilir olmali.
     for k in db.execute(
         select(AkreditifKalemi).join(Akreditif, Akreditif.id == AkreditifKalemi.akreditif_id)
         .where(Akreditif.sirket_id == sirket_id, AkreditifKalemi.odendi_mi.is_(False))
@@ -334,11 +336,35 @@ def bekleyen_odemeleri_listele(
         if taksit_var_mi is not None:
             continue  # taksitlendirilmis kalemler yerine kendi taksitleri listelenir
         akreditif = db.get(Akreditif, k.akreditif_id)
+        kalan = k.tutar - (k.odenen_tutar or Decimal("0"))
+        if kalan <= 0:
+            continue
         ust_baslik = f"Akreditif {akreditif.akreditif_no or '#' + str(akreditif.id)}"
         sonuc.append(BekleyenOdemeYanit(
             kaynak_tablo="AKREDITIF_KALEMI", kaynak_id=k.id, ust_baslik=ust_baslik,
-            etiket=f"{k.tip.value} — {k.aciklama or ''}",
-            tutar=k.tutar, para_birimi=akreditif.para_birimi.value, vade_tarihi=k.vade_tarihi, yon="CIKIS",
+            etiket=f"{k.tip.value} — {k.aciklama or ''}" + (" (kısmi ödenmiş)" if k.odenen_tutar else ""),
+            tutar=kalan, para_birimi=akreditif.para_birimi.value, vade_tarihi=k.vade_tarihi, yon="CIKIS",
+        ))
+
+    # --- Akreditifin KALEMLERE DAGITILMAMIS genel bakiyesi (henuz hic kalem
+    # eklenmemis olsa bile, acik bir akreditifin tamami taahhut/borc sayilir -
+    # bu yuzden kalemlerin toplami akreditifin tutarindan azsa, aradaki fark
+    # da "Genel Bakiye" olarak secilebilir olmali; aksi halde kullanici
+    # kalem eklemeden o akreditife hicbir odeme giremezdi.)
+    acik_akreditifler_genel = list(db.execute(
+        select(Akreditif).where(Akreditif.sirket_id == sirket_id, Akreditif.durum != AkreditifDurum.IPTAL)
+    ).scalars())
+    for ak in acik_akreditifler_genel:
+        kalemler = list(db.execute(select(AkreditifKalemi).where(AkreditifKalemi.akreditif_id == ak.id)).scalars())
+        kalemlere_dagitilmis = sum((k.tutar for k in kalemler), Decimal("0"))
+        genel_kalan = ak.tutar - kalemlere_dagitilmis
+        if genel_kalan <= 0:
+            continue
+        ust_baslik = f"Akreditif {ak.akreditif_no or '#' + str(ak.id)}"
+        sonuc.append(BekleyenOdemeYanit(
+            kaynak_tablo="AKREDITIF_GENEL", kaynak_id=ak.id, ust_baslik=ust_baslik,
+            etiket="Genel Bakiye (henüz kalem eklenmemiş kısım)",
+            tutar=genel_kalan, para_birimi=ak.para_birimi, vade_tarihi=ak.vade_tarihi, yon="CIKIS",
         ))
 
     # --- Akreditif kalem taksitleri (ödenmemiş -> CIKIS)
