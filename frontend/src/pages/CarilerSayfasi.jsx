@@ -2,7 +2,7 @@ import { useEffect, useState, Fragment } from 'react';
 import * as XLSX from 'xlsx';
 import { api, hataMesajiCikar } from '../api/client';
 import {
-  Kart, SayfaBasligi, Buton, Etiket, Alan, girdiStili, BosDurum, HataMesaji, paraFormat, eylemChipStili,
+  Kart, SayfaBasligi, Buton, Etiket, Alan, girdiStili, BosDurum, HataMesaji, paraFormat, eylemChipStili, ParaGirdisi,
 } from '../components/Ortak';
 import { useNavigate } from 'react-router-dom';
 import AramaliSecici from '../components/AramaliSecici';
@@ -525,7 +525,7 @@ function AlimMiniFormu({ cari, onTamamlandi, onVazgec }) {
         </Alan>
         <Alan etiket="Birim fiyat">
           <div style={{ display: 'flex', gap: 6 }}>
-            <input required type="number" step="0.01" value={form.birim_fiyat} onChange={(e) => setForm((f) => ({ ...f, birim_fiyat: e.target.value }))} style={{ ...girdiStili, flex: 1 }} />
+            <ParaGirdisi required value={form.birim_fiyat} onChange={(v) => setForm((f) => ({ ...f, birim_fiyat: v }))} style={{ flex: 1 }} />
             <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={{ ...girdiStili, width: 80 }}>
               <option value="TRY">TL</option>
               <option value="USD">USD</option>
@@ -684,7 +684,7 @@ function SatisMiniFormu({ cari, onTamamlandi, onVazgec }) {
           )}
         </Alan>
         <Alan etiket="Satış fiyatı (TL)">
-          <input required type="number" step="0.01" value={form.satis_fiyati_try} onChange={(e) => setForm((f) => ({ ...f, satis_fiyati_try: e.target.value }))} style={girdiStili} />
+          <ParaGirdisi required value={form.satis_fiyati_try} onChange={(v) => setForm((f) => ({ ...f, satis_fiyati_try: v }))} />
         </Alan>
         <Alan etiket="Tarih">
           <input required type="date" value={form.tarih} onChange={(e) => setForm((f) => ({ ...f, tarih: e.target.value }))} style={girdiStili} />
@@ -780,7 +780,7 @@ function KiralamaMiniFormu({ cari, onTamamlandi, onVazgec }) {
         </Alan>
         <Alan etiket="Aylık kira tutarı">
           <div style={{ display: 'flex', gap: 6 }}>
-            <input required type="number" step="0.01" value={form.aylik_kira_tutari} onChange={(e) => setForm((f) => ({ ...f, aylik_kira_tutari: e.target.value }))} style={{ ...girdiStili, flex: 1 }} />
+            <ParaGirdisi required value={form.aylik_kira_tutari} onChange={(v) => setForm((f) => ({ ...f, aylik_kira_tutari: v }))} style={{ flex: 1 }} />
             <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={{ ...girdiStili, width: 80 }}>
               <option value="TRY">TL</option>
               <option value="USD">USD</option>
@@ -863,7 +863,7 @@ function BakimMiniFormu({ cari, onTamamlandi, onVazgec }) {
           </select>
         </Alan>
         <Alan etiket="Tutar (TL)">
-          <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
+          <ParaGirdisi required value={form.tutar} onChange={(v) => setForm((f) => ({ ...f, tutar: v }))} />
         </Alan>
         <Alan etiket="Tarih">
           <input required type="date" value={form.tarih} onChange={(e) => setForm((f) => ({ ...f, tarih: e.target.value }))} style={girdiStili} />
