@@ -549,6 +549,7 @@ export default function SiparislerSayfasi() {
   const [icerikAcikId, setIcerikAcikId] = useState(null);
   const [belgeNotlari, setBelgeNotlari] = useState({}); // siparisId -> gecici not metni (sadece bu oturum icin)
   const siralama = useSiralama();
+  const [filtreSiparisNo, setFiltreSiparisNo] = useState(new URLSearchParams(location.search).get('ara') || '');
   const [filtreTedarikciId, setFiltreTedarikciId] = useState('');
   const [filtreBaslangic, setFiltreBaslangic] = useState('');
   const [filtreBitis, setFiltreBitis] = useState('');
@@ -656,6 +657,7 @@ export default function SiparislerSayfasi() {
   }
 
   const gosterilecekSiparisler = siparisler.filter((s) => {
+    if (filtreSiparisNo && !s.siparis_no.toLocaleLowerCase('tr').includes(filtreSiparisNo.toLocaleLowerCase('tr'))) return false;
     if (filtreTedarikciId && String(s.tedarikci_cari_id) !== String(filtreTedarikciId)) return false;
     if (filtreDurum && s.durum !== filtreDurum) return false;
     if (filtreBaslangic && s.siparis_tarihi < filtreBaslangic) return false;
@@ -678,7 +680,10 @@ export default function SiparislerSayfasi() {
       )}
 
       <Kart style={{ marginBottom: 12 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr', gap: 10 }}>
+          <Alan etiket="Sipariş no'ya göre filtrele">
+            <input value={filtreSiparisNo} onChange={(e) => setFiltreSiparisNo(e.target.value)} placeholder="Örn: 2026-002" style={girdiStili} />
+          </Alan>
           <Alan etiket="Tedarikçiye göre filtrele">
             <AramaliSecici secenekler={cariler} deger={filtreTedarikciId} onDegistir={setFiltreTedarikciId} etiketFn={(c) => c.unvan} bosMetin="Tümü / yazarak arayın..." />
           </Alan>
@@ -711,13 +716,15 @@ export default function SiparislerSayfasi() {
         ) : (
           <table style={{ tableLayout: 'fixed', width: '100%' }}>
             <colgroup>
-              <col style={{ width: '14%' }} />
               <col style={{ width: '12%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '9%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '9%' }} />
+              <col style={{ width: '9%' }} />
+              <col style={{ width: '9%' }} />
               <col style={{ width: '11%' }} />
-              <col style={{ width: '12%' }} />
-              <col style={{ width: '11%' }} />
-              <col style={{ width: '13%' }} />
-              <col style={{ width: '27%' }} />
+              <col style={{ width: '21%' }} />
             </colgroup>
             <thead>
               <tr style={{ background: 'var(--zemin)' }}>
@@ -726,6 +733,8 @@ export default function SiparislerSayfasi() {
                 <SiraliBaslik alanAdi="siparis_tarihi" siralama={siralama}>Tarih</SiraliBaslik>
                 <SiraliBaslik alanAdi="durum" siralama={siralama}>Durum</SiraliBaslik>
                 <SiraliBaslik alanAdi="_toplam" siralama={siralama}>Tutar</SiraliBaslik>
+                <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>Ödenen</th>
+                <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>Kalan</th>
                 <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>Ödeme Durumu</th>
                 <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>İşlem</th>
               </tr>
@@ -756,6 +765,12 @@ export default function SiparislerSayfasi() {
                         <Etiket ton={DURUM_ETIKET[s.durum]}>{DURUM_METIN[s.durum]}</Etiket>
                       </td>
                       <td style={{ padding: '12px 16px' }}>{paraFormat(toplam, s.para_birimi)}</td>
+                      <td style={{ padding: '12px 16px', color: 'var(--yesil)' }}>
+                        {bakiyeHaritasi[s.id] ? paraFormat(bakiyeHaritasi[s.id].toplam_odenen, s.para_birimi) : '—'}
+                      </td>
+                      <td style={{ padding: '12px 16px', fontWeight: 600, color: bakiyeHaritasi[s.id] && Number(bakiyeHaritasi[s.id].kalan_bakiye) > 0 ? 'var(--kirmizi)' : 'var(--yesil)' }}>
+                        {bakiyeHaritasi[s.id] ? paraFormat(bakiyeHaritasi[s.id].kalan_bakiye, s.para_birimi) : '—'}
+                      </td>
                       <td style={{ padding: '12px 16px' }}>
                         {(() => {
                           const b = bakiyeHaritasi[s.id];
@@ -854,28 +869,28 @@ export default function SiparislerSayfasi() {
                     </tr>
                     {detay360AcikId === s.id && (
                       <tr>
-                        <td colSpan={7} style={{ padding: 0 }}>
+                        <td colSpan={9} style={{ padding: 0 }}>
                           <Siparis360Paneli siparis={s} onKapat={() => setDetay360AcikId(null)} />
                         </td>
                       </tr>
                     )}
                     {odemelerAcikSiparisId === s.id && (
                       <tr>
-                        <td colSpan={7} style={{ padding: 0 }}>
+                        <td colSpan={9} style={{ padding: 0 }}>
                           <SiparisOdemeleriPaneli siparis={s} onKapat={() => setOdemelerAcikSiparisId(null)} />
                         </td>
                       </tr>
                     )}
                     {gumrukAcikSiparisId === s.id && (
                       <tr>
-                        <td colSpan={7} style={{ padding: 0 }}>
+                        <td colSpan={9} style={{ padding: 0 }}>
                           <GumrukBeyannameleriPaneli siparis={s} cariler={cariler} onKapat={() => setGumrukAcikSiparisId(null)} />
                         </td>
                       </tr>
                     )}
                     {icerikAcikId === s.id && (
                       <tr>
-                        <td colSpan={7} style={{ padding: '12px 16px', background: 'var(--zemin)' }}>
+                        <td colSpan={9} style={{ padding: '12px 16px', background: 'var(--zemin)' }}>
                           <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Sipariş içeriği</div>
                           {(s.urunler || []).length === 0 ? (
                             <div style={{ fontSize: 13, color: 'var(--metin-soluk)' }}>Bu siparişte ürün bulunamadı.</div>
@@ -906,7 +921,7 @@ export default function SiparislerSayfasi() {
                     )}
                     {durumDegistirAcikId === s.id && (
                       <tr>
-                        <td colSpan={7} style={{ padding: '12px 16px', background: 'var(--zemin)' }}>
+                        <td colSpan={9} style={{ padding: '12px 16px', background: 'var(--zemin)' }}>
                           <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
                             <div style={{ flex: 1, maxWidth: 220 }}>
                               <Alan etiket="Yeni durum">
@@ -933,7 +948,7 @@ export default function SiparislerSayfasi() {
                     )}
                     {belgeAcik?.siparisId === s.id && (
                       <tr>
-                        <td colSpan={7} style={{ padding: '12px 16px', background: 'var(--zemin)' }}>
+                        <td colSpan={9} style={{ padding: '12px 16px', background: 'var(--zemin)' }}>
                           <BelgeSablonu
                             onKapat={() => setBelgeAcik(null)}
                             belgeBasligi={`Sipariş Formu${belgeAcik.nusha === 'tedarikci' ? ' (Tedarikçi Nüshası)' : ' (Şirket İçi)'}`}
