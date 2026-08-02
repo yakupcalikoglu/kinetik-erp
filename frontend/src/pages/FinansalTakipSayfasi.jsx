@@ -914,8 +914,9 @@ function MaliyetDagitimFormu({ akreditif, onKapat, onTamamlandi }) {
 
 function AkreditifKalemOdemeFormu({ kalem, akreditif, onKaydedildi, onVazgec }) {
   const [bankaHesaplari, setBankaHesaplari] = useState([]);
+  const kalanBakiye = Number(kalem.tutar) - Number(kalem.odenen_tutar || 0);
   const [form, setForm] = useState({
-    odeme_yontemi: 'BANKA', banka_hesap_id: '', odeme_tarihi: new Date().toISOString().slice(0, 10), kur: '1',
+    tutar: String(kalanBakiye), odeme_yontemi: 'BANKA', banka_hesap_id: '', odeme_tarihi: new Date().toISOString().slice(0, 10), kur: '1',
   });
   const [hata, setHata] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
@@ -933,6 +934,7 @@ function AkreditifKalemOdemeFormu({ kalem, akreditif, onKaydedildi, onVazgec }) 
     setKaydediliyor(true);
     try {
       await api.put(`/akreditif-kalemleri/${kalem.id}/ode`, {
+        tutar: Number(form.tutar),
         odeme_tarihi: form.odeme_tarihi,
         odeme_yontemi: form.odeme_yontemi,
         banka_hesap_id: form.odeme_yontemi === 'BANKA' ? Number(form.banka_hesap_id) : null,
@@ -952,10 +954,13 @@ function AkreditifKalemOdemeFormu({ kalem, akreditif, onKaydedildi, onVazgec }) 
         <div style={{ padding: 16, background: 'var(--zemin)' }}>
           <form onSubmit={kaydet}>
             <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 12 }}>
-              Kalemi öde — {paraFormat(kalem.tutar, akreditif.para_birimi)}
+              Kalemi öde — kalan bakiye: {paraFormat(kalanBakiye, akreditif.para_birimi)}
             </div>
             <HataMesaji>{hata}</HataMesaji>
-            <div style={{ display: 'grid', gridTemplateColumns: akreditif.para_birimi !== 'TRY' ? '1fr 1fr 1fr 1fr' : '1fr 1fr 1fr', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: akreditif.para_birimi !== 'TRY' ? '1fr 1fr 1fr 1fr 1fr' : '1fr 1fr 1fr 1fr', gap: 12 }}>
+              <Alan etiket={`Ödenecek tutar (${akreditif.para_birimi}) — kısmi ödeme yapabilirsiniz`}>
+                <ParaGirdisi required value={form.tutar} onChange={(v) => setForm((f) => ({ ...f, tutar: v }))} />
+              </Alan>
               <Alan etiket="Ödeme yöntemi">
                 <select value={form.odeme_yontemi} onChange={(e) => setForm((f) => ({ ...f, odeme_yontemi: e.target.value }))} style={girdiStili}>
                   <option value="BANKA">Banka</option>
@@ -1692,9 +1697,20 @@ function AkreditifSekmesi() {
                         <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
                           <td style={{ padding: '8px 0' }}>{AKREDITIF_KALEM_TIP_METIN[k.tip]}</td>
                           <td style={{ padding: '8px 0' }}>{k.aciklama || '—'}</td>
-                          <td style={{ padding: '8px 0' }}>{paraFormat(k.tutar, seciliAkreditif.para_birimi)}</td>
+                          <td style={{ padding: '8px 0' }}>
+                            {paraFormat(k.tutar, seciliAkreditif.para_birimi)}
+                            {Number(k.odenen_tutar) > 0 && !k.odendi_mi && (
+                              <div style={{ fontSize: 11, color: 'var(--metin-ikincil)' }}>
+                                {paraFormat(k.odenen_tutar, seciliAkreditif.para_birimi)} ödendi
+                              </div>
+                            )}
+                          </td>
                           <td style={{ padding: '8px 0' }}>{k.vade_tarihi}</td>
-                          <td style={{ padding: '8px 0' }}><Etiket ton={k.odendi_mi ? 'yesil' : 'amber'}>{k.odendi_mi ? 'Ödendi' : 'Bekliyor'}</Etiket></td>
+                          <td style={{ padding: '8px 0' }}>
+                            <Etiket ton={k.odendi_mi ? 'yesil' : Number(k.odenen_tutar) > 0 ? 'amber' : 'notr'}>
+                              {k.odendi_mi ? 'Ödendi' : Number(k.odenen_tutar) > 0 ? 'Kısmi Ödendi' : 'Bekliyor'}
+                            </Etiket>
+                          </td>
                           <td style={{ padding: '8px 0' }}>
                             {k.odendi_mi ? (
                               <button onClick={() => kalemOdemesiniGeriAl(k.id)} style={eylemChipStili('kirmizi')}>Ödemeyi Geri Al</button>
