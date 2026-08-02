@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { api, hataMesajiCikar } from '../api/client';
 import {
   Kart, SayfaBasligi, Buton, Etiket, Alan, girdiStili, BosDurum, HataMesaji, paraFormat, Sekmeler, eylemChipStili,
-  OtomatikTamamlamaGirdisi,
+  OtomatikTamamlamaGirdisi, ParaGirdisi,
 } from '../components/Ortak';
 import AramaliSecici from '../components/AramaliSecici';
 
@@ -319,7 +319,7 @@ function OdemeFormu({ tutar: tutarProp, paraBirimi = 'TRY', aksiyonMetni = 'Öde
         {tutarDuzenlenebilir && (
           <div style={{ marginBottom: 10, maxWidth: 220 }}>
             <Alan etiket={tutarEtiketi}>
-              <input required type="number" step="0.01" value={tutarDuzenlenmis} onChange={(e) => setTutarDuzenlenmis(e.target.value)} style={girdiStili} />
+              <ParaGirdisi required value={tutarDuzenlenmis} onChange={(v) => setTutarDuzenlenmis(v)} />
             </Alan>
           </div>
         )}
@@ -418,7 +418,7 @@ function CekDuzenleFormu({ cek, cariler, onKaydedildi, onVazgec }) {
                 <AramaliSecici secenekler={cariler} deger={form.cari_id} onDegistir={(v) => setForm((f) => ({ ...f, cari_id: v }))} etiketFn={(c) => c.unvan} bosMetin="Cari yok / yazarak arayın..." />
               </Alan>
               <Alan etiket="Tutar">
-                <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
+                <ParaGirdisi required value={form.tutar} onChange={(v) => setForm((f) => ({ ...f, tutar: v }))} />
               </Alan>
               <Alan etiket="Para birimi">
                 <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={girdiStili}>
@@ -617,7 +617,7 @@ function CekSekmesi() {
               <AramaliSecici secenekler={cariler} deger={form.cari_id} onDegistir={(v) => setForm((f) => ({ ...f, cari_id: v }))} etiketFn={(c) => c.unvan} />
             </Alan>
             <Alan etiket="Tutar">
-              <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
+              <ParaGirdisi required value={form.tutar} onChange={(v) => setForm((f) => ({ ...f, tutar: v }))} />
             </Alan>
             <Alan etiket="Para birimi">
               <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={girdiStili}>
@@ -1039,7 +1039,7 @@ function AkreditifKalemDuzenleFormu({ kalem, onKaydedildi, onVazgec }) {
                 <input value={form.aciklama} onChange={(e) => setForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
               </Alan>
               <Alan etiket="Tutar">
-                <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
+                <ParaGirdisi required value={form.tutar} onChange={(v) => setForm((f) => ({ ...f, tutar: v }))} />
               </Alan>
               <Alan etiket="Vade tarihi">
                 <input required type="date" value={form.vade_tarihi} onChange={(e) => setForm((f) => ({ ...f, vade_tarihi: e.target.value }))} style={girdiStili} />
@@ -1089,7 +1089,7 @@ function TaksitDuzenleFormu({ taksit, onKaydedildi, onVazgec }) {
                 <input required type="date" value={form.vade_tarihi} onChange={(e) => setForm((f) => ({ ...f, vade_tarihi: e.target.value }))} style={girdiStili} />
               </Alan>
               <Alan etiket="Tutar">
-                <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
+                <ParaGirdisi required value={form.tutar} onChange={(v) => setForm((f) => ({ ...f, tutar: v }))} />
               </Alan>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
@@ -1224,7 +1224,7 @@ function TaksitlendirFormu({ kalem, onTamamlandi, onVazgec }) {
                 <input required type="number" min="2" value={form.taksit_sayisi} onChange={(e) => setForm((f) => ({ ...f, taksit_sayisi: e.target.value }))} style={girdiStili} />
               </Alan>
               <Alan etiket="Ek ücret (taksitlendirme bedeli)">
-                <input type="number" step="0.01" value={form.ek_ucret} onChange={(e) => setForm((f) => ({ ...f, ek_ucret: e.target.value }))} style={girdiStili} />
+                <ParaGirdisi value={form.ek_ucret} onChange={(v) => setForm((f) => ({ ...f, ek_ucret: v }))} />
               </Alan>
               <Alan etiket="İlk taksit vade tarihi">
                 <input required type="date" value={form.ilk_vade_tarihi} onChange={(e) => setForm((f) => ({ ...f, ilk_vade_tarihi: e.target.value }))} style={girdiStili} />
@@ -1562,7 +1562,7 @@ function AkreditifSekmesi() {
               </select>
             </Alan>
             <Alan etiket="Tutar (sipariş seçilince otomatik doldurulur, elle düzeltebilirsiniz)">
-              <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
+              <ParaGirdisi required value={form.tutar} onChange={(v) => setForm((f) => ({ ...f, tutar: v }))} />
             </Alan>
             <DovizKarsiligiGosterge tutar={form.tutar} paraBirimi={form.para_birimi} />
             <Alan etiket="Açılış tarihi">
@@ -1587,7 +1587,9 @@ function AkreditifSekmesi() {
             { etiket: 'Akreditif No', alan: 'akreditif_no' },
             { etiket: 'Sipariş', alan: '_siparis' },
             { etiket: 'Banka', alan: '_banka' },
-            { etiket: 'Tutar', alan: 'tutar' },
+            { etiket: 'Ödenecek Toplam', alan: 'tutar' },
+            { etiket: 'Ödenen', alan: 'toplam_odenen' },
+            { etiket: 'Kalan', alan: 'kalan_bakiye' },
             { etiket: 'Açılış', alan: 'acilis_tarihi' },
             { etiket: 'Vade', alan: 'vade_tarihi' },
             { etiket: 'Durum', alan: 'durum' },
@@ -1605,6 +1607,10 @@ function AkreditifSekmesi() {
               <td style={{ padding: '10px 16px' }}>{siparisEtiketi(a.siparis_id)}</td>
               <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{bankaEtiketi(a.banka_hesap_id)}</td>
               <td style={{ padding: '10px 16px' }}>{paraFormat(a.tutar, a.para_birimi)}</td>
+              <td style={{ padding: '10px 16px', color: 'var(--yesil)' }}>{paraFormat(a.toplam_odenen, a.para_birimi)}</td>
+              <td style={{ padding: '10px 16px', fontWeight: 600, color: Number(a.kalan_bakiye) > 0 ? 'var(--kirmizi)' : 'var(--yesil)' }}>
+                {paraFormat(a.kalan_bakiye, a.para_birimi)}
+              </td>
               <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{tarihFormat(a.acilis_tarihi)}</td>
               <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{a.vade_tarihi ? tarihFormat(a.vade_tarihi) : '—'}</td>
               <td style={{ padding: '10px 16px' }}><Etiket ton={AKREDITIF_DURUM_TON[a.durum]}>{AKREDITIF_DURUM_METIN[a.durum]}</Etiket></td>
@@ -1651,7 +1657,7 @@ function AkreditifSekmesi() {
               <input value={kalemForm.aciklama} onChange={(e) => setKalemForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
             </Alan>
             <Alan etiket="Tutar">
-              <input required type="number" step="0.01" value={kalemForm.tutar} onChange={(e) => setKalemForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
+              <ParaGirdisi required value={kalemForm.tutar} onChange={(v) => setKalemForm((f) => ({ ...f, tutar: v }))} />
             </Alan>
             <Alan etiket="Vade tarihi">
               <input required type="date" value={kalemForm.vade_tarihi} onChange={(e) => setKalemForm((f) => ({ ...f, vade_tarihi: e.target.value }))} style={girdiStili} />
@@ -1852,7 +1858,7 @@ function PersonelSekmesi() {
               <input value={form.pozisyon} onChange={(e) => setForm((f) => ({ ...f, pozisyon: e.target.value }))} style={girdiStili} />
             </Alan>
             <Alan etiket="Aylık maaş (TL)">
-              <input type="number" step="0.01" value={form.aylik_maas} onChange={(e) => setForm((f) => ({ ...f, aylik_maas: e.target.value }))} style={girdiStili} />
+              <ParaGirdisi value={form.aylik_maas} onChange={(v) => setForm((f) => ({ ...f, aylik_maas: v }))} />
             </Alan>
             <Alan etiket="İşe başlama tarihi">
               <input type="date" value={form.ise_baslama_tarihi} onChange={(e) => setForm((f) => ({ ...f, ise_baslama_tarihi: e.target.value }))} style={girdiStili} />
@@ -1934,7 +1940,7 @@ function PersonelSekmesi() {
               </select>
             </Alan>
             <Alan etiket="Tutar">
-              <input required type="number" step="0.01" value={odemeForm.tutar} onChange={(e) => setOdemeForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
+              <ParaGirdisi required value={odemeForm.tutar} onChange={(v) => setOdemeForm((f) => ({ ...f, tutar: v }))} />
             </Alan>
             <div style={{ alignSelf: 'end' }}><Buton type="submit">Tahakkuk ettir</Buton></div>
           </form>
@@ -2085,7 +2091,7 @@ function BakimSekmesi() {
               />
             </Alan>
             <Alan etiket="Tutar">
-              <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
+              <ParaGirdisi required value={form.tutar} onChange={(v) => setForm((f) => ({ ...f, tutar: v }))} />
             </Alan>
             <Alan etiket="Para birimi">
               <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={girdiStili}>
@@ -2337,7 +2343,7 @@ function LeasingSekmesi() {
                           <input required type="number" min="1" value={k.miktar} onChange={(e) => kalemGuncelle(i, 'miktar', e.target.value)} style={{ ...girdiStili, width: 80 }} />
                         </td>
                         <td style={{ padding: 6 }}>
-                          <input required type="number" step="0.01" value={k.birim_fiyat} onChange={(e) => kalemGuncelle(i, 'birim_fiyat', e.target.value)} style={{ ...girdiStili, width: 130 }} />
+                          <ParaGirdisi required value={k.birim_fiyat} onChange={(v) => kalemGuncelle(i, 'birim_fiyat', v)} style={{ width: 130 }} />
                         </td>
                         <td style={{ padding: 6, fontSize: 13, fontWeight: 500 }}>{paraFormat(satirToplam, form.para_birimi)}</td>
                         <td style={{ padding: 6 }}>
@@ -2567,7 +2573,7 @@ function KiralamaSonlandirmaFormu({ sozlesme, onKaydedildi, onVazgec }) {
             </div>
             <div style={{ minWidth: 160 }}>
               <Alan etiket={`Son dönem tahsilatı (${sozlesme.para_birimi}, 0 olabilir)`}>
-                <input type="number" step="0.01" value={form.son_donem_tutari} onChange={(e) => setForm((f) => ({ ...f, son_donem_tutari: e.target.value }))} style={girdiStili} />
+                <ParaGirdisi value={form.son_donem_tutari} onChange={(v) => setForm((f) => ({ ...f, son_donem_tutari: v }))} />
               </Alan>
             </div>
             {Number(form.son_donem_tutari) > 0 && (
@@ -2785,7 +2791,7 @@ function KiralamaSekmesi() {
                 </Alan>
               )}
               <Alan etiket="Depozito (opsiyonel)">
-                <input type="number" step="0.01" value={form.depozito} onChange={(e) => setForm((f) => ({ ...f, depozito: e.target.value }))} style={girdiStili} />
+                <ParaGirdisi value={form.depozito} onChange={(v) => setForm((f) => ({ ...f, depozito: v }))} />
               </Alan>
             </div>
 
@@ -2817,7 +2823,7 @@ function KiralamaSekmesi() {
                           <input required type="number" min="1" value={k.miktar} onChange={(e) => kalemGuncelle(i, 'miktar', e.target.value)} style={{ ...girdiStili, width: 80 }} />
                         </td>
                         <td style={{ padding: 6 }}>
-                          <input required type="number" step="0.01" value={k.birim_fiyat} onChange={(e) => kalemGuncelle(i, 'birim_fiyat', e.target.value)} style={{ ...girdiStili, width: 130 }} />
+                          <ParaGirdisi required value={k.birim_fiyat} onChange={(v) => kalemGuncelle(i, 'birim_fiyat', v)} style={{ width: 130 }} />
                         </td>
                         <td style={{ padding: 6, fontSize: 13, fontWeight: 500 }}>{paraFormat(satirToplam, form.para_birimi)}</td>
                         <td style={{ padding: 6 }}>
@@ -2976,7 +2982,7 @@ function KiralamaSekmesi() {
               <input required type="date" value={odemeForm.donem_sonu} onChange={(e) => setOdemeForm((f) => ({ ...f, donem_sonu: e.target.value }))} style={girdiStili} />
             </Alan>
             <Alan etiket="Tutar">
-              <input required type="number" step="0.01" value={odemeForm.tutar} onChange={(e) => setOdemeForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
+              <ParaGirdisi required value={odemeForm.tutar} onChange={(v) => setOdemeForm((f) => ({ ...f, tutar: v }))} />
             </Alan>
             <div style={{ alignSelf: 'end' }}><Buton type="submit">Dönem ekle</Buton></div>
           </form>
@@ -3140,7 +3146,7 @@ function TaksitSekmesi() {
                 <AramaliSecici secenekler={cariler} deger={form.musteri_cari_id} onDegistir={(v) => setForm((f) => ({ ...f, musteri_cari_id: v }))} etiketFn={(c) => c.unvan} />
               </Alan>
               <Alan etiket="Peşinat (TL)">
-                <input type="number" step="0.01" value={form.pesinat} onChange={(e) => setForm((f) => ({ ...f, pesinat: e.target.value }))} style={girdiStili} />
+                <ParaGirdisi value={form.pesinat} onChange={(v) => setForm((f) => ({ ...f, pesinat: v }))} />
               </Alan>
               <Alan etiket="Taksit sayısı">
                 <input required type="number" min="1" value={form.taksit_sayisi} onChange={(e) => setForm((f) => ({ ...f, taksit_sayisi: e.target.value }))} style={girdiStili} />
@@ -3174,7 +3180,7 @@ function TaksitSekmesi() {
                         <input required type="number" min="1" value={k.miktar} onChange={(e) => kalemGuncelle(i, 'miktar', e.target.value)} style={{ ...girdiStili, width: 80 }} />
                       </td>
                       <td style={{ padding: 6 }}>
-                        <input required type="number" step="0.01" value={k.birim_fiyat} onChange={(e) => kalemGuncelle(i, 'birim_fiyat', e.target.value)} style={{ ...girdiStili, width: 130 }} />
+                        <ParaGirdisi required value={k.birim_fiyat} onChange={(v) => kalemGuncelle(i, 'birim_fiyat', v)} style={{ width: 130 }} />
                       </td>
                       <td style={{ padding: 6, fontSize: 13, fontWeight: 500 }}>{paraFormat(satirToplam)}</td>
                       <td style={{ padding: 6 }}>
@@ -3501,7 +3507,7 @@ function SabitGiderSekmesi() {
               </select>
             </Alan>
             <Alan etiket="Tutar">
-              <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
+              <ParaGirdisi required value={form.tutar} onChange={(v) => setForm((f) => ({ ...f, tutar: v }))} />
             </Alan>
             {form.para_birimi !== 'TRY' ? (
               <Alan etiket={`Kur (${form.para_birimi} → TL)`}>
@@ -3667,10 +3673,10 @@ function BorcDuzenleFormu({ borc, cariler, onKaydedildi, onVazgec }) {
                 </select>
               </Alan>
               <Alan etiket="Tutar">
-                <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
+                <ParaGirdisi required value={form.tutar} onChange={(v) => setForm((f) => ({ ...f, tutar: v }))} />
               </Alan>
               <Alan etiket="Faiz oranı (%)">
-                <input type="number" step="0.01" value={form.faiz_orani} onChange={(e) => setForm((f) => ({ ...f, faiz_orani: e.target.value }))} style={girdiStili} />
+                <ParaGirdisi value={form.faiz_orani} onChange={(v) => setForm((f) => ({ ...f, faiz_orani: v }))} />
               </Alan>
               <Alan etiket="Alınma tarihi">
                 <input required type="date" value={form.alinma_tarihi} onChange={(e) => setForm((f) => ({ ...f, alinma_tarihi: e.target.value }))} style={girdiStili} />
@@ -3774,7 +3780,7 @@ function BorcSekmesi() {
               </select>
             </Alan>
             <Alan etiket="Tutar">
-              <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
+              <ParaGirdisi required value={form.tutar} onChange={(v) => setForm((f) => ({ ...f, tutar: v }))} />
             </Alan>
             <DovizKarsiligiGosterge tutar={form.tutar} paraBirimi={form.para_birimi} />
             <Alan etiket="Alınma tarihi">
