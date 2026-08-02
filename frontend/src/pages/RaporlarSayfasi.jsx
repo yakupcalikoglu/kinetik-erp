@@ -261,6 +261,56 @@ function HarcamaTurleriOzetiKarti() {
 }
 
 // ============================================================== KÂR MARJI ANALİZİ
+function NakitAkisTahminiKarti() {
+  const [veri, setVeri] = useState(null);
+  const [hata, setHata] = useState(null);
+
+  useEffect(() => {
+    api.get('/raporlar/nakit-akis-tahmini').then((r) => setVeri(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
+  }, []);
+
+  return (
+    <Kart style={{ marginBottom: 16 }}>
+      <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Nakit Akış Tahmini</div>
+      <div style={{ fontSize: 12.5, color: 'var(--metin-ikincil)', marginBottom: 14 }}>
+        Mevcut Kasa + Banka bakiyeniz, önümüzdeki günlerde beklenen tahsilat ve ödemelerle netleştirilerek tahmini gelecek bakiyeniz hesaplanır.
+      </div>
+      <HataMesaji>{hata}</HataMesaji>
+      {!veri ? (
+        <div style={{ color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
+      ) : (
+        <>
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 11.5, color: 'var(--metin-ikincil)' }}>Mevcut Kasa + Banka Bakiyesi (TL)</div>
+            <div style={{ fontSize: 20, fontWeight: 700 }}>{paraFormat(veri.mevcut_bakiye_try)}</div>
+          </div>
+          <table>
+            <thead>
+              <tr style={{ background: 'var(--zemin)' }}>
+                {['Dönem', 'Beklenen Tahsilat', 'Beklenen Ödeme', 'Tahmini Bakiye'].map((b) => (
+                  <th key={b} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 12, color: 'var(--metin-ikincil)' }}>{b}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {veri.satirlar.map((s) => (
+                <tr key={s.gun} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                  <td style={{ padding: '8px 12px', fontWeight: 500 }}>Önümüzdeki {s.gun} gün</td>
+                  <td style={{ padding: '8px 12px', color: 'var(--yesil)' }}>+{paraFormat(s.beklenen_tahsilat_try)}</td>
+                  <td style={{ padding: '8px 12px', color: 'var(--kirmizi)' }}>-{paraFormat(s.beklenen_odeme_try)}</td>
+                  <td style={{ padding: '8px 12px', fontWeight: 700, color: Number(s.tahmini_bakiye_try) >= 0 ? 'inherit' : 'var(--kirmizi)' }}>
+                    {paraFormat(s.tahmini_bakiye_try)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+    </Kart>
+  );
+}
+
 function KdvOzetiKarti() {
   const [ozet, setOzet] = useState(null);
   const [hata, setHata] = useState(null);
@@ -920,6 +970,7 @@ export default function RaporlarSayfasi() {
       <SayfaBasligi baslik="Raporlar" aciklama="Genel bakış, yaklaşan vadeler, envanter, hareket türü, ürün ve cari bazlı raporlar" />
       <GenelBakisKarti />
       <AylikNetKarKarti />
+      <NakitAkisTahminiKarti />
       <KdvOzetiKarti />
       <KarMarjiKarti />
       <HarcamaTurleriOzetiKarti />
