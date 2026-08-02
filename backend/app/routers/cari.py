@@ -16,6 +16,7 @@ from app.schemas.cari import (
     CariGuncelleIstegi, CariYanit, CariHareketYanit, CariBakiyeYanit,
     CariTopluIceAktarIstegi, CariTopluIceAktarSonucu, CariOzetYaniti, CariOzetKalemi,
     CariHareketSatiri, TedarikciOzetiYaniti, TedarikciSonSiparisSatiri,
+    MusteriOzetiYaniti, MusteriSonSatisSatiri,
 )
 from app.services import uyumsoft_mock
 
@@ -688,4 +689,53 @@ async def tedarikci_ozeti(
         toplam_harcama_try=toplam_harcama_try,
         kalan_bakiye_try=toplam_harcama_try - toplam_odenen_try,
         son_siparisler=son_siparisler,
+    )
+
+
+@router.get("/{cari_id}/musteri-ozeti", response_model=MusteriOzetiYaniti,
+            dependencies=[Depends(izin_gerektir("CARI_GORUNTULE"))])
+async def musteri_ozeti(
+    cari_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
+):
+    """
+    Bir musterinin GECMISTEKI satis performansini ozetler: toplam kac
+    satis yapildi, toplam ne kadar (TL), guncel alacagimiz ne kadar, ve
+    en son yapilan satislarin kisa bir listesi. Satis Yap / Proforma
+    olustururken musteri secilince "bu musteriye daha once ne fiyata
+    sattik, bizde borcu var mi" sorusuna hizlica cevap vermek icin.
+    """
+    from decimal import Decimal as _Decimal
+    from app.models.stok import StokSeriNo, StokKarti, StokDurum
+
+    cari = db.get(CariHesap, cari_id)
+    if cari is None or cari.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Cari bulunamadı.")
+
+    satislar = list(db.execute(
+        select(StokSeriNo).where(
+            StokSeriNo.sirket_id == sirket_id, StokSeriNo.musteri_cari_id == cari_id,
+            StokSeriNo.durum == StokDurum.SATILDI,
+        )
+    ).scalars())
+    satislar.sort(key=lambda u: u.satis_tarihi or date.min, reverse=True)
+
+    toplam_satis_tutari = sum((u.satis_fiyati_try or _Decimal("0") for u in satislar), _Decimal("0"))
+
+    son_satislar: list[MusteriSonSatisSatiri] = []
+    for u in satislar[:5]:
+        kart = db.get(StokKarti, u.stok_karti_id)
+        son_satislar.append(MusteriSonSatisSatiri(
+            tarih=u.satis_tarihi, seri_no=u.seri_no,
+            urun_adi=f"{kart.marka} {kart.model}" if kart else "—",
+            tutar_try=u.satis_fiyati_try or _Decimal("0"),
+        ))
+
+    ozet = await cari_ozet(cari_id=cari_id, sirket_id=sirket_id, db=db)
+
+    return MusteriOzetiYaniti(
+        cari_id=cari_id, unvan=cari.unvan,
+        toplam_satis_sayisi=len(satislar),
+        toplam_satis_tutari_try=toplam_satis_tutari,
+        guncel_alacak_try=ozet.net_try,
+        son_satislar=son_satislar,
     )
