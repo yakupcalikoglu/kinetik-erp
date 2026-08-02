@@ -320,6 +320,7 @@ def siparis_kopyala(
             birim_fiyat=u.birim_fiyat,
             para_birimi=u.para_birimi,
             birim_agirlik_kg=u.birim_agirlik_kg,
+            kdv_orani=u.kdv_orani,
             aciklama=u.aciklama,
         ))
 
