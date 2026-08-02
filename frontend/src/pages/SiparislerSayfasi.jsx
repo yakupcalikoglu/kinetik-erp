@@ -2,7 +2,7 @@ import { useEffect, useState, Fragment } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, hataMesajiCikar } from '../api/client';
-import { Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat, eylemChipStili } from '../components/Ortak';
+import { Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat, eylemChipStili, ParaGirdisi } from '../components/Ortak';
 import BelgeSablonu from '../components/BelgeSablonu';
 import AramaliSecici from '../components/AramaliSecici';
 
@@ -277,7 +277,7 @@ function GumrukBeyannameleriPaneli({ siparis, cariler, onKapat }) {
               </select>
             </Alan>
             <Alan etiket="Tutar">
-              <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
+              <ParaGirdisi required value={form.tutar} onChange={(v) => setForm((f) => ({ ...f, tutar: v }))} />
             </Alan>
             {form.para_birimi !== 'TRY' && (
               <Alan etiket={`Kur (${form.para_birimi} → TL)`}>
@@ -285,7 +285,7 @@ function GumrukBeyannameleriPaneli({ siparis, cariler, onKapat }) {
               </Alan>
             )}
             <Alan etiket="KDV tutarı (opsiyonel, TL — bu tutarın ne kadarı KDV, KDV Özeti raporuna otomatik yansır)">
-              <input type="number" step="0.01" value={form.kdv_tutari} onChange={(e) => setForm((f) => ({ ...f, kdv_tutari: e.target.value }))} style={girdiStili} />
+              <ParaGirdisi value={form.kdv_tutari} onChange={(v) => setForm((f) => ({ ...f, kdv_tutari: v }))} />
             </Alan>
             <Alan etiket="Notlar">
               <input value={form.notlar} onChange={(e) => setForm((f) => ({ ...f, notlar: e.target.value }))} style={girdiStili} />
@@ -446,7 +446,7 @@ function SiparisOdemeleriPaneli({ siparis, onKapat }) {
         <form onSubmit={odemeEkle} style={{ marginBottom: 16, padding: 12, background: 'white', border: '1px solid var(--kenarlik)', borderRadius: 8 }}>
           <div style={{ display: 'grid', gridTemplateColumns: kurGerekli ? '1fr 1fr 1fr 1fr' : '1fr 1fr 1fr', gap: 10 }}>
             <Alan etiket={`Tutar (${siparis.para_birimi})`}>
-              <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
+              <ParaGirdisi required value={form.tutar} onChange={(v) => setForm((f) => ({ ...f, tutar: v }))} />
             </Alan>
             <Alan etiket="Ödeme yöntemi">
               <select value={form.odeme_yontemi} onChange={(e) => setForm((f) => ({ ...f, odeme_yontemi: e.target.value }))} style={girdiStili}>
