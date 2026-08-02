@@ -1069,11 +1069,11 @@ async def net_durum(
         kur = await kur_getir(pb)
         odenen_toplam = Decimal("0")
         for k in kalemler:
-            if k.odendi_mi:
-                odenen_toplam += k.tutar
-                continue
             taksitler = list(db.execute(select(AkreditifKalemTaksiti).where(AkreditifKalemTaksiti.kalem_id == k.id)).scalars())
-            odenen_toplam += sum((t.tutar for t in taksitler if t.odendi_mi), Decimal("0"))
+            if taksitler:
+                odenen_toplam += sum((t.tutar for t in taksitler if t.odendi_mi), Decimal("0"))
+            else:
+                odenen_toplam += k.odenen_tutar or Decimal("0")
         kalan_borc = ak.tutar - odenen_toplam
         if kalan_borc > 0:
             akreditif_borc_try += kalan_borc * kur
