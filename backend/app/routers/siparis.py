@@ -577,7 +577,7 @@ def gumruk_beyannamesi_ekle(
         beyanname_no=istek.beyanname_no, beyanname_tarihi=istek.beyanname_tarihi,
         gumruk_musaviri_cari_id=istek.gumruk_musaviri_cari_id,
         tutar=istek.tutar, para_birimi=istek.para_birimi, kur=istek.kur,
-        tutar_try=tutar_try, notlar=istek.notlar,
+        tutar_try=tutar_try, kdv_tutari=istek.kdv_tutari, notlar=istek.notlar,
     )
     db.add(yeni)
     db.commit()
