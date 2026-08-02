@@ -1,7 +1,7 @@
 import { useEffect, useState, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, hataMesajiCikar } from '../api/client';
-import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat, eylemChipStili, Sekmeler, OtomatikTamamlamaGirdisi, Etiket } from '../components/Ortak';
+import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat, eylemChipStili, Sekmeler, OtomatikTamamlamaGirdisi, Etiket, ParaGirdisi } from '../components/Ortak';
 
 function tarihFormat(iso) {
   if (!iso || typeof iso !== 'string' || !iso.includes('-')) return iso || '—';
@@ -98,7 +98,7 @@ function useBekleyenOdemeler() {
 }
 
 const TUR_GRUPLARI = {
-  AKREDITIF: ['AKREDITIF_KALEMI', 'AKREDITIF_KALEM_TAKSIT'],
+  AKREDITIF: ['AKREDITIF_KALEMI', 'AKREDITIF_KALEM_TAKSIT', 'AKREDITIF_GENEL'],
   LEASING: ['LEASING_ODEME'],
   CEK: ['CEKLER'],
   KIRALAMA: ['KIRALAMA_ODEME'],
@@ -135,10 +135,11 @@ const BEKLEYEN_ENDPOINT_MAP = {
   PERSONEL_ODEME: (id) => `/personel-odemeleri/${id}/ode`,
   SABIT_GIDER: (id) => `/sabit-giderler/${id}/ode`,
   AKREDITIF_KALEMI: (id) => `/akreditif-kalemleri/${id}/ode`,
+  AKREDITIF_GENEL: (id) => `/akreditifler/${id}/genel-odeme`,
   AKREDITIF_KALEM_TAKSIT: (id) => `/akreditif-kalem-taksitleri/${id}/ode`,
 };
 
-async function bekleyenOdemeyiGonder(secili, { odeme_tarihi, odeme_yontemi, banka_hesap_id, kur }) {
+async function bekleyenOdemeyiGonder(secili, { odeme_tarihi, odeme_yontemi, banka_hesap_id, kur, tutar }) {
   if (secili.kaynak_tablo === 'CEKLER') {
     return api.put(`/cekler/${secili.kaynak_id}/durum`, {
       yeni_durum: secili.yon === 'GIRIS' ? 'TAHSIL_EDILDI' : 'ODENDI',
@@ -146,7 +147,14 @@ async function bekleyenOdemeyiGonder(secili, { odeme_tarihi, odeme_yontemi, bank
     });
   }
   const endpointFn = BEKLEYEN_ENDPOINT_MAP[secili.kaynak_tablo];
-  return api.put(endpointFn(secili.kaynak_id), { odeme_tarihi, odeme_yontemi, banka_hesap_id, kur });
+  // Akreditif kalemi/genel bakiye artik kismi odeme destekledigi icin tutar
+  // gonderilmesi gerekiyor - diger turlerde (sabit taksit/donem tutari
+  // oldugu icin) bu alan backend tarafindan yok sayilir, zararsizdir.
+  const govde = { odeme_tarihi, odeme_yontemi, banka_hesap_id, kur };
+  if (secili.kaynak_tablo === 'AKREDITIF_KALEMI' || secili.kaynak_tablo === 'AKREDITIF_GENEL') {
+    govde.tutar = tutar;
+  }
+  return api.put(endpointFn(secili.kaynak_id), govde);
 }
 
 const SEKMELER = [
@@ -440,6 +448,7 @@ function YeniBankaHareketiFormu({ hesaplar, onKaydedildi, onVazgec }) {
   const [baglantiliBankaHesapId, setBaglantiliBankaHesapId] = useState('');
   const [baglantiliTarih, setBaglantiliTarih] = useState(new Date().toISOString().slice(0, 10));
   const [baglantiliKur, setBaglantiliKur] = useState('1');
+  const [baglantiliTutar, setBaglantiliTutar] = useState('');
 
   const [form, setForm] = useState({
     banka_hesap_id: '', tarih: new Date().toISOString().slice(0, 10), tip: 'GIRIS',
@@ -456,6 +465,11 @@ function YeniBankaHareketiFormu({ hesaplar, onKaydedildi, onVazgec }) {
   const altKayitlar = ustBaslik ? buTurdekiBekleyenler.filter((b) => b.ust_baslik === ustBaslik) : [];
   const seciliKayit = altKayitlar.find((b) => `${b.kaynak_tablo}:${b.kaynak_id}` === seciliAnahtar);
   const baglantiliDovizli = seciliKayit && seciliKayit.para_birimi !== 'TRY';
+  const kismiOdenebilirMi = seciliKayit && (seciliKayit.kaynak_tablo === 'AKREDITIF_KALEMI' || seciliKayit.kaynak_tablo === 'AKREDITIF_GENEL');
+
+  useEffect(() => {
+    if (seciliKayit) setBaglantiliTutar(String(seciliKayit.tutar));
+  }, [seciliAnahtar]); // eslint-disable-line
 
   useEffect(() => {
     if (seciliKayit && seciliKayit.para_birimi !== 'TRY') {
@@ -490,6 +504,7 @@ function YeniBankaHareketiFormu({ hesaplar, onKaydedildi, onVazgec }) {
           odeme_yontemi: 'BANKA',
           banka_hesap_id: Number(baglantiliBankaHesapId),
           kur: baglantiliDovizli ? Number(baglantiliKur) : null,
+          tutar: kismiOdenebilirMi ? Number(baglantiliTutar) : undefined,
         });
       } else {
         await api.post('/banka-hareketleri', {
@@ -622,6 +637,11 @@ function YeniBankaHareketiFormu({ hesaplar, onKaydedildi, onVazgec }) {
                 ))}
               </select>
             </Alan>
+            {kismiOdenebilirMi && (
+              <Alan etiket={`Ödenecek tutar (${seciliKayit.para_birimi}) — kısmi ödeme yapabilirsiniz`}>
+                <ParaGirdisi required value={baglantiliTutar} onChange={(v) => setBaglantiliTutar(v)} />
+              </Alan>
+            )}
             <Alan etiket="Hangi banka hesabından?">
               <select required value={baglantiliBankaHesapId} onChange={(e) => setBaglantiliBankaHesapId(e.target.value)} style={girdiStili}>
                 <option value="">Seçin...</option>
