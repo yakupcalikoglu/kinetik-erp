@@ -72,6 +72,120 @@ const SON_DURUMLAR = ['TAMAMLANDI', 'IPTAL'];
 
 // Siparise (tedarikciye) yapilan avans/ara/kapama odemelerini yonetir.
 // Stok maliyeti hesabindan BAGIMSIZDIR - sadece nakit akisini/kalan bakiyeyi takip eder.
+const SIPARIS_360_DURUM_METIN = {
+  DEPODA: 'Depoda', SIPARISTE: 'Siparişte', YOLDA: 'Yolda', GUMRUKTE: 'Gümrükte',
+  ANTREPODA: 'Antrepoda', SATILDI: 'Satıldı', KIRADA: 'Kirada', BAKIMDA: 'Bakımda', HURDA: 'Hurda',
+};
+
+function Siparis360Paneli({ siparis, onKapat }) {
+  const [veri, setVeri] = useState(null);
+  const [hata, setHata] = useState(null);
+
+  useEffect(() => {
+    Promise.all([
+      api.get(`/siparisler/${siparis.id}/odemeler`).catch(() => ({ data: [] })),
+      api.get(`/siparisler/${siparis.id}/bakiye`).catch(() => ({ data: null })),
+      api.get(`/siparisler/${siparis.id}/gumruk-beyannameleri`).catch(() => ({ data: [] })),
+      api.get('/akreditifler', { params: { siparis_id: siparis.id } }).catch(() => ({ data: [] })),
+      api.get('/stok-seri-no', { params: { siparis_id: siparis.id } }).catch(() => ({ data: [] })),
+    ]).then(([odemeler, bakiye, gumruk, akreditifler, urunler]) => {
+      setVeri({
+        odemeler: odemeler.data, bakiye: bakiye.data, gumruk: gumruk.data,
+        akreditifler: akreditifler.data, urunler: urunler.data,
+      });
+    }).catch((e) => setHata(hataMesajiCikar(e)));
+  }, [siparis.id]);
+
+  return (
+    <Kart style={{ margin: '8px 16px 16px', background: 'var(--zemin)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ fontWeight: 600, fontSize: 14 }}>{siparis.siparis_no} — Sipariş Detayı</div>
+        <Buton variant="ikincil" onClick={onKapat}>Kapat</Buton>
+      </div>
+      <HataMesaji>{hata}</HataMesaji>
+      {!veri ? (
+        <div style={{ color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
+      ) : (
+        <>
+          <div style={{ display: 'flex', gap: 24, marginBottom: 16, flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontSize: 11.5, color: 'var(--metin-ikincil)' }}>Toplam Tutar</div>
+              <div style={{ fontSize: 17, fontWeight: 700 }}>{veri.bakiye ? paraFormat(veri.bakiye.toplam_siparis_tutari, siparis.para_birimi) : '—'}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11.5, color: 'var(--metin-ikincil)' }}>Ödenen</div>
+              <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--yesil)' }}>{veri.bakiye ? paraFormat(veri.bakiye.toplam_odenen, siparis.para_birimi) : '—'}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11.5, color: 'var(--metin-ikincil)' }}>Kalan Bakiye</div>
+              <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--kirmizi)' }}>{veri.bakiye ? paraFormat(veri.bakiye.kalan_bakiye, siparis.para_birimi) : '—'}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11.5, color: 'var(--metin-ikincil)' }}>Gümrük Beyannamesi</div>
+              <div style={{ fontSize: 17, fontWeight: 700 }}>{veri.gumruk.length} adet</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11.5, color: 'var(--metin-ikincil)' }}>Akreditif</div>
+              <div style={{ fontSize: 17, fontWeight: 700 }}>{veri.akreditifler.length > 0 ? `${veri.akreditifler.length} adet` : 'Yok'}</div>
+            </div>
+          </div>
+
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Ürünlerin Güncel Durumu</div>
+          {veri.urunler.length === 0 ? (
+            <div style={{ fontSize: 12.5, color: 'var(--metin-soluk)', marginBottom: 16 }}>Henüz teslim alınmış/kaydedilmiş ürün yok.</div>
+          ) : (
+            <table style={{ marginBottom: 16 }}>
+              <thead>
+                <tr style={{ background: 'white' }}>
+                  {['Seri No', 'Durum'].map((b) => (
+                    <th key={b} style={{ textAlign: 'left', padding: '6px 10px', fontSize: 12, color: 'var(--metin-ikincil)' }}>{b}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {veri.urunler.map((u) => (
+                  <tr key={u.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                    <td style={{ padding: '6px 10px', fontFamily: 'var(--font-mono)' }}>{u.seri_no}</td>
+                    <td style={{ padding: '6px 10px' }}>
+                      <Etiket ton={u.durum === 'SATILDI' ? 'yesil' : u.durum === 'HURDA' ? 'kirmizi' : 'notr'}>
+                        {SIPARIS_360_DURUM_METIN[u.durum] || u.durum}
+                      </Etiket>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+
+          {veri.akreditifler.length > 0 && (
+            <>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>İlişkili Akreditif(ler)</div>
+              <table>
+                <thead>
+                  <tr style={{ background: 'white' }}>
+                    {['Akreditif No', 'Tutar', 'Durum'].map((b) => (
+                      <th key={b} style={{ textAlign: 'left', padding: '6px 10px', fontSize: 12, color: 'var(--metin-ikincil)' }}>{b}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {veri.akreditifler.map((ak) => (
+                    <tr key={ak.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                      <td style={{ padding: '6px 10px' }}>{ak.akreditif_no || `#${ak.id}`}</td>
+                      <td style={{ padding: '6px 10px' }}>{paraFormat(ak.tutar, ak.para_birimi)}</td>
+                      <td style={{ padding: '6px 10px', color: 'var(--metin-ikincil)' }}>{ak.durum}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+        </>
+      )}
+    </Kart>
+  );
+}
+
 function GumrukBeyannameleriPaneli({ siparis, cariler, onKapat }) {
   const [liste, setListe] = useState(null);
   const [formAcik, setFormAcik] = useState(false);
@@ -388,6 +502,7 @@ export default function SiparislerSayfasi() {
   const [hata, setHata] = useState(null);
   const [odemelerAcikSiparisId, setOdemelerAcikSiparisId] = useState(null);
   const [gumrukAcikSiparisId, setGumrukAcikSiparisId] = useState(null);
+  const [detay360AcikId, setDetay360AcikId] = useState(null);
   const [belgeAcik, setBelgeAcik] = useState(null); // { siparisId, nusha } | null
   const [durumDegistirAcikId, setDurumDegistirAcikId] = useState(null);
   const [icerikAcikId, setIcerikAcikId] = useState(null);
@@ -629,6 +744,12 @@ export default function SiparislerSayfasi() {
                             </>
                           )}
                           <button
+                            onClick={() => setDetay360AcikId((mevcut) => (mevcut === s.id ? null : s.id))}
+                            style={eylemChipStili('yesil')}
+                          >
+                            {detay360AcikId === s.id ? 'Detayı Kapat' : 'Sipariş Detayı'}
+                          </button>
+                          <button
                             onClick={() => setOdemelerAcikSiparisId((mevcut) => (mevcut === s.id ? null : s.id))}
                             style={eylemChipStili('amber')}
                           >
@@ -666,6 +787,13 @@ export default function SiparislerSayfasi() {
                         </div>
                       </td>
                     </tr>
+                    {detay360AcikId === s.id && (
+                      <tr>
+                        <td colSpan={6} style={{ padding: 0 }}>
+                          <Siparis360Paneli siparis={s} onKapat={() => setDetay360AcikId(null)} />
+                        </td>
+                      </tr>
+                    )}
                     {odemelerAcikSiparisId === s.id && (
                       <tr>
                         <td colSpan={6} style={{ padding: 0 }}>
