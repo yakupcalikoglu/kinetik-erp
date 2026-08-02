@@ -59,6 +59,18 @@ class YaklasanVadelerYaniti(BaseModel):
     odemeler_toplam: Decimal
     tahsilatlar: list[YaklasanVadeSatiri]
     tahsilatlar_toplam: Decimal
+
+
+class NakitAkisSatiri(BaseModel):
+    gun: int  # 30, 60 veya 90 - bugunden itibaren KUMULATIF donem
+    beklenen_tahsilat_try: Decimal
+    beklenen_odeme_try: Decimal
+    tahmini_bakiye_try: Decimal
+
+
+class NakitAkisTahminiYaniti(BaseModel):
+    mevcut_bakiye_try: Decimal
+    satirlar: list[NakitAkisSatiri]
 class DepoEnvanterSatiri(BaseModel):
     stok_karti_id: int
     marka: str | None
