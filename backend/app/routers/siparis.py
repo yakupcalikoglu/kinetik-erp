@@ -107,6 +107,21 @@ def _siparis_detayli_getir(db: Session, siparis_id: int) -> Siparis:
     return siparis
 
 
+@router.get("/sonraki-no", dependencies=[Depends(izin_gerektir("SIPARIS_GORUNTULE"))])
+def siparis_sonraki_no_getir(
+    sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
+):
+    """Bu yil icin bir sonraki siparis numarasini onerir (SP-YYYY-NNNNN formatinda)."""
+    yil = date_cls.today().year
+    sayac = db.execute(
+        select(func.count()).select_from(Siparis).where(
+            Siparis.sirket_id == sirket_id,
+            func.extract("year", Siparis.siparis_tarihi) == yil,
+        )
+    ).scalar_one()
+    return {"siparis_no": f"SP-{yil}-{sayac + 1:05d}"}
+
+
 @router.get("", response_model=list[SiparisYanit],
             dependencies=[Depends(izin_gerektir("SIPARIS_GORUNTULE"))])
 def siparisleri_listele(
