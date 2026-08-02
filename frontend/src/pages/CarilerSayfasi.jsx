@@ -4,7 +4,7 @@ import { api, hataMesajiCikar } from '../api/client';
 import {
   Kart, SayfaBasligi, Buton, Etiket, Alan, girdiStili, BosDurum, HataMesaji, paraFormat, eylemChipStili, ParaGirdisi,
 } from '../components/Ortak';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import AramaliSecici from '../components/AramaliSecici';
 
 // Herhangi bir listeyi bir sutuna gore tiklanabilir sekilde siralamak icin
@@ -995,7 +995,8 @@ export default function CarilerSayfasi() {
   const [hata, setHata] = useState(null);
   const [formAcik, setFormAcik] = useState(false);
   const [duzenlenenCari, setDuzenlenenCari] = useState(null);
-  const [arama, setArama] = useState('');
+  const location = useLocation();
+  const [arama, setArama] = useState(new URLSearchParams(location.search).get('ara') || '');
   const [seciliCari, setSeciliCari] = useState(null);
   const [iceAktarAcik, setIceAktarAcik] = useState(false);
   const siralama = useSiralama();
