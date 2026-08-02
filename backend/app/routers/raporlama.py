@@ -1112,6 +1112,7 @@ class AylikKarSatiri(BaseModel):
     ay: str  # "2026-07" formatinda
     stok_satis_kari: Decimal
     demirbas_satis_kari: Decimal
+    yedek_parca_kari: Decimal
     bakim_geliri: Decimal
     bakim_gideri: Decimal
     kira_geliri: Decimal
@@ -1139,7 +1140,7 @@ def aylik_net_kar(
 
     def satir(ay: str) -> dict:
         return aylik.setdefault(ay, {
-            "stok_satis_kari": Decimal("0"), "demirbas_satis_kari": Decimal("0"),
+            "stok_satis_kari": Decimal("0"), "demirbas_satis_kari": Decimal("0"), "yedek_parca_kari": Decimal("0"),
             "bakim_geliri": Decimal("0"), "bakim_gideri": Decimal("0"),
             "kira_geliri": Decimal("0"), "personel_gideri": Decimal("0"), "diger_gider": Decimal("0"),
         })
@@ -1168,6 +1169,23 @@ def aylik_net_kar(
         ay = d.satis_tarihi.strftime("%Y-%m")
         kar = (d.satis_fiyati_try or Decimal("0")) - d.maliyet_try
         satir(ay)["demirbas_satis_kari"] += kar
+
+    # 2b) Yedek parca satis kari (Cikis hareketleri, satis fiyati girilmis olanlar)
+    from app.models.yedek_parca import YedekParcaHareketi, YedekParcaHareketYon, YedekParca
+    yp_satislari = list(db.execute(
+        select(YedekParcaHareketi)
+        .join(YedekParca, YedekParca.id == YedekParcaHareketi.yedek_parca_id)
+        .where(
+            YedekParca.sirket_id == sirket_id, YedekParcaHareketi.yon == YedekParcaHareketYon.CIKIS,
+            YedekParcaHareketi.maliyet_birim_fiyat_try.isnot(None), YedekParcaHareketi.birim_fiyat_try.isnot(None),
+        )
+    ).scalars())
+    for h in yp_satislari:
+        if not h.tarih:
+            continue
+        ay = h.tarih.strftime("%Y-%m")
+        kar = (h.birim_fiyat_try - h.maliyet_birim_fiyat_try) * h.miktar
+        satir(ay)["yedek_parca_kari"] += kar
 
     # 3) Bakim geliri/gideri
     bakimlar = list(db.execute(select(BakimKaydi).where(BakimKaydi.sirket_id == sirket_id)).scalars())
@@ -1214,7 +1232,8 @@ def aylik_net_kar(
     sonuc = []
     for ay, veri in aylik.items():
         net_kar = (
-            veri["stok_satis_kari"] + veri["demirbas_satis_kari"] + veri["bakim_geliri"] + veri["kira_geliri"]
+            veri["stok_satis_kari"] + veri["demirbas_satis_kari"] + veri["yedek_parca_kari"]
+            + veri["bakim_geliri"] + veri["kira_geliri"]
             - veri["bakim_gideri"] - veri["personel_gideri"] - veri["diger_gider"]
         )
         sonuc.append(AylikKarSatiri(ay=ay, net_kar=net_kar, **veri))
