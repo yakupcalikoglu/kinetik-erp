@@ -388,7 +388,7 @@ function AylikNetKarKarti() {
         <table>
           <thead>
             <tr style={{ background: 'var(--zemin)' }}>
-              {['Ay', 'Stok Satış Kârı', 'Demirbaş Kârı', 'Bakım (Net)', 'Kira Geliri', 'Personel Gideri', 'Diğer Gider', 'Net Kâr'].map((b) => (
+              {['Ay', 'Stok Satış Kârı', 'Demirbaş Kârı', 'Yedek Parça Kârı', 'Bakım (Net)', 'Kira Geliri', 'Personel Gideri', 'Diğer Gider', 'Net Kâr'].map((b) => (
                 <th key={b} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
               ))}
             </tr>
@@ -399,6 +399,7 @@ function AylikNetKarKarti() {
                 <td style={{ padding: '8px 12px', fontWeight: 500 }}>{ayAdiGoster(s.ay)}</td>
                 <td style={{ padding: '8px 12px' }}>{paraFormat(s.stok_satis_kari)}</td>
                 <td style={{ padding: '8px 12px' }}>{paraFormat(s.demirbas_satis_kari)}</td>
+                <td style={{ padding: '8px 12px' }}>{paraFormat(s.yedek_parca_kari)}</td>
                 <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{paraFormat(s.bakim_geliri - s.bakim_gideri)}</td>
                 <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{paraFormat(s.kira_geliri)}</td>
                 <td style={{ padding: '8px 12px', color: 'var(--kirmizi)' }}>−{paraFormat(s.personel_gideri)}</td>
