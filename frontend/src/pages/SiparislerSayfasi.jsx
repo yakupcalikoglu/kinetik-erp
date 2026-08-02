@@ -77,7 +77,7 @@ function GumrukBeyannameleriPaneli({ siparis, cariler, onKapat }) {
   const [formAcik, setFormAcik] = useState(false);
   const [form, setForm] = useState({
     beyanname_no: '', beyanname_tarihi: new Date().toISOString().slice(0, 10),
-    gumruk_musaviri_cari_id: '', tutar: '', para_birimi: 'TRY', kur: '1', notlar: '',
+    gumruk_musaviri_cari_id: '', tutar: '', para_birimi: 'TRY', kur: '1', kdv_tutari: '', notlar: '',
   });
   const [hata, setHata] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
@@ -105,10 +105,11 @@ function GumrukBeyannameleriPaneli({ siparis, cariler, onKapat }) {
         tutar: Number(form.tutar),
         para_birimi: form.para_birimi,
         kur: Number(form.kur),
+        kdv_tutari: form.kdv_tutari ? Number(form.kdv_tutari) : 0,
         notlar: form.notlar || null,
       });
       setFormAcik(false);
-      setForm({ beyanname_no: '', beyanname_tarihi: new Date().toISOString().slice(0, 10), gumruk_musaviri_cari_id: '', tutar: '', para_birimi: 'TRY', kur: '1', notlar: '' });
+      setForm({ beyanname_no: '', beyanname_tarihi: new Date().toISOString().slice(0, 10), gumruk_musaviri_cari_id: '', tutar: '', para_birimi: 'TRY', kur: '1', kdv_tutari: '', notlar: '' });
       yukle();
     } catch (err) {
       setHata(hataMesajiCikar(err));
@@ -169,6 +170,9 @@ function GumrukBeyannameleriPaneli({ siparis, cariler, onKapat }) {
                 <input type="number" step="0.0001" value={form.kur} onChange={(e) => setForm((f) => ({ ...f, kur: e.target.value }))} style={girdiStili} />
               </Alan>
             )}
+            <Alan etiket="KDV tutarı (opsiyonel, TL — bu tutarın ne kadarı KDV, KDV Özeti raporuna otomatik yansır)">
+              <input type="number" step="0.01" value={form.kdv_tutari} onChange={(e) => setForm((f) => ({ ...f, kdv_tutari: e.target.value }))} style={girdiStili} />
+            </Alan>
             <Alan etiket="Notlar">
               <input value={form.notlar} onChange={(e) => setForm((f) => ({ ...f, notlar: e.target.value }))} style={girdiStili} />
             </Alan>
@@ -185,7 +189,7 @@ function GumrukBeyannameleriPaneli({ siparis, cariler, onKapat }) {
         <table style={{ width: '100%', background: 'white' }}>
           <thead>
             <tr>
-              {['Beyanname No', 'Tarih', 'Gümrük Müşaviri', 'Tutar', 'Notlar', ''].map((b) => (
+              {['Beyanname No', 'Tarih', 'Gümrük Müşaviri', 'Tutar', 'KDV', 'Notlar', ''].map((b) => (
                 <th key={b} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 12, color: 'var(--metin-ikincil)' }}>{b}</th>
               ))}
             </tr>
@@ -197,6 +201,7 @@ function GumrukBeyannameleriPaneli({ siparis, cariler, onKapat }) {
                 <td style={{ padding: '8px 12px' }}>{b.beyanname_tarihi}</td>
                 <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{b.gumruk_musaviri_unvan || '—'}</td>
                 <td style={{ padding: '8px 12px', fontWeight: 500 }}>{paraFormat(b.tutar, b.para_birimi)}</td>
+                <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{b.kdv_tutari > 0 ? paraFormat(b.kdv_tutari) : '—'}</td>
                 <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{b.notlar || '—'}</td>
                 <td style={{ padding: '8px 12px' }}>
                   <button onClick={() => sil(b.id)} style={eylemChipStili('kirmizi')}>Sil</button>
