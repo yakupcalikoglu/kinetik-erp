@@ -1,4 +1,5 @@
 import { useEffect, useState, Fragment } from 'react';
+import { useLocation } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { api, hataMesajiCikar } from '../api/client';
 import {
@@ -590,6 +591,8 @@ function HareketlerPaneli({ parca, cariler, onKapat, onDegisti }) {
 }
 
 export default function YedekParcaSayfasi() {
+  const location = useLocation();
+  const [parcaArama, setParcaArama] = useState(new URLSearchParams(location.search).get('ara') || '');
   const [liste, setListe] = useState([]);
   const [yukleniyor, setYukleniyor] = useState(true);
   const [hata, setHata] = useState(null);
@@ -693,6 +696,15 @@ export default function YedekParcaSayfasi() {
       />
       <HataMesaji>{hata}</HataMesaji>
 
+      <div style={{ marginBottom: 12 }}>
+        <input
+          value={parcaArama}
+          onChange={(e) => setParcaArama(e.target.value)}
+          placeholder="Parça adına göre ara..."
+          style={{ ...girdiStili, maxWidth: 320 }}
+        />
+      </div>
+
       {iceAktarAcik && (
         <YedekParcaIceAktarPaneli
           onKapat={() => setIceAktarAcik(false)}
@@ -773,7 +785,10 @@ export default function YedekParcaSayfasi() {
               </tr>
             </thead>
             <tbody>
-              {siralama.sirala(liste, (item, alan) => item[alan]).map((p) => {
+              {siralama.sirala(
+                liste.filter((p) => !parcaArama || p.ad.toLocaleLowerCase('tr').includes(parcaArama.toLocaleLowerCase('tr'))),
+                (item, alan) => item[alan]
+              ).map((p) => {
                 const azaldi = p.min_stok_seviyesi != null && Number(p.mevcut_miktar) <= Number(p.min_stok_seviyesi);
                 return (
                   <Fragment key={p.id}>
