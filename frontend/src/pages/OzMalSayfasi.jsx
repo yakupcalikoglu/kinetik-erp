@@ -1,7 +1,7 @@
 import { useEffect, useState, Fragment } from 'react';
 import { api, hataMesajiCikar } from '../api/client';
 import {
-  Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat, eylemChipStili,
+  Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat, eylemChipStili, ParaGirdisi,
 } from '../components/Ortak';
 import * as XLSX from 'xlsx';
 import AramaliSecici from '../components/AramaliSecici';
@@ -166,13 +166,13 @@ function DemirbasFormu({ duzenlenen, cariler, onKaydedildi, onVazgec }) {
           </Alan>
           {duzenlemeModu ? (
             <Alan etiket="Maliyet (TL)">
-              <input required type="number" step="0.01" value={form.maliyet_try} onChange={(e) => setForm((f) => ({ ...f, maliyet_try: e.target.value }))} style={girdiStili} />
+              <ParaGirdisi required value={form.maliyet_try} onChange={(v) => setForm((f) => ({ ...f, maliyet_try: v }))} />
             </Alan>
           ) : (
             <>
               <Alan etiket="Maliyet">
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <input required type="number" step="0.01" value={form.maliyet_orijinal} onChange={(e) => setForm((f) => ({ ...f, maliyet_orijinal: e.target.value }))} style={{ ...girdiStili, flex: 1 }} />
+                  <ParaGirdisi required value={form.maliyet_orijinal} onChange={(v) => setForm((f) => ({ ...f, maliyet_orijinal: v }))} style={{ flex: 1 }} />
                   <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={{ ...girdiStili, width: 90 }}>
                     <option value="TRY">TL</option>
                     <option value="USD">USD</option>
@@ -246,7 +246,7 @@ function DemirbasSatisFormu({ demirbas, onKaydedildi, onVazgec }) {
           <form onSubmit={kaydet} style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
             <div style={{ minWidth: 160 }}>
               <Alan etiket="Satış tutarı (TL, 0 olabilir)">
-                <input type="number" step="0.01" value={form.satis_fiyati_try} onChange={(e) => setForm((f) => ({ ...f, satis_fiyati_try: e.target.value }))} style={girdiStili} />
+                <ParaGirdisi value={form.satis_fiyati_try} onChange={(v) => setForm((f) => ({ ...f, satis_fiyati_try: v }))} />
               </Alan>
             </div>
             {Number(form.satis_fiyati_try) > 0 && (
