@@ -1,4 +1,5 @@
 import { useEffect, useState, Fragment } from 'react';
+import { useLocation } from 'react-router-dom';
 import { api, hataMesajiCikar } from '../api/client';
 import {
   Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat, eylemChipStili, ParaGirdisi,
@@ -438,7 +439,8 @@ export default function OzMalSayfasi() {
   const [formAcik, setFormAcik] = useState(false);
   const [duzenlenen, setDuzenlenen] = useState(null);
   const [satisAcikId, setSatisAcikId] = useState(null);
-  const [aramaMetni, setAramaMetni] = useState('');
+  const location = useLocation();
+  const [aramaMetni, setAramaMetni] = useState(new URLSearchParams(location.search).get('ara') || '');
   const [iceAktarAcik, setIceAktarAcik] = useState(false);
   const siralama = useSiralama();
   const cariler = useCariler();
