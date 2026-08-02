@@ -811,7 +811,19 @@ async def kdv_ozeti(
         kdv_tutari_try = miktar * birim_fiyat * (kdv_orani / Decimal("100")) * kur
         indirilecek[ay] = indirilecek.get(ay, Decimal("0")) + kdv_tutari_try
 
-    # 2) Kullanicinin elle ekledigi ek girisler (siparis disi giderler icin)
+    # 2) Gumruk beyannamelerindeki KDV (ithalatta gumrukte odenen KDV)
+    from app.models.stok import GumrukBeyannamesi
+    gumruk_beyannameleri = list(db.execute(
+        select(GumrukBeyannamesi).join(Siparis, Siparis.id == GumrukBeyannamesi.siparis_id)
+        .where(Siparis.sirket_id == sirket_id, GumrukBeyannamesi.kdv_tutari > 0)
+    ).scalars())
+    for gb in gumruk_beyannameleri:
+        if not gb.beyanname_tarihi:
+            continue
+        ay = gb.beyanname_tarihi.strftime("%Y-%m")
+        indirilecek[ay] = indirilecek.get(ay, Decimal("0")) + gb.kdv_tutari
+
+    # 3) Kullanicinin elle ekledigi ek girisler (siparis/gumruk disi giderler icin)
     for g in db.execute(select(KdvManuelGiris).where(KdvManuelGiris.sirket_id == sirket_id)).scalars():
         indirilecek[g.ay] = indirilecek.get(g.ay, Decimal("0")) + g.tutar_try
 
