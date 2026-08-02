@@ -23,6 +23,7 @@ from app.services.kur_servisi import guncel_kur_getir
 from app.schemas.raporlama import (
     SeriNoRaporYaniti, HareketTuruRaporYaniti, HareketTuruSatiri,
     AnaKasaOzetYaniti, GenelBakisYaniti, YaklasanVadeSatiri, YaklasanVadelerYaniti,
+    NakitAkisSatiri, NakitAkisTahminiYaniti,
     DepoEnvanterSatiri, AktifKiralamaSatiri,
 )
 
@@ -734,6 +735,75 @@ def yaklasan_vadeler(
         tahsilatlar=tahsilatlar,
         tahsilatlar_toplam=sum((s.tutar for s in tahsilatlar), Decimal("0")),
     )
+
+
+@router.get("/nakit-akis-tahmini", response_model=NakitAkisTahminiYaniti,
+            dependencies=[Depends(izin_gerektir("RAPOR_GORUNTULE"))])
+async def nakit_akis_tahmini(
+    sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
+):
+    """
+    Mevcut Kasa+Banka bakiyesi (TL) + onumuzdeki 30/60/90 gunde (kumulatif)
+    beklenen tahsilat/odeme netlestirilerek tahmini gelecek bakiye hesaplanir.
+    Nakit planlamasi icin: "onumuzdeki ay sonunda kasam yaklasik ne kadar
+    olacak" sorusuna cevap verir.
+    """
+    from app.services.kur_servisi import guncel_kur_getir
+    from app.models.banka import BankaHesabi, BankaHareketi
+
+    kur_cache: dict[str, Decimal] = {"TRY": Decimal("1")}
+
+    async def kur_getir(pb: str) -> Decimal:
+        if pb not in kur_cache:
+            try:
+                k = await guncel_kur_getir(pb)
+                kur_cache[pb] = Decimal(str(k)) if k else Decimal("1")
+            except Exception:
+                kur_cache[pb] = Decimal("1")
+        return kur_cache[pb]
+
+    # Mevcut Kasa bakiyesi (TL)
+    tum_kasa = list(db.execute(select(KasaHareketi).where(KasaHareketi.sirket_id == sirket_id)).scalars())
+    kasa_net = sum(
+        ((h.tutar_try_karsiligi or 0) if h.yon.value == "GIRIS" else -(h.tutar_try_karsiligi or 0) for h in tum_kasa),
+        Decimal("0"),
+    )
+
+    # Mevcut Banka bakiyeleri - her hesap kendi para biriminde, TL'ye cevrilir
+    banka_sorgu = (
+        select(BankaHesabi.para_birimi, func.coalesce(func.sum(BankaHareketi.tutar), 0).label("bakiye"))
+        .outerjoin(BankaHareketi, BankaHareketi.banka_hesap_id == BankaHesabi.id)
+        .where(BankaHesabi.sirket_id == sirket_id)
+        .group_by(BankaHesabi.id, BankaHesabi.para_birimi)
+    )
+    banka_net_try = Decimal("0")
+    for pb, bakiye in db.execute(banka_sorgu).all():
+        pb_deger = pb.value if hasattr(pb, "value") else pb
+        kur = await kur_getir(pb_deger) if pb_deger != "TRY" else Decimal("1")
+        banka_net_try += Decimal(str(bakiye)) * kur
+
+    mevcut_bakiye = kasa_net + banka_net_try
+
+    satirlar = []
+    for gun in (30, 60, 90):
+        veri = yaklasan_vadeler(gun=gun, sirket_id=sirket_id, db=db)
+
+        toplam_tahsilat = Decimal("0")
+        for t in veri.tahsilatlar:
+            kur = await kur_getir(t.para_birimi) if t.para_birimi != "TRY" else Decimal("1")
+            toplam_tahsilat += t.tutar * kur
+
+        toplam_odeme = Decimal("0")
+        for o in veri.odemeler:
+            kur = await kur_getir(o.para_birimi) if o.para_birimi != "TRY" else Decimal("1")
+            toplam_odeme += o.tutar * kur
+
+        satirlar.append(NakitAkisSatiri(
+            gun=gun, beklenen_tahsilat_try=toplam_tahsilat, beklenen_odeme_try=toplam_odeme,
+            tahmini_bakiye_try=mevcut_bakiye + toplam_tahsilat - toplam_odeme,
+        ))
+
+    return NakitAkisTahminiYaniti(mevcut_bakiye_try=mevcut_bakiye, satirlar=satirlar)
 
 
 @router.get("/depo-envanteri", response_model=list[DepoEnvanterSatiri],
