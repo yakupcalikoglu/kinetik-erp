@@ -90,10 +90,15 @@ export default function SiparisOlusturSayfasi() {
     setUrunler((liste) => liste.filter((_, i) => i !== index));
   }
 
-  const genelToplam = urunler.reduce(
+  const araToplam = urunler.reduce(
     (acc, u) => acc + (Number(u.miktar) || 0) * (Number(u.birim_fiyat) || 0),
     0
   );
+  const kdvToplam = urunler.reduce(
+    (acc, u) => acc + (Number(u.miktar) || 0) * (Number(u.birim_fiyat) || 0) * ((Number(u.kdv_orani) || 0) / 100),
+    0
+  );
+  const genelToplam = araToplam + kdvToplam;
 
   async function kaydet(e) {
     e.preventDefault();
@@ -269,8 +274,12 @@ export default function SiparisOlusturSayfasi() {
             </tbody>
           </table>
 
-          <div style={{ padding: '12px 20px', borderTop: '1px solid var(--kenarlik)', textAlign: 'right', fontSize: 14 }}>
-            Genel toplam: <strong>{genelToplam.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} {form.para_birimi}</strong>
+          <div style={{ padding: '12px 20px', borderTop: '1px solid var(--kenarlik)', textAlign: 'right', fontSize: 13.5 }}>
+            <div style={{ color: 'var(--metin-ikincil)' }}>Ara toplam (KDV hariç): {araToplam.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} {form.para_birimi}</div>
+            <div style={{ color: 'var(--metin-ikincil)' }}>KDV: {kdvToplam.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} {form.para_birimi}</div>
+            <div style={{ fontSize: 15, fontWeight: 600, marginTop: 4 }}>
+              Genel toplam (KDV dahil): {genelToplam.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} {form.para_birimi}
+            </div>
           </div>
         </Kart>
 
