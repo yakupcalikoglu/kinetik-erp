@@ -1883,8 +1883,25 @@ function PersonelSekmesi() {
       {seciliPersonel && (
         <Kart>
           <div style={{ fontWeight: 600, fontSize: 13.5, marginBottom: 12 }}>
-            Personel #{seciliPersonel} — ödeme geçmişi
+            {(liste.find((p) => p.id === seciliPersonel) || {}).ad_soyad || `Personel #${seciliPersonel}`} — ödeme geçmişi
           </div>
+
+          {odemeler && odemeler.length > 0 && (
+            <div style={{ display: 'flex', gap: 24, marginBottom: 14, flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontSize: 11.5, color: 'var(--metin-ikincil)' }}>Toplam Ödenen (bugüne kadar)</div>
+                <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--yesil)' }}>
+                  {paraFormat(odemeler.filter((o) => o.odendi_mi).reduce((acc, o) => acc + Number(o.tutar), 0))}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11.5, color: 'var(--metin-ikincil)' }}>Bekleyen Tahakkuk</div>
+                <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--kirmizi)' }}>
+                  {paraFormat(odemeler.filter((o) => !o.odendi_mi).reduce((acc, o) => acc + Number(o.tutar), 0))}
+                </div>
+              </div>
+            </div>
+          )}
 
           <form onSubmit={odemeEkle} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 10, marginBottom: 14 }}>
             <Alan etiket="Dönem">
