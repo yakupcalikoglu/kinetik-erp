@@ -5,7 +5,7 @@ import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji } from '../comp
 import AramaliSecici from '../components/AramaliSecici';
 
 function bosUrunSatiri() {
-  return { stok_karti_id: '', miktar: 1, birim_fiyat: '', para_birimi: 'USD', birim_agirlik_kg: '', aciklama: '' };
+  return { stok_karti_id: '', miktar: 1, birim_fiyat: '', para_birimi: 'USD', birim_agirlik_kg: '', kdv_orani: '20', aciklama: '' };
 }
 
 export default function SiparisOlusturSayfasi() {
@@ -65,6 +65,7 @@ export default function SiparisOlusturSayfasi() {
             birim_fiyat: u.birim_fiyat,
             para_birimi: u.para_birimi,
             birim_agirlik_kg: u.birim_agirlik_kg ?? '',
+            kdv_orani: u.kdv_orani != null ? String(u.kdv_orani) : '20',
             aciklama: u.aciklama ?? '',
           }))
         );
@@ -119,6 +120,7 @@ export default function SiparisOlusturSayfasi() {
           birim_fiyat: Number(u.birim_fiyat),
           para_birimi: u.para_birimi,
           birim_agirlik_kg: u.birim_agirlik_kg ? Number(u.birim_agirlik_kg) : null,
+          kdv_orani: u.kdv_orani ? Number(u.kdv_orani) : 20,
           aciklama: u.aciklama || null,
         })),
       };
@@ -215,7 +217,7 @@ export default function SiparisOlusturSayfasi() {
           <table>
             <thead>
               <tr style={{ background: 'var(--zemin)' }}>
-                {['Stok Kartı', 'Miktar', 'Birim Fiyat', 'Birim Ağırlık (kg)', 'Açıklama', ''].map((b) => (
+                {['Stok Kartı', 'Miktar', 'Birim Fiyat', 'Birim Ağırlık (kg)', 'KDV %', 'Açıklama', ''].map((b) => (
                   <th key={b} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
                 ))}
               </tr>
@@ -245,6 +247,10 @@ export default function SiparisOlusturSayfasi() {
                   <td style={{ padding: 8 }}>
                     <input type="number" step="0.1" value={u.birim_agirlik_kg} onChange={(e) => urunGuncelle(i, 'birim_agirlik_kg', e.target.value)}
                       style={{ ...girdiStili, width: 110 }} />
+                  </td>
+                  <td style={{ padding: 8 }}>
+                    <input type="number" step="0.01" value={u.kdv_orani} onChange={(e) => urunGuncelle(i, 'kdv_orani', e.target.value)}
+                      style={{ ...girdiStili, width: 70 }} title="Bu üründen indirilecek KDV oranı - KDV Özeti raporunda kullanılır" />
                   </td>
                   <td style={{ padding: 8 }}>
                     <input value={u.aciklama} onChange={(e) => urunGuncelle(i, 'aciklama', e.target.value)}
