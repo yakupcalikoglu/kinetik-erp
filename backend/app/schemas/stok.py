@@ -191,6 +191,7 @@ class SiparisUrunIstegi(BaseModel):
     birim_fiyat: Decimal
     para_birimi: ParaBirimi
     birim_agirlik_kg: Decimal | None = None
+    kdv_orani: Decimal = Decimal("20")
     aciklama: str | None = None
 
 
@@ -232,6 +233,7 @@ class SiparisUrunYanit(BaseModel):
     birim_fiyat: Decimal
     para_birimi: ParaBirimi
     birim_agirlik_kg: Decimal | None
+    kdv_orani: Decimal = Decimal("20")
 
     class Config:
         from_attributes = True
