@@ -207,6 +207,8 @@ class SiparisOdeme(Base):
     siparis_id = Column(BigInteger, ForeignKey("siparisler.id"), nullable=False)
     tarih = Column(Date, nullable=False)
     tutar = Column(Numeric(18, 2), nullable=False)  # siparisin kendi para biriminde (orn. USD)
+    odeme_yontemi = Column(String(10))  # "NAKIT" | "BANKA" | "CEK" | "LEASING"
+    cek_id = Column(BigInteger, ForeignKey("cekler.id"))  # odeme_yontemi == "CEK" ise, olusturulan cek kaydi
     notlar = Column(String(300))
     olusturma_tarihi = Column(DateTime, server_default=func.now())
 
