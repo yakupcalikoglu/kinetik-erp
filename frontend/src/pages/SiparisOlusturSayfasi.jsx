@@ -39,7 +39,12 @@ export default function SiparisOlusturSayfasi() {
     api.get('/stok-kartlari')
       .then((res) => setStokKartlari(res.data))
       .catch(() => {});
-  }, []);
+    if (!duzenlemeModu) {
+      api.get('/siparisler/sonraki-no')
+        .then((res) => setForm((f) => (f.siparis_no ? f : { ...f, siparis_no: res.data.siparis_no })))
+        .catch(() => {});
+    }
+  }, []); // eslint-disable-line
 
   useEffect(() => {
     if (!duzenlemeModu) return;
