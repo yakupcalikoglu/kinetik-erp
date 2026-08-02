@@ -21,6 +21,7 @@ class AkreditifKalemYanit(BaseModel):
     tip: AkreditifKalemTip
     aciklama: str | None
     tutar: Decimal
+    odenen_tutar: Decimal = Decimal("0")
     vade_tarihi: date
     odendi_mi: bool
     odeme_tarihi: date | None
@@ -42,6 +43,8 @@ class AkreditifYanit(BaseModel):
     durum: AkreditifDurum
     notlar: str | None
     kalemler: list[AkreditifKalemYanit] = []
+    toplam_odenen: Decimal = Decimal("0")  # backend'de hesaplanir
+    kalan_bakiye: Decimal = Decimal("0")   # backend'de hesaplanir (tutar - toplam_odenen)
 
     class Config:
         from_attributes = True
@@ -67,6 +70,7 @@ class AkreditifKalemDuzenleIstegi(BaseModel):
 
 
 class AkreditifKalemOdeIstegi(BaseModel):
+    tutar: Decimal  # bu odemede fiilen odenen tutar - kalemin tamami olmak ZORUNDA DEGIL (kismi odeme desteklenir)
     odeme_tarihi: date
     odeme_yontemi: str  # "NAKIT" | "BANKA"
     banka_hesap_id: int | None = None
@@ -77,6 +81,8 @@ class AkreditifKalemOdeIstegi(BaseModel):
 class AkreditifUrunSecenegi(BaseModel):
     stok_seri_no_id: int
     seri_no: str
+    stok_karti_id: int
+    urun_adi: str | None = None
     satinalma_maliyeti_try: Decimal | None
     mevcut_diger_maliyet_try: Decimal | None
 
