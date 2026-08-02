@@ -1,5 +1,5 @@
 import { useEffect, useState, Fragment } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import AramaliSecici from '../components/AramaliSecici';
 
@@ -744,6 +744,8 @@ function UrunDuzenleFormu({ urun, stokKartlari, onKaydedildi, onVazgec }) {
 
 export default function StokSayfasi() {
   const { oturum } = useAuth();
+  const location = useLocation();
+  const [seriNoArama, setSeriNoArama] = useState(new URLSearchParams(location.search).get('ara') || '');
   const [usdKur, setUsdKur] = useState(null);
   const [tumUrunler, setTumUrunler] = useState([]);
   const [urunler, setUrunler] = useState([]);
@@ -928,6 +930,7 @@ export default function StokSayfasi() {
   // isaretlenmedikce (ya da durum filtresi ozellikle "SATILDI" secilmedikce).
   const gruplananUrunler = [...urunler]
     .filter((u) => satilanlariGoster || durumFiltre === 'SATILDI' || u.durum !== 'SATILDI')
+    .filter((u) => !seriNoArama || (u.seri_no || '').toLocaleLowerCase('tr').includes(seriNoArama.toLocaleLowerCase('tr')) || (u.sasi_no || '').toLocaleLowerCase('tr').includes(seriNoArama.toLocaleLowerCase('tr')))
     .sort((a, b) => {
       if (a.siparis_id === b.siparis_id) return a.id - b.id;
       if (a.siparis_id == null) return 1;
@@ -1006,6 +1009,14 @@ export default function StokSayfasi() {
         />
       )}
 
+      <div className="no-print" style={{ marginBottom: 12 }}>
+        <input
+          value={seriNoArama}
+          onChange={(e) => setSeriNoArama(e.target.value)}
+          placeholder="Seri no / şasi no ile ara..."
+          style={{ ...girdiStili, maxWidth: 320 }}
+        />
+      </div>
       <div className="no-print" style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         {[['TICARI', 'Ticari Mal'], ['OZ_MAL', 'Öz Mal'], ['', 'Tümü']].map(([deger, etiket]) => (
           <button
