@@ -106,6 +106,22 @@ class CariOzetKalemi(BaseModel):
     tutar_try: Decimal
 
 
+class MusteriSonSatisSatiri(BaseModel):
+    tarih: date
+    seri_no: str
+    urun_adi: str
+    tutar_try: Decimal
+
+
+class MusteriOzetiYaniti(BaseModel):
+    cari_id: int
+    unvan: str
+    toplam_satis_sayisi: int
+    toplam_satis_tutari_try: Decimal
+    guncel_alacak_try: Decimal  # musterinin bize olan guncel borcu (pozitif: bize borclu)
+    son_satislar: list[MusteriSonSatisSatiri]
+
+
 class TedarikciSonSiparisSatiri(BaseModel):
     tarih: date
     siparis_no: str
