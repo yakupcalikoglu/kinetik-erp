@@ -106,6 +106,23 @@ class CariOzetKalemi(BaseModel):
     tutar_try: Decimal
 
 
+class TedarikciSonSiparisSatiri(BaseModel):
+    tarih: date
+    siparis_no: str
+    urun_ozeti: str  # "2x JAC 3.5 Ton, 1x Transpalet" gibi
+    tutar: Decimal
+    para_birimi: str
+
+
+class TedarikciOzetiYaniti(BaseModel):
+    cari_id: int
+    unvan: str
+    toplam_siparis_sayisi: int
+    toplam_harcama_try: Decimal
+    kalan_bakiye_try: Decimal  # tedarikciye olan guncel borc (TL karsiligi)
+    son_siparisler: list[TedarikciSonSiparisSatiri]
+
+
 class CariHareketSatiri(BaseModel):
     tarih: date
     tur: str  # "SATIS", "KIRALAMA", "BAKIM", "TAKSITLI_SATIS", "CEK", "SIPARIS"
