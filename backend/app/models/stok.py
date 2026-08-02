@@ -229,5 +229,8 @@ class GumrukBeyannamesi(Base):
     para_birimi = Column(String(10), nullable=False, default="TRY")
     kur = Column(Numeric(18, 6), nullable=False, default=1)
     tutar_try = Column(Numeric(18, 2), nullable=False)
+    # Bu tutarin (tutar_try) icinde ne kadarinin KDV oldugu - varsa KDV
+    # Ozeti raporundaki "Indirilecek KDV" hesabina otomatik dahil edilir.
+    kdv_tutari = Column(Numeric(18, 2), nullable=False, default=0)
     notlar = Column(String(500))
     olusturma_tarihi = Column(DateTime, server_default=func.now())
