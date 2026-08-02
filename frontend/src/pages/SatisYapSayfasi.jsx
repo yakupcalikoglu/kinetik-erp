@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { api, hataMesajiCikar } from '../api/client';
-import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat, Sekmeler, eylemChipStili } from '../components/Ortak';
+import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat, Sekmeler, eylemChipStili, Etiket } from '../components/Ortak';
 import AramaliSecici from '../components/AramaliSecici';
 
 const ODEME_TIPLERI = [
@@ -21,6 +21,61 @@ const ODEME_TIPI_ACIKLAMA = {
   LEASINGLI: 'Leasing şirketi peşin mi ödedi, yoksa taksitleri biz mi takip edeceğiz — aşağıdan seçin.',
   CEK: 'Müşteriden çek alınır, vadesinde tahsil edilir.',
 };
+
+function MusteriOzetiPaneli({ musteriCariId }) {
+  const [ozet, setOzet] = useState(null);
+  const [hata, setHata] = useState(null);
+
+  useEffect(() => {
+    if (!musteriCariId) { setOzet(null); return; }
+    api.get(`/cariler/${musteriCariId}/musteri-ozeti`).then((r) => setOzet(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
+  }, [musteriCariId]);
+
+  if (!musteriCariId) return null;
+
+  return (
+    <Kart style={{ marginBottom: 16, background: 'var(--zemin)' }}>
+      <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 10 }}>
+        {ozet ? ozet.unvan : ''} — Geçmiş İş Özeti
+      </div>
+      <HataMesaji>{hata}</HataMesaji>
+      {!ozet ? (
+        <div style={{ fontSize: 12.5, color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
+      ) : ozet.toplam_satis_sayisi === 0 ? (
+        <div style={{ fontSize: 12.5, color: 'var(--metin-soluk)' }}>Bu müşteriye daha önce satış yapılmamış.</div>
+      ) : (
+        <>
+          <div style={{ display: 'flex', gap: 24, marginBottom: 12, flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--metin-ikincil)' }}>Toplam Satış</div>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>{ozet.toplam_satis_sayisi}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--metin-ikincil)' }}>Toplam Satış Tutarı</div>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>{paraFormat(ozet.toplam_satis_tutari_try)}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--metin-ikincil)' }}>Güncel Alacağımız</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: Number(ozet.guncel_alacak_try) > 0 ? 'var(--kirmizi)' : 'var(--yesil)' }}>
+                {paraFormat(ozet.guncel_alacak_try)}
+              </div>
+            </div>
+          </div>
+          {ozet.son_satislar.length > 0 && (
+            <div style={{ fontSize: 12, color: 'var(--metin-ikincil)' }}>
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>Son satışlar:</div>
+              {ozet.son_satislar.map((s) => (
+                <div key={s.seri_no} style={{ marginBottom: 2 }}>
+                  <Etiket ton="notr">{s.tarih}</Etiket> {s.urun_adi} ({s.seri_no}) — {paraFormat(s.tutar_try)}
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </Kart>
+  );
+}
 
 export default function SatisYapSayfasi() {
   const [searchParams] = useSearchParams();
@@ -160,6 +215,8 @@ export default function SatisYapSayfasi() {
     <div>
       <SayfaBasligi baslik="Satış Yap" aciklama="Satış otomatik olarak Kasa/Banka/Çek/Taksit kayıtlarına işlenir" />
       <HataMesaji>{hata}</HataMesaji>
+
+      <MusteriOzetiPaneli musteriCariId={musteriCariId} />
 
       <Kart>
         <form onSubmit={satisiTamamla}>
