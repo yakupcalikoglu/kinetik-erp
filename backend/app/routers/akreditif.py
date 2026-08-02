@@ -18,6 +18,7 @@ from app.core.security import sifre_dogrula
 from app.schemas.akreditif import (
     AkreditifOlusturIstegi, AkreditifYanit, AkreditifDurumGuncelleIstegi,
     AkreditifKalemEkleIstegi, AkreditifKalemOdeIstegi, AkreditifKalemDuzenleIstegi,
+    AkreditifKalemYanit,
     AkreditifUrunSecenegi, AkreditifMaliyetDagitIstegi, AkreditifMaliyetDagitYaniti,
     AkreditifMaliyetDagitimSatiri,
     AkreditifKalemTaksitlendirIstegi, AkreditifKalemTaksitiYanit, AkreditifKalemTaksitOdeIstegi,
