@@ -1515,7 +1515,24 @@ function AkreditifSekmesi() {
           </div>
           <form onSubmit={kaydet} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
             <Alan etiket="Sipariş">
-              <select required value={form.siparis_id} onChange={(e) => setForm((f) => ({ ...f, siparis_id: e.target.value }))} style={girdiStili}>
+              <select
+                required
+                value={form.siparis_id}
+                onChange={(e) => {
+                  const secilenId = e.target.value;
+                  const secilenSiparis = siparisler.find((s) => String(s.id) === secilenId);
+                  const toplamTutar = secilenSiparis
+                    ? (secilenSiparis.urunler || []).reduce((acc, u) => acc + Number(u.miktar) * Number(u.birim_fiyat), 0)
+                    : '';
+                  setForm((f) => ({
+                    ...f,
+                    siparis_id: secilenId,
+                    tutar: secilenSiparis ? String(toplamTutar) : f.tutar,
+                    para_birimi: secilenSiparis ? secilenSiparis.para_birimi : f.para_birimi,
+                  }));
+                }}
+                style={girdiStili}
+              >
                 <option value="">Seçiniz...</option>
                 {siparisler.map((s) => <option key={s.id} value={s.id}>{s.siparis_no}</option>)}
               </select>
@@ -1544,7 +1561,7 @@ function AkreditifSekmesi() {
                 <option value="TRY">TRY</option>
               </select>
             </Alan>
-            <Alan etiket="Tutar">
+            <Alan etiket="Tutar (sipariş seçilince otomatik doldurulur, elle düzeltebilirsiniz)">
               <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
             </Alan>
             <DovizKarsiligiGosterge tutar={form.tutar} paraBirimi={form.para_birimi} />
