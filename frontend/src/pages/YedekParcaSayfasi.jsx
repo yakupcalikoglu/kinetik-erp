@@ -2,7 +2,7 @@ import { useEffect, useState, Fragment } from 'react';
 import * as XLSX from 'xlsx';
 import { api, hataMesajiCikar } from '../api/client';
 import {
-  Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat, eylemChipStili,
+  Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat, eylemChipStili, ParaGirdisi,
 } from '../components/Ortak';
 import AramaliSecici from '../components/AramaliSecici';
 import { excelIndir } from '../utils/disaAktarma';
@@ -260,7 +260,7 @@ function HareketDuzenleFormu({ parca, hareket, cariler, urunSecenekleri, onTamam
             </Alan>
             <Alan etiket={form.yon === 'GIRIS' ? 'Alış fiyatı' : 'Satış fiyatı (boşsa sarf sayılır)'}>
               <div style={{ display: 'flex', gap: 6 }}>
-                <input type="number" step="0.01" value={form.birim_fiyat} onChange={(e) => setForm((f) => ({ ...f, birim_fiyat: e.target.value }))} style={{ ...girdiStili, flex: 1 }} />
+                <ParaGirdisi value={form.birim_fiyat} onChange={(v) => setForm((f) => ({ ...f, birim_fiyat: v }))} style={{ flex: 1 }} />
                 <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={{ ...girdiStili, width: 70 }}>
                   <option value="TRY">TL</option>
                   <option value="USD">USD</option>
@@ -437,7 +437,7 @@ function HareketlerPaneli({ parca, cariler, onKapat, onDegisti }) {
             </Alan>
             <Alan etiket={form.yon === 'GIRIS' ? 'Alış fiyatı (opsiyonel — güncel fiyatı günceller)' : 'Satış fiyatı (opsiyonel — boşsa sadece kullanım/sarf sayılır)'}>
               <div style={{ display: 'flex', gap: 6 }}>
-                <input type="number" step="0.01" value={form.birim_fiyat} onChange={(e) => setForm((f) => ({ ...f, birim_fiyat: e.target.value }))} style={{ ...girdiStili, flex: 1 }} />
+                <ParaGirdisi value={form.birim_fiyat} onChange={(v) => setForm((f) => ({ ...f, birim_fiyat: v }))} style={{ flex: 1 }} />
                 <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={{ ...girdiStili, width: 80 }}>
                   <option value="TRY">TL</option>
                   <option value="USD">USD</option>
@@ -734,7 +734,7 @@ export default function YedekParcaSayfasi() {
               </select>
             </Alan>
             <Alan etiket="Birim fiyat (TL)">
-              <input required type="number" step="0.01" value={form.birim_fiyat_try} onChange={(e) => setForm((f) => ({ ...f, birim_fiyat_try: e.target.value }))} style={girdiStili} />
+              <ParaGirdisi required value={form.birim_fiyat_try} onChange={(v) => setForm((f) => ({ ...f, birim_fiyat_try: v }))} />
             </Alan>
             <Alan etiket="Min. stok seviyesi (uyarı için)">
               <input type="number" step="0.01" value={form.min_stok_seviyesi} onChange={(e) => setForm((f) => ({ ...f, min_stok_seviyesi: e.target.value }))} style={girdiStili} />
