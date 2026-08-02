@@ -828,7 +828,7 @@ async def kdv_ozeti(
 
 
 @router.post("/kdv-manuel-girisler", response_model=KdvManuelGirisYanit,
-             dependencies=[Depends(izin_gerektir("RAPOR_GORUNTULE"))])
+             dependencies=[Depends(izin_gerektir("GIDER_DUZENLE"))])
 def kdv_manuel_giris_ekle(
     istek: KdvManuelGirisIstegi, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
 ):
@@ -848,7 +848,7 @@ def kdv_manuel_girisleri_listele(
     return list(db.execute(sorgu).scalars())
 
 
-@router.delete("/kdv-manuel-girisler/{giris_id}", dependencies=[Depends(izin_gerektir("RAPOR_GORUNTULE"))])
+@router.delete("/kdv-manuel-girisler/{giris_id}", dependencies=[Depends(izin_gerektir("GIDER_DUZENLE"))])
 def kdv_manuel_giris_sil(
     giris_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
 ):
