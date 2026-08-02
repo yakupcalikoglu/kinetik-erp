@@ -54,7 +54,7 @@ import { excelIndir } from '../utils/disaAktarma';
 const API_TABAN_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 import {
   Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat,
-  eylemChipStili,
+  eylemChipStili, ParaGirdisi,
 } from '../components/Ortak';
 
 const DURUM_ETIKET = {
@@ -139,7 +139,7 @@ function MaliyetKalemiEkleFormu({ urun, onKaydedildi }) {
           </select>
         </Alan>
         <Alan etiket="Tutar">
-          <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
+          <ParaGirdisi required value={form.tutar} onChange={(v) => setForm((f) => ({ ...f, tutar: v }))} />
         </Alan>
         {form.para_birimi !== 'TRY' ? (
           <Alan etiket="Kur (otomatik, elle değiştirilebilir)">
@@ -231,7 +231,7 @@ function MaliyetKalemiDuzenleFormu({ kalem, urunId, onKaydedildi, onVazgec }) {
                 </select>
               </Alan>
               <Alan etiket="Tutar">
-                <input required type="number" step="0.01" value={form.tutar} onChange={(e) => setForm((f) => ({ ...f, tutar: e.target.value }))} style={girdiStili} />
+                <ParaGirdisi required value={form.tutar} onChange={(v) => setForm((f) => ({ ...f, tutar: v }))} />
               </Alan>
               <Alan etiket="Kur">
                 <input required type="number" step="0.0001" value={form.kur} onChange={(e) => setForm((f) => ({ ...f, kur: e.target.value }))} style={girdiStili} />
@@ -347,11 +347,11 @@ function MaliyetDetayi({ urun, stokKartlari, onKapat }) {
           </div>
           <div style={{ minWidth: 200 }}>
             <div style={{ color: 'var(--metin-ikincil)', fontSize: 11.5, marginBottom: 3 }}>Satış fiyatı dene (TL) — net kârlılığı gör</div>
-            <input
-              type="number" step="0.01" value={denemeSatisFiyati}
-              onChange={(e) => setDenemeSatisFiyati(e.target.value)}
+            <ParaGirdisi
+              value={denemeSatisFiyati}
+              onChange={(v) => setDenemeSatisFiyati(v)}
               placeholder="Örn: 55000"
-              style={{ ...girdiStili, width: 160 }}
+              style={{ width: 160 }}
             />
           </div>
           {denemeKarZarar != null && (
@@ -567,7 +567,7 @@ function OzMalIlkKayitFormu({ stokKartlari, onKaydedildi, onVazgec }) {
           </Alan>
           <Alan etiket="Maliyet">
             <div style={{ display: 'flex', gap: 6 }}>
-              <input required type="number" step="0.01" value={form.maliyet_orijinal} onChange={(e) => setForm((f) => ({ ...f, maliyet_orijinal: e.target.value }))} style={{ ...girdiStili, flex: 1 }} />
+              <ParaGirdisi required value={form.maliyet_orijinal} onChange={(v) => setForm((f) => ({ ...f, maliyet_orijinal: v }))} style={{ flex: 1 }} />
               <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={{ ...girdiStili, width: 90 }}>
                 <option value="TRY">TL</option>
                 <option value="USD">USD</option>
@@ -639,7 +639,7 @@ function HurdayaCikarFormu({ urun, onKaydedildi, onVazgec }) {
           <form onSubmit={kaydet} style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
             <div style={{ minWidth: 160 }}>
               <Alan etiket="Hurda bedeli (TL, 0 olabilir)">
-                <input type="number" step="0.01" value={form.hurda_bedeli_try} onChange={(e) => setForm((f) => ({ ...f, hurda_bedeli_try: e.target.value }))} style={girdiStili} />
+                <ParaGirdisi value={form.hurda_bedeli_try} onChange={(v) => setForm((f) => ({ ...f, hurda_bedeli_try: v }))} />
               </Alan>
             </div>
             {Number(form.hurda_bedeli_try) > 0 && (
@@ -1090,7 +1090,7 @@ export default function StokSayfasi() {
                   </select>
                 </Alan>
                 <Alan etiket="Toplam tutar">
-                  <input type="number" step="0.01" value={topluMaliyetForm.toplam_tutar} onChange={(e) => setTopluMaliyetForm((f) => ({ ...f, toplam_tutar: e.target.value }))} style={girdiStili} />
+                  <ParaGirdisi value={topluMaliyetForm.toplam_tutar} onChange={(v) => setTopluMaliyetForm((f) => ({ ...f, toplam_tutar: v }))} />
                 </Alan>
                 {topluMaliyetForm.para_birimi !== 'TRY' && (
                   <Alan etiket="Kur">
