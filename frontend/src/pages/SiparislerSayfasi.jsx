@@ -753,7 +753,7 @@ export default function SiparislerSayfasi() {
                               ...(s.kaynak === 'ITHALAT' ? [['Çıkış limanı', s.cikis_limani || '—'], ['Varış limanı', s.varis_limani || '—']] : []),
                             ]}
                             kalemlerBaslangic={(s.urunler || []).map((u) => ({
-                              aciklama: urunAdi(u.stok_karti_id), miktar: u.miktar, birimFiyat: u.birim_fiyat, kdvOrani: 0,
+                              aciklama: urunAdi(u.stok_karti_id), miktar: u.miktar, birimFiyat: u.birim_fiyat, kdvOrani: Number(u.kdv_orani || 0),
                             }))}
                             paraBirimi={s.para_birimi}
                             fiyatGoster={belgeAcik.nusha === 'ic'}
