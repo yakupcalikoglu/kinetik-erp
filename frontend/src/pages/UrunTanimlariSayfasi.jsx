@@ -40,7 +40,7 @@ function SiraliBaslik({ children, alanAdi, siralama, style }) {
 }
 import {
   Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji,
-  eylemChipStili, BIRIM_SECENEKLERI,
+  eylemChipStili, BIRIM_SECENEKLERI, paraFormat,
 } from '../components/Ortak';
 
 function bosForm() {
