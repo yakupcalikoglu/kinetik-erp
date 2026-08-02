@@ -161,6 +161,22 @@ class Fatura(Base):
     olusturma_tarihi = Column(DateTime, server_default=func.now())
 
 
+class KdvManuelGiris(Base):
+    """
+    Indirilecek KDV (alis faturalarindan) icin manuel giris - sistemde
+    alis faturasi/tedarikci KDV takibi olmadigi icin, kullanici kendi
+    muhasebe kayitlarindan aylik toplami buraya girer.
+    """
+    __tablename__ = "kdv_manuel_girisler"
+
+    id = Column(BigInteger, primary_key=True)
+    sirket_id = Column(BigInteger, ForeignKey("sirketler.id"), nullable=False)
+    ay = Column(String(7), nullable=False)  # "2026-07" formatinda
+    tutar_try = Column(Numeric(18, 2), nullable=False)
+    aciklama = Column(String(300))
+    olusturma_tarihi = Column(DateTime, server_default=func.now())
+
+
 class FaturaDetay(Base):
     __tablename__ = "fatura_detay"
 
