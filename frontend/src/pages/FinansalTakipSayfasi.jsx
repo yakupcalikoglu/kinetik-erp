@@ -2195,8 +2195,24 @@ function LeasingSekmesi() {
   const [form, setForm] = useState(bosLeasingFormu());
   const [odemeAcikTaksitId, setOdemeAcikTaksitId] = useState(null);
 
+  const [odemePlaniHaritasi, setOdemePlaniHaritasi] = useState({}); // leasingId -> {toplam, odenen, kalan}
+
   function yukle() {
-    api.get('/leasing-sozlesmeleri').then((r) => setListe(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
+    api.get('/leasing-sozlesmeleri').then((r) => {
+      setListe(r.data);
+      Promise.all(
+        r.data.map((l) => api.get(`/leasing-sozlesmeleri/${l.id}/odeme-plani`).then((res) => [l.id, res.data]).catch(() => [l.id, null]))
+      ).then((sonuclar) => {
+        const harita = {};
+        sonuclar.forEach(([id, taksitler]) => {
+          if (!taksitler) return;
+          const odenen = taksitler.filter((t) => t.odendi_mi).reduce((acc, t) => acc + Number(t.tutar), 0);
+          const toplam = taksitler.reduce((acc, t) => acc + Number(t.tutar), 0);
+          harita[id] = { toplam, odenen, kalan: toplam - odenen };
+        });
+        setOdemePlaniHaritasi(harita);
+      });
+    }).catch((e) => setHata(hataMesajiCikar(e)));
   }
   useEffect(yukle, []);
 
@@ -2409,6 +2425,8 @@ function LeasingSekmesi() {
               <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>Ürünler</th>
               <SiraliBaslik alanAdi="toplam_tutar" siralama={siralama}>Toplam Tutar</SiraliBaslik>
               <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>TL Karşılığı</th>
+              <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>Ödenen</th>
+              <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>Kalan</th>
               <SiraliBaslik alanAdi="taksit_sayisi" siralama={siralama}>Taksit Sayısı</SiraliBaslik>
               <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>İşlem</th>
             </tr>
@@ -2428,6 +2446,12 @@ function LeasingSekmesi() {
                 </td>
                 <td style={{ padding: '10px 16px' }}>{paraFormat(l.toplam_tutar, l.para_birimi)}</td>
                 <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{tlKarsiligiGoster(l.toplam_tutar, l.para_birimi, kurlar)}</td>
+                <td style={{ padding: '10px 16px', color: 'var(--yesil)' }}>
+                  {odemePlaniHaritasi[l.id] ? paraFormat(odemePlaniHaritasi[l.id].odenen, l.para_birimi) : '—'}
+                </td>
+                <td style={{ padding: '10px 16px', fontWeight: 600, color: odemePlaniHaritasi[l.id] && odemePlaniHaritasi[l.id].kalan > 0 ? 'var(--kirmizi)' : 'var(--yesil)' }}>
+                  {odemePlaniHaritasi[l.id] ? paraFormat(odemePlaniHaritasi[l.id].kalan, l.para_birimi) : '—'}
+                </td>
                 <td style={{ padding: '10px 16px' }}>{l.taksit_sayisi}</td>
                 <td style={{ padding: '10px 16px' }}>
                   <div style={{ display: 'flex', gap: 6 }}>
@@ -3062,10 +3086,30 @@ function TaksitSekmesi() {
   const [taksitler, setTaksitler] = useState(null);
   const [odemeAcikTaksitId, setOdemeAcikTaksitId] = useState(null);
 
+  const [tumPlanlar, setTumPlanlar] = useState([]);
+  const [genisletilmisPlanId, setGenisletilmisPlanId] = useState(null);
+  const [genisPlanTaksitleri, setGenisPlanTaksitleri] = useState(null);
+
   function vadesiGecenleriYukle() {
     api.get('/taksitler/vadesi-gecenler').then((r) => setVadesiGecenler(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
   }
   useEffect(vadesiGecenleriYukle, []);
+
+  function tumPlanlariYukle() {
+    api.get('/taksitli-satis-planlari').then((r) => setTumPlanlar(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
+  }
+  useEffect(tumPlanlariYukle, []);
+
+  function planiGenisletVeyaKapat(planId) {
+    if (genisletilmisPlanId === planId) {
+      setGenisletilmisPlanId(null);
+      setGenisPlanTaksitleri(null);
+      return;
+    }
+    setGenisletilmisPlanId(planId);
+    setGenisPlanTaksitleri(null);
+    api.get(`/taksitli-satis-planlari/${planId}/taksitler`).then((r) => setGenisPlanTaksitleri(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
+  }
 
   function kalemGuncelle(i, alan, deger) {
     setForm((f) => ({ ...f, kalemler: f.kalemler.map((k, idx) => (idx === i ? { ...k, [alan]: deger } : k)) }));
@@ -3101,6 +3145,7 @@ function TaksitSekmesi() {
       const { data: taksitVerisi } = await api.get(`/taksitli-satis-planlari/${data.id}/taksitler`);
       setTaksitler(taksitVerisi);
       setFormAcik(false);
+      tumPlanlariYukle();
     } catch (err) { setHata(hataMesajiCikar(err)); }
   }
 
@@ -3137,6 +3182,77 @@ function TaksitSekmesi() {
         <Buton onClick={() => setFormAcik((a) => !a)}>{formAcik ? 'Kapat' : '+ Yeni taksitli satış'}</Buton>
       </div>
       <HataMesaji>{hata}</HataMesaji>
+
+      <Kart style={{ padding: 0, marginBottom: 16 }}>
+        <div style={{ padding: '14px 16px', fontWeight: 600, fontSize: 14, borderBottom: '1px solid var(--kenarlik)' }}>
+          Tüm Taksitli Satış Planları
+        </div>
+        {tumPlanlar.length === 0 ? (
+          <BosDurum baslik="Henüz taksitli satış planı yok" />
+        ) : (
+          <table>
+            <thead>
+              <tr style={{ background: 'var(--zemin)' }}>
+                {['Müşteri', 'Başlangıç', 'Taksit Sayısı', 'Toplam Tutar', 'Ödenen', 'Kalan', ''].map((b) => (
+                  <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {tumPlanlar.map((p) => (
+                <Fragment key={p.id}>
+                  <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                    <td style={{ padding: '10px 16px', fontWeight: 500 }}>{p.musteri_unvan || `#${p.musteri_cari_id}`}</td>
+                    <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{p.baslangic_tarihi}</td>
+                    <td style={{ padding: '10px 16px' }}>{p.taksit_sayisi}</td>
+                    <td style={{ padding: '10px 16px' }}>{paraFormat(p.toplam_tutar, p.para_birimi)}</td>
+                    <td style={{ padding: '10px 16px', color: 'var(--yesil)' }}>{paraFormat(p.toplam_odenen, p.para_birimi)}</td>
+                    <td style={{ padding: '10px 16px', fontWeight: 600, color: Number(p.kalan_bakiye) > 0 ? 'var(--kirmizi)' : 'var(--yesil)' }}>
+                      {paraFormat(p.kalan_bakiye, p.para_birimi)}
+                    </td>
+                    <td style={{ padding: '10px 16px' }}>
+                      <button onClick={() => planiGenisletVeyaKapat(p.id)} style={eylemChipStili('lacivert')}>
+                        {genisletilmisPlanId === p.id ? 'Kapat' : 'Taksitler'}
+                      </button>
+                    </td>
+                  </tr>
+                  {genisletilmisPlanId === p.id && (
+                    <tr>
+                      <td colSpan={7} style={{ padding: '12px 16px', background: 'var(--zemin)' }}>
+                        {!genisPlanTaksitleri ? (
+                          <div style={{ color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
+                        ) : (
+                          <table>
+                            <thead>
+                              <tr>
+                                {['Taksit No', 'Vade', 'Tutar', 'Durum'].map((b) => (
+                                  <th key={b} style={{ textAlign: 'left', padding: '6px 10px', fontSize: 12, color: 'var(--metin-ikincil)' }}>{b}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {genisPlanTaksitleri.map((t) => (
+                                <tr key={t.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                                  <td style={{ padding: '6px 10px' }}>{t.taksit_no}</td>
+                                  <td style={{ padding: '6px 10px', color: 'var(--metin-ikincil)' }}>{t.vade_tarihi}</td>
+                                  <td style={{ padding: '6px 10px' }}>{paraFormat(t.tutar, p.para_birimi)}</td>
+                                  <td style={{ padding: '6px 10px' }}>
+                                    <Etiket ton={t.odendi_mi ? 'yesil' : 'amber'}>{t.odendi_mi ? 'Ödendi' : 'Bekliyor'}</Etiket>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Kart>
 
       {formAcik && (
         <Kart style={{ marginBottom: 16 }}>
