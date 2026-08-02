@@ -764,11 +764,12 @@ async def kdv_ozeti(
 ):
     """
     Ay ay KDV ozeti: Hesaplanan KDV (satis faturalarindaki kdv_tutari,
-    TRY'ye canli kurla cevrilir) ve Indirilecek KDV (manuel girilen).
-    Sistemde alis faturasi/tedarikci KDV takibi olmadigi icin indirilecek
-    KDV kullanici tarafindan kendi muhasebe kayitlarindan girilir.
+    TRY'ye canli kurla cevrilir) ve Indirilecek KDV = Siparis (alim)
+    kalemlerinden OTOMATIK hesaplanan KDV + kullanicinin elle ekledigi
+    manuel girisler (orn. sipariş disi giderlerin KDV'si icin).
     """
     from app.services.kur_servisi import guncel_kur_getir
+    from app.models.stok import Siparis, SiparisDetay
 
     faturalar = list(db.execute(select(Fatura).where(Fatura.sirket_id == sirket_id)).scalars())
 
@@ -793,6 +794,24 @@ async def kdv_ozeti(
         hesaplanan[ay] = hesaplanan.get(ay, Decimal("0")) + (f.kdv_tutari or Decimal("0")) * kur
 
     indirilecek: dict[str, Decimal] = {}
+
+    # 1) Siparis kalemlerinden OTOMATIK indirilecek KDV
+    siparis_satirlari = list(db.execute(
+        select(Siparis.siparis_tarihi, SiparisDetay.miktar, SiparisDetay.birim_fiyat,
+               SiparisDetay.para_birimi, SiparisDetay.kdv_orani)
+        .join(SiparisDetay, SiparisDetay.siparis_id == Siparis.id)
+        .where(Siparis.sirket_id == sirket_id, Siparis.durum.notin_(["TASLAK", "IPTAL"]))
+    ).all())
+    for tarih, miktar, birim_fiyat, pb, kdv_orani in siparis_satirlari:
+        if not tarih:
+            continue
+        ay = tarih.strftime("%Y-%m")
+        pb_deger = pb.value if hasattr(pb, "value") else pb
+        kur = await kur_getir(pb_deger) if pb_deger != "TRY" else Decimal("1")
+        kdv_tutari_try = miktar * birim_fiyat * (kdv_orani / Decimal("100")) * kur
+        indirilecek[ay] = indirilecek.get(ay, Decimal("0")) + kdv_tutari_try
+
+    # 2) Kullanicinin elle ekledigi ek girisler (siparis disi giderler icin)
     for g in db.execute(select(KdvManuelGiris).where(KdvManuelGiris.sirket_id == sirket_id)).scalars():
         indirilecek[g.ay] = indirilecek.get(g.ay, Decimal("0")) + g.tutar_try
 
