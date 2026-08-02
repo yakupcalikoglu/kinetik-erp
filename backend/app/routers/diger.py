@@ -11,6 +11,7 @@ import json
 from app.models.diger import (
     Personel, PersonelOdeme, SabitGider,
     Borc, BorcOdeme, BorcTip, ProformaFatura, ProformaDetay, Fatura, FaturaDetay,
+    KdvManuelGiris,
 )
 from app.models.denetim import DuzenlemeKaydi
 from app.core.security import sifre_dogrula
@@ -21,6 +22,7 @@ from app.schemas.diger import (
     BorcOlusturIstegi, BorcYanit, BorcOdemeOlusturIstegi, BorcOdemeYanit, BorcBakiyeYanit,
     BorcDuzenleIstegi,
     ProformaOlusturIstegi, ProformaYanit, FaturayaCevirYaniti, FaturaYanit, NotGuncelleIstegi,
+    KdvManuelGirisIstegi, KdvManuelGirisYanit, KdvOzetSatiri, KdvOzetYaniti,
 )
 from app.services.para_hareketi import para_hareketi_olustur
 
@@ -750,5 +752,90 @@ def borc_odemesini_sil(
         db.delete(h)
 
     db.delete(odeme)
+    db.commit()
+    return {"silindi": True}
+
+
+# ===================================================================== KDV RAPORU
+@router.get("/raporlar/kdv-ozeti", response_model=KdvOzetYaniti,
+            dependencies=[Depends(izin_gerektir("RAPOR_GORUNTULE"))])
+async def kdv_ozeti(
+    ay_sayisi: int = 12, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
+):
+    """
+    Ay ay KDV ozeti: Hesaplanan KDV (satis faturalarindaki kdv_tutari,
+    TRY'ye canli kurla cevrilir) ve Indirilecek KDV (manuel girilen).
+    Sistemde alis faturasi/tedarikci KDV takibi olmadigi icin indirilecek
+    KDV kullanici tarafindan kendi muhasebe kayitlarindan girilir.
+    """
+    from app.services.kur_servisi import guncel_kur_getir
+
+    faturalar = list(db.execute(select(Fatura).where(Fatura.sirket_id == sirket_id)).scalars())
+
+    kur_cache: dict[str, Decimal] = {"TRY": Decimal("1")}
+
+    async def kur_getir(pb: str) -> Decimal:
+        if pb not in kur_cache:
+            try:
+                k = await guncel_kur_getir(pb)
+                kur_cache[pb] = Decimal(str(k)) if k else Decimal("1")
+            except Exception:
+                kur_cache[pb] = Decimal("1")
+        return kur_cache[pb]
+
+    hesaplanan: dict[str, Decimal] = {}
+    for f in faturalar:
+        if not f.tarih:
+            continue
+        ay = f.tarih.strftime("%Y-%m")
+        pb = f.para_birimi.value if hasattr(f.para_birimi, "value") else f.para_birimi
+        kur = await kur_getir(pb) if pb != "TRY" else Decimal("1")
+        hesaplanan[ay] = hesaplanan.get(ay, Decimal("0")) + (f.kdv_tutari or Decimal("0")) * kur
+
+    indirilecek: dict[str, Decimal] = {}
+    for g in db.execute(select(KdvManuelGiris).where(KdvManuelGiris.sirket_id == sirket_id)).scalars():
+        indirilecek[g.ay] = indirilecek.get(g.ay, Decimal("0")) + g.tutar_try
+
+    tum_aylar = sorted(set(hesaplanan.keys()) | set(indirilecek.keys()), reverse=True)[:ay_sayisi]
+    satirlar = [
+        KdvOzetSatiri(
+            ay=ay, hesaplanan_kdv_try=hesaplanan.get(ay, Decimal("0")),
+            indirilecek_kdv_try=indirilecek.get(ay, Decimal("0")),
+            net_kdv_try=hesaplanan.get(ay, Decimal("0")) - indirilecek.get(ay, Decimal("0")),
+        )
+        for ay in tum_aylar
+    ]
+    return KdvOzetYaniti(satirlar=satirlar)
+
+
+@router.post("/kdv-manuel-girisler", response_model=KdvManuelGirisYanit,
+             dependencies=[Depends(izin_gerektir("RAPOR_GORUNTULE"))])
+def kdv_manuel_giris_ekle(
+    istek: KdvManuelGirisIstegi, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
+):
+    yeni = KdvManuelGiris(sirket_id=sirket_id, ay=istek.ay, tutar_try=istek.tutar_try, aciklama=istek.aciklama)
+    db.add(yeni)
+    db.commit()
+    db.refresh(yeni)
+    return yeni
+
+
+@router.get("/kdv-manuel-girisler", response_model=list[KdvManuelGirisYanit],
+            dependencies=[Depends(izin_gerektir("RAPOR_GORUNTULE"))])
+def kdv_manuel_girisleri_listele(
+    sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
+):
+    sorgu = select(KdvManuelGiris).where(KdvManuelGiris.sirket_id == sirket_id).order_by(KdvManuelGiris.ay.desc())
+    return list(db.execute(sorgu).scalars())
+
+
+@router.delete("/kdv-manuel-girisler/{giris_id}", dependencies=[Depends(izin_gerektir("RAPOR_GORUNTULE"))])
+def kdv_manuel_giris_sil(
+    giris_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
+):
+    kayit = db.get(KdvManuelGiris, giris_id)
+    if kayit is None or kayit.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Kayıt bulunamadı.")
+    db.delete(kayit)
     db.commit()
     return {"silindi": True}
