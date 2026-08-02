@@ -15,7 +15,7 @@ from app.schemas.cari import (
     VergiNoSorguIstegi, VergiNoSorguYaniti, CariOlusturIstegi,
     CariGuncelleIstegi, CariYanit, CariHareketYanit, CariBakiyeYanit,
     CariTopluIceAktarIstegi, CariTopluIceAktarSonucu, CariOzetYaniti, CariOzetKalemi,
-    CariHareketSatiri,
+    CariHareketSatiri, TedarikciOzetiYaniti, TedarikciSonSiparisSatiri,
 )
 from app.services import uyumsoft_mock
 
@@ -614,3 +614,78 @@ def cari_tum_hareketler(
 
     satirlar.sort(key=lambda s: s.tarih or date.min, reverse=True)
     return satirlar
+
+
+@router.get("/{cari_id}/tedarikci-ozeti", response_model=TedarikciOzetiYaniti,
+            dependencies=[Depends(izin_gerektir("CARI_GORUNTULE"))])
+async def tedarikci_ozeti(
+    cari_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
+):
+    """
+    Bir tedarikcinin GECMISTEKI performansini ozetler: toplam kac siparis
+    verildi, toplam ne kadar harcandi (TL karsiligi, guncel kurla), guncel
+    kalan borc ve en son verilen siparislerin kisa bir listesi. Yeni bir
+    siparis olustururken tedarikci secilince "bu firmayla daha once ne is
+    yaptik" sorusuna hizlica cevap vermek icin.
+    """
+    from decimal import Decimal as _Decimal
+    from app.models.stok import Siparis, SiparisDetay, StokKarti, SiparisOdeme
+    from app.services.kur_servisi import guncel_kur_getir
+
+    cari = db.get(CariHesap, cari_id)
+    if cari is None or cari.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Cari bulunamadı.")
+
+    kur_cache: dict[str, _Decimal] = {"TRY": _Decimal("1")}
+
+    async def kur_getir(pb: str) -> _Decimal:
+        if pb not in kur_cache:
+            try:
+                k = await guncel_kur_getir(pb)
+                kur_cache[pb] = _Decimal(str(k)) if k else _Decimal("1")
+            except Exception:
+                kur_cache[pb] = _Decimal("1")
+        return kur_cache[pb]
+
+    siparisler = list(db.execute(
+        select(Siparis).where(
+            Siparis.sirket_id == sirket_id, Siparis.tedarikci_cari_id == cari_id,
+            Siparis.durum.notin_(["TASLAK", "IPTAL"]),
+        )
+    ).scalars())
+    siparisler.sort(key=lambda s: s.siparis_tarihi, reverse=True)
+
+    toplam_harcama_try = _Decimal("0")
+    toplam_odenen_try = _Decimal("0")
+    son_siparisler: list[TedarikciSonSiparisSatiri] = []
+
+    for s in siparisler:
+        urunler = list(db.execute(select(SiparisDetay).where(SiparisDetay.siparis_id == s.id)).scalars())
+        toplam_tutar = sum((u.miktar * u.birim_fiyat for u in urunler), _Decimal("0"))
+        odenen = db.execute(
+            select(func.coalesce(func.sum(SiparisOdeme.tutar), 0)).where(SiparisOdeme.siparis_id == s.id)
+        ).scalar_one()
+
+        pb = s.para_birimi.value if hasattr(s.para_birimi, "value") else s.para_birimi
+        kur = await kur_getir(pb) if pb != "TRY" else _Decimal("1")
+        toplam_harcama_try += toplam_tutar * kur
+        toplam_odenen_try += odenen * kur
+
+        if len(son_siparisler) < 5:
+            parcalar = []
+            for u in urunler[:3]:
+                kart = db.get(StokKarti, u.stok_karti_id)
+                parcalar.append(f"{u.miktar}x {(kart.marka + ' ' + kart.model) if kart else '?'}")
+            son_siparisler.append(TedarikciSonSiparisSatiri(
+                tarih=s.siparis_tarihi, siparis_no=s.siparis_no,
+                urun_ozeti=", ".join(parcalar) or "—",
+                tutar=toplam_tutar, para_birimi=pb,
+            ))
+
+    return TedarikciOzetiYaniti(
+        cari_id=cari_id, unvan=cari.unvan,
+        toplam_siparis_sayisi=len(siparisler),
+        toplam_harcama_try=toplam_harcama_try,
+        kalan_bakiye_try=toplam_harcama_try - toplam_odenen_try,
+        son_siparisler=son_siparisler,
+    )
