@@ -261,6 +261,103 @@ function HarcamaTurleriOzetiKarti() {
 }
 
 // ============================================================== KÂR MARJI ANALİZİ
+function KdvOzetiKarti() {
+  const [ozet, setOzet] = useState(null);
+  const [hata, setHata] = useState(null);
+  const [formAcik, setFormAcik] = useState(false);
+  const [form, setForm] = useState({ ay: new Date().toISOString().slice(0, 7), tutar_try: '', aciklama: '' });
+  const [kaydediliyor, setKaydediliyor] = useState(false);
+
+  function yukle() {
+    api.get('/raporlar/kdv-ozeti', { params: { ay_sayisi: 12 } }).then((r) => setOzet(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
+  }
+  useEffect(yukle, []);
+
+  async function girisEkle(e) {
+    e.preventDefault();
+    setKaydediliyor(true);
+    try {
+      await api.post('/kdv-manuel-girisler', { ay: form.ay, tutar_try: Number(form.tutar_try), aciklama: form.aciklama || null });
+      setFormAcik(false);
+      setForm({ ay: new Date().toISOString().slice(0, 7), tutar_try: '', aciklama: '' });
+      yukle();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setKaydediliyor(false);
+    }
+  }
+
+  const ayAdiGoster = (ay) => {
+    const [yil, ayNo] = ay.split('-');
+    const aylar = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+    return `${aylar[Number(ayNo) - 1]} ${yil}`;
+  };
+
+  return (
+    <Kart style={{ marginBottom: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
+        <div style={{ fontSize: 15, fontWeight: 600 }}>KDV Özeti</div>
+        <Buton variant="ikincil" onClick={() => setFormAcik((a) => !a)}>{formAcik ? 'Kapat' : '+ İndirilecek KDV Ekle'}</Buton>
+      </div>
+      <div style={{ fontSize: 12.5, color: 'var(--metin-ikincil)', marginBottom: 14 }}>
+        Hesaplanan KDV, satış faturalarınızdan otomatik hesaplanır. İndirilecek KDV (alış faturalarınızdaki KDV) sistemde
+        ayrıca tutulmadığı için elle giriyorsunuz — muhasebecinizden/alış faturalarınızdan aylık toplamı buraya ekleyin.
+      </div>
+      <HataMesaji>{hata}</HataMesaji>
+
+      {formAcik && (
+        <form onSubmit={girisEkle} style={{ display: 'flex', gap: 10, alignItems: 'flex-end', marginBottom: 16, flexWrap: 'wrap', padding: 12, background: 'var(--zemin)', borderRadius: 8 }}>
+          <div style={{ minWidth: 140 }}>
+            <Alan etiket="Ay">
+              <input required type="month" value={form.ay} onChange={(e) => setForm((f) => ({ ...f, ay: e.target.value }))} style={girdiStili} />
+            </Alan>
+          </div>
+          <div style={{ minWidth: 160 }}>
+            <Alan etiket="İndirilecek KDV (TL)">
+              <input required type="number" step="0.01" value={form.tutar_try} onChange={(e) => setForm((f) => ({ ...f, tutar_try: e.target.value }))} style={girdiStili} />
+            </Alan>
+          </div>
+          <div style={{ minWidth: 200 }}>
+            <Alan etiket="Açıklama (opsiyonel)">
+              <input value={form.aciklama} onChange={(e) => setForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
+            </Alan>
+          </div>
+          <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Kaydediliyor...' : 'Ekle'}</Buton>
+        </form>
+      )}
+
+      {!ozet ? (
+        <div style={{ color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
+      ) : ozet.satirlar.length === 0 ? (
+        <BosDurum baslik="Henüz veri yok" />
+      ) : (
+        <table>
+          <thead>
+            <tr style={{ background: 'var(--zemin)' }}>
+              {['Ay', 'Hesaplanan KDV', 'İndirilecek KDV', 'Net KDV'].map((b) => (
+                <th key={b} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 12, color: 'var(--metin-ikincil)' }}>{b}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {ozet.satirlar.map((s) => (
+              <tr key={s.ay} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                <td style={{ padding: '8px 12px', fontWeight: 500 }}>{ayAdiGoster(s.ay)}</td>
+                <td style={{ padding: '8px 12px' }}>{paraFormat(s.hesaplanan_kdv_try)}</td>
+                <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{paraFormat(s.indirilecek_kdv_try)}</td>
+                <td style={{ padding: '8px 12px', fontWeight: 700, color: Number(s.net_kdv_try) >= 0 ? 'var(--kirmizi)' : 'var(--yesil)' }}>
+                  {paraFormat(s.net_kdv_try)} {Number(s.net_kdv_try) >= 0 ? '(ödenecek)' : '(devreden)'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </Kart>
+  );
+}
+
 function AylikNetKarKarti() {
   const [veri, setVeri] = useState(null);
   const [hata, setHata] = useState(null);
@@ -822,6 +919,7 @@ export default function RaporlarSayfasi() {
       <SayfaBasligi baslik="Raporlar" aciklama="Genel bakış, yaklaşan vadeler, envanter, hareket türü, ürün ve cari bazlı raporlar" />
       <GenelBakisKarti />
       <AylikNetKarKarti />
+      <KdvOzetiKarti />
       <KarMarjiKarti />
       <HarcamaTurleriOzetiKarti />
       <YaklasanVadelerKarti />
