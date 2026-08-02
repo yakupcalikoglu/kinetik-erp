@@ -336,9 +336,10 @@ function SiparisOdemeleriPaneli({ siparis, onKapat }) {
   const [formAcik, setFormAcik] = useState(false);
   const [form, setForm] = useState({
     tarih: new Date().toISOString().slice(0, 10), tutar: '', odeme_yontemi: 'NAKIT',
-    banka_hesap_id: '', kur: '1', notlar: '',
+    banka_hesap_id: '', kur: '1', cek_no: '', cek_banka_adi: '', cek_vade_tarihi: '', notlar: '',
   });
   const [hata, setHata] = useState(null);
+  const [uyari, setUyari] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
 
   function yukle() {
@@ -359,22 +360,31 @@ function SiparisOdemeleriPaneli({ siparis, onKapat }) {
   async function odemeEkle(e) {
     e.preventDefault();
     setHata(null);
+    setUyari(null);
     if (form.odeme_yontemi === 'BANKA' && !form.banka_hesap_id) {
       setHata('Lütfen banka hesabı seçin.');
       return;
     }
+    if (form.odeme_yontemi === 'CEK' && !form.cek_vade_tarihi) {
+      setHata('Çek ile ödeme için vade tarihi girmelisiniz.');
+      return;
+    }
     setKaydediliyor(true);
     try {
-      await api.post(`/siparisler/${siparis.id}/odemeler`, {
+      const { data } = await api.post(`/siparisler/${siparis.id}/odemeler`, {
         tarih: form.tarih,
         tutar: Number(form.tutar),
         odeme_yontemi: form.odeme_yontemi,
         banka_hesap_id: form.odeme_yontemi === 'BANKA' ? Number(form.banka_hesap_id) : null,
         kur: kurGerekli ? Number(form.kur) : null,
+        cek_no: form.odeme_yontemi === 'CEK' ? (form.cek_no || null) : null,
+        cek_banka_adi: form.odeme_yontemi === 'CEK' ? (form.cek_banka_adi || null) : null,
+        cek_vade_tarihi: form.odeme_yontemi === 'CEK' ? form.cek_vade_tarihi : null,
         notlar: form.notlar || null,
       });
       setFormAcik(false);
-      setForm((f) => ({ ...f, tutar: '', notlar: '' }));
+      setForm((f) => ({ ...f, tutar: '', cek_no: '', cek_banka_adi: '', cek_vade_tarihi: '', notlar: '' }));
+      if (data.asim_uyarisi) setUyari(data.asim_uyarisi);
       yukle();
     } catch (err) {
       setHata(hataMesajiCikar(err));
@@ -400,6 +410,11 @@ function SiparisOdemeleriPaneli({ siparis, onKapat }) {
         <Buton variant="ikincil" onClick={onKapat}>Kapat</Buton>
       </div>
       <HataMesaji>{hata}</HataMesaji>
+      {uyari && (
+        <div style={{ background: 'var(--amber-acik, #fdf0d5)', color: '#8a5a00', padding: '10px 14px', borderRadius: 8, fontSize: 12.5, marginBottom: 12 }}>
+          ⚠ {uyari}
+        </div>
+      )}
 
       {bakiye && (
         <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', padding: '10px 14px', background: 'white', borderRadius: 8, marginBottom: 14, fontSize: 13 }}>
@@ -420,8 +435,11 @@ function SiparisOdemeleriPaneli({ siparis, onKapat }) {
         </div>
       )}
 
-      <div style={{ marginBottom: 12 }}>
+      <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <Buton onClick={() => setFormAcik((a) => !a)}>{formAcik ? 'Kapat' : '+ Yeni ödeme ekle'}</Buton>
+        <span style={{ fontSize: 11.5, color: 'var(--metin-ikincil)' }}>
+          Akreditif ile ödüyorsanız bu formu değil, "Akreditif" panelini kullanın.
+        </span>
       </div>
 
       {formAcik && (
@@ -434,6 +452,8 @@ function SiparisOdemeleriPaneli({ siparis, onKapat }) {
               <select value={form.odeme_yontemi} onChange={(e) => setForm((f) => ({ ...f, odeme_yontemi: e.target.value }))} style={girdiStili}>
                 <option value="NAKIT">Nakit (Ana Kasa)</option>
                 <option value="BANKA">Banka</option>
+                <option value="CEK">Çek (verilen)</option>
+                <option value="LEASING">Leasing (bilgi amaçlı)</option>
               </select>
             </Alan>
             {form.odeme_yontemi === 'BANKA' ? (
@@ -449,6 +469,24 @@ function SiparisOdemeleriPaneli({ siparis, onKapat }) {
               <Alan etiket={`${siparis.para_birimi} için TL kuru (otomatik, elle değiştirilebilir)`}>
                 <input required type="number" step="0.0001" value={form.kur} onChange={(e) => setForm((f) => ({ ...f, kur: e.target.value }))} style={girdiStili} />
               </Alan>
+            )}
+            {form.odeme_yontemi === 'CEK' && (
+              <>
+                <Alan etiket="Çek no (opsiyonel)">
+                  <input value={form.cek_no} onChange={(e) => setForm((f) => ({ ...f, cek_no: e.target.value }))} style={girdiStili} />
+                </Alan>
+                <Alan etiket="Çekin bankası (opsiyonel)">
+                  <input value={form.cek_banka_adi} onChange={(e) => setForm((f) => ({ ...f, cek_banka_adi: e.target.value }))} style={girdiStili} />
+                </Alan>
+                <Alan etiket="Vade tarihi">
+                  <input required type="date" value={form.cek_vade_tarihi} onChange={(e) => setForm((f) => ({ ...f, cek_vade_tarihi: e.target.value }))} style={girdiStili} />
+                </Alan>
+              </>
+            )}
+            {form.odeme_yontemi === 'LEASING' && (
+              <div style={{ gridColumn: '1 / -1', fontSize: 12, color: 'var(--metin-ikincil)', background: 'var(--zemin)', padding: '8px 10px', borderRadius: 6 }}>
+                Bu kayıt sadece bilgi amaçlıdır — gerçek ödemeyi leasing firmanız tedarikçiye doğrudan yapar. Kasa/Banka'ya hiçbir hareket yansımaz.
+              </div>
             )}
             <Alan etiket="Tarih">
               <input required type="date" value={form.tarih} onChange={(e) => setForm((f) => ({ ...f, tarih: e.target.value }))} style={girdiStili} />
@@ -468,7 +506,7 @@ function SiparisOdemeleriPaneli({ siparis, onKapat }) {
           <table>
             <thead>
               <tr style={{ background: 'white' }}>
-                {['Tarih', 'Tutar', 'Not', ''].map((b) => (
+                {['Tarih', 'Tutar', 'Yöntem', 'Not', ''].map((b) => (
                   <th key={b} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 12, color: 'var(--metin-ikincil)' }}>{b}</th>
                 ))}
               </tr>
@@ -478,6 +516,9 @@ function SiparisOdemeleriPaneli({ siparis, onKapat }) {
                 <tr key={o.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
                   <td style={{ padding: '8px 12px' }}>{o.tarih}</td>
                   <td style={{ padding: '8px 12px', fontWeight: 500 }}>{paraFormat(o.tutar, siparis.para_birimi)}</td>
+                  <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>
+                    {{ NAKIT: 'Nakit', BANKA: 'Banka', CEK: 'Çek', LEASING: 'Leasing' }[o.odeme_yontemi] || '—'}
+                  </td>
                   <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{o.notlar || '—'}</td>
                   <td style={{ padding: '8px 12px' }}>
                     <button onClick={() => odemeyiSil(o.id)} style={eylemChipStili('kirmizi')}>Sil</button>
@@ -520,10 +561,23 @@ export default function SiparislerSayfasi() {
       : null
   );
 
+  const [bakiyeHaritasi, setBakiyeHaritasi] = useState({}); // siparisId -> {toplam_siparis_tutari, toplam_odenen, kalan_bakiye}
+
   function listeyiYukle() {
     setYukleniyor(true);
     api.get('/siparisler')
-      .then((res) => setSiparisler(res.data))
+      .then((res) => {
+        setSiparisler(res.data);
+        // Her siparis icin bakiye bilgisini paralel cek - liste tablosunda
+        // "Odeme Durumu" sutunu icin (hangi siparis tam/kismi/hic odenmemis).
+        Promise.all(
+          res.data.map((s) => api.get(`/siparisler/${s.id}/bakiye`).then((r) => [s.id, r.data]).catch(() => [s.id, null]))
+        ).then((sonuclar) => {
+          const harita = {};
+          sonuclar.forEach(([id, veri]) => { if (veri) harita[id] = veri; });
+          setBakiyeHaritasi(harita);
+        });
+      })
       .catch((err) => setHata(hataMesajiCikar(err)))
       .finally(() => setYukleniyor(false));
   }
@@ -657,12 +711,13 @@ export default function SiparislerSayfasi() {
         ) : (
           <table style={{ tableLayout: 'fixed', width: '100%' }}>
             <colgroup>
-              <col style={{ width: '16%' }} />
               <col style={{ width: '14%' }} />
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '11%' }} />
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '11%' }} />
               <col style={{ width: '13%' }} />
-              <col style={{ width: '14%' }} />
-              <col style={{ width: '13%' }} />
-              <col style={{ width: '30%' }} />
+              <col style={{ width: '27%' }} />
             </colgroup>
             <thead>
               <tr style={{ background: 'var(--zemin)' }}>
@@ -671,6 +726,7 @@ export default function SiparislerSayfasi() {
                 <SiraliBaslik alanAdi="siparis_tarihi" siralama={siralama}>Tarih</SiraliBaslik>
                 <SiraliBaslik alanAdi="durum" siralama={siralama}>Durum</SiraliBaslik>
                 <SiraliBaslik alanAdi="_toplam" siralama={siralama}>Tutar</SiraliBaslik>
+                <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>Ödeme Durumu</th>
                 <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>İşlem</th>
               </tr>
             </thead>
@@ -700,6 +756,15 @@ export default function SiparislerSayfasi() {
                         <Etiket ton={DURUM_ETIKET[s.durum]}>{DURUM_METIN[s.durum]}</Etiket>
                       </td>
                       <td style={{ padding: '12px 16px' }}>{paraFormat(toplam, s.para_birimi)}</td>
+                      <td style={{ padding: '12px 16px' }}>
+                        {(() => {
+                          const b = bakiyeHaritasi[s.id];
+                          if (!b) return <span style={{ color: 'var(--metin-soluk)', fontSize: 12 }}>—</span>;
+                          if (b.kalan_bakiye <= 0) return <Etiket ton="yesil">Tam Ödendi</Etiket>;
+                          if (b.toplam_odenen > 0) return <Etiket ton="amber">Kısmi Ödendi</Etiket>;
+                          return <Etiket ton="kirmizi">Hiç Ödenmedi</Etiket>;
+                        })()}
+                      </td>
                       <td style={{ padding: '12px 16px' }}>
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                           {s.durum === 'TASLAK' && (
@@ -789,28 +854,28 @@ export default function SiparislerSayfasi() {
                     </tr>
                     {detay360AcikId === s.id && (
                       <tr>
-                        <td colSpan={6} style={{ padding: 0 }}>
+                        <td colSpan={7} style={{ padding: 0 }}>
                           <Siparis360Paneli siparis={s} onKapat={() => setDetay360AcikId(null)} />
                         </td>
                       </tr>
                     )}
                     {odemelerAcikSiparisId === s.id && (
                       <tr>
-                        <td colSpan={6} style={{ padding: 0 }}>
+                        <td colSpan={7} style={{ padding: 0 }}>
                           <SiparisOdemeleriPaneli siparis={s} onKapat={() => setOdemelerAcikSiparisId(null)} />
                         </td>
                       </tr>
                     )}
                     {gumrukAcikSiparisId === s.id && (
                       <tr>
-                        <td colSpan={6} style={{ padding: 0 }}>
+                        <td colSpan={7} style={{ padding: 0 }}>
                           <GumrukBeyannameleriPaneli siparis={s} cariler={cariler} onKapat={() => setGumrukAcikSiparisId(null)} />
                         </td>
                       </tr>
                     )}
                     {icerikAcikId === s.id && (
                       <tr>
-                        <td colSpan={6} style={{ padding: '12px 16px', background: 'var(--zemin)' }}>
+                        <td colSpan={7} style={{ padding: '12px 16px', background: 'var(--zemin)' }}>
                           <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Sipariş içeriği</div>
                           {(s.urunler || []).length === 0 ? (
                             <div style={{ fontSize: 13, color: 'var(--metin-soluk)' }}>Bu siparişte ürün bulunamadı.</div>
@@ -841,7 +906,7 @@ export default function SiparislerSayfasi() {
                     )}
                     {durumDegistirAcikId === s.id && (
                       <tr>
-                        <td colSpan={6} style={{ padding: '12px 16px', background: 'var(--zemin)' }}>
+                        <td colSpan={7} style={{ padding: '12px 16px', background: 'var(--zemin)' }}>
                           <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
                             <div style={{ flex: 1, maxWidth: 220 }}>
                               <Alan etiket="Yeni durum">
@@ -868,7 +933,7 @@ export default function SiparislerSayfasi() {
                     )}
                     {belgeAcik?.siparisId === s.id && (
                       <tr>
-                        <td colSpan={6} style={{ padding: '12px 16px', background: 'var(--zemin)' }}>
+                        <td colSpan={7} style={{ padding: '12px 16px', background: 'var(--zemin)' }}>
                           <BelgeSablonu
                             onKapat={() => setBelgeAcik(null)}
                             belgeBasligi={`Sipariş Formu${belgeAcik.nusha === 'tedarikci' ? ' (Tedarikçi Nüshası)' : ' (Şirket İçi)'}`}
