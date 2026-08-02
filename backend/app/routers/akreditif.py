@@ -1,3 +1,4 @@
+from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import select
@@ -51,11 +52,39 @@ def _akreditif_getir_veya_404(db: Session, akreditif_id: int, sirket_id: int) ->
     return kayit
 
 
+def _toplam_odenen_hesapla(db: Session, akreditif_id: int) -> Decimal:
+    """
+    Bir akreditif icin GERCEKTEN odenmis toplam tutari hesaplar. Bir
+    kalem taksitlendirilmisse, o kalemin odenen kismi taksitlerin
+    (odendi_mi=True olanlarin) toplamidir - kalem.odendi_mi SADECE tum
+    taksitler odendiginde True olur, bu yuzden kismi odenmis bir kalemin
+    katkisini bu sekilde dogru yakalariz.
+    """
+    toplam = Decimal("0")
+    kalemler = list(db.execute(select(AkreditifKalemi).where(AkreditifKalemi.akreditif_id == akreditif_id)).scalars())
+    for k in kalemler:
+        taksitler = list(db.execute(select(AkreditifKalemTaksiti).where(AkreditifKalemTaksiti.kalem_id == k.id)).scalars())
+        if taksitler:
+            toplam += sum((t.tutar for t in taksitler if t.odendi_mi), Decimal("0"))
+        else:
+            toplam += k.odenen_tutar or Decimal("0")
+    return toplam
+
+
 def _detayli_getir(db: Session, akreditif_id: int) -> Akreditif:
     akreditif = db.get(Akreditif, akreditif_id)
     akreditif.kalemler = list(db.execute(
         select(AkreditifKalemi).where(AkreditifKalemi.akreditif_id == akreditif.id)
     ).scalars())
+    akreditif.toplam_odenen = _toplam_odenen_hesapla(db, akreditif_id)
+    akreditif.kalan_bakiye = akreditif.tutar - akreditif.toplam_odenen
+    # Kendi kendini duzelten kontrol: gecmiste yanlis hesaplanmis/kalmis bir
+    # durum varsa (orn. eski hatali mantiktan kalma "Kapandi"), her
+    # goruntulemede gercek tutara gore otomatik duzeltilir.
+    eski_durum = akreditif.durum
+    _durumu_yeniden_hesapla(db, akreditif)
+    if akreditif.durum != eski_durum:
+        db.commit()
     return akreditif
 
 
@@ -162,10 +191,19 @@ def akreditifleri_listele(
     if durum:
         sorgu = sorgu.where(Akreditif.durum == durum)
     akreditifler = list(db.execute(sorgu).scalars())
+    degisiklik_var = False
     for a in akreditifler:
         a.kalemler = list(db.execute(
             select(AkreditifKalemi).where(AkreditifKalemi.akreditif_id == a.id)
         ).scalars())
+        a.toplam_odenen = _toplam_odenen_hesapla(db, a.id)
+        a.kalan_bakiye = a.tutar - a.toplam_odenen
+        eski_durum = a.durum
+        _durumu_yeniden_hesapla(db, a)
+        if a.durum != eski_durum:
+            degisiklik_var = True
+    if degisiklik_var:
+        db.commit()
     return akreditifler
 
 
@@ -195,16 +233,21 @@ def akreditif_durum_guncelle(
 
 
 def _durumu_yeniden_hesapla(db: Session, akreditif: Akreditif) -> None:
-    kalemler = list(db.execute(
-        select(AkreditifKalemi).where(AkreditifKalemi.akreditif_id == akreditif.id)
-    ).scalars())
-    if not kalemler:
+    """
+    Akreditifin durumunu, o ana kadar EKLENMIS kalemlerin hepsinin odenip
+    odenmedigine gore DEGIL, akreditifin KENDI toplam tutarina (akreditif.tutar)
+    gore hesaplar. Boylece henuz tum kalemleri girilmemis ya da kismen
+    odenmis bir akreditif yanlislikla "Kapandi" olarak isaretlenmez -
+    sadece GERCEKTEN tutarin tamami odendiginde kapanir.
+    """
+    if akreditif.durum == AkreditifDurum.IPTAL:
         return
-    if all(k.odendi_mi for k in kalemler):
+    toplam_odenen = _toplam_odenen_hesapla(db, akreditif.id)
+    if akreditif.tutar > 0 and toplam_odenen >= akreditif.tutar:
         akreditif.durum = AkreditifDurum.KAPANDI
-    elif any(k.odendi_mi for k in kalemler):
+    elif toplam_odenen > 0:
         akreditif.durum = AkreditifDurum.KISMI_ODENDI
-    elif akreditif.durum not in (AkreditifDurum.IPTAL,):
+    else:
         akreditif.durum = AkreditifDurum.ACIK
 
 
@@ -240,13 +283,27 @@ def akreditif_kalemi_ode(
     if akreditif is None or akreditif.sirket_id != sirket_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Akreditif kalemi bulunamadı.")
 
-    kalem.odendi_mi = True
-    kalem.odeme_tarihi = istek.odeme_tarihi
+    if kalem.odendi_mi:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bu kalem zaten tamamen ödenmiş.")
+
+    kalan = kalem.tutar - (kalem.odenen_tutar or Decimal("0"))
+    if istek.tutar <= 0:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ödeme tutarı sıfırdan büyük olmalıdır.")
+    if istek.tutar > kalan:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Girilen tutar ({istek.tutar}), bu kalemden kalan bakiyeyi ({kalan}) aşıyor."
+        )
+
+    kalem.odenen_tutar = (kalem.odenen_tutar or Decimal("0")) + istek.tutar
+    if kalem.odenen_tutar >= kalem.tutar:
+        kalem.odendi_mi = True
+        kalem.odeme_tarihi = istek.odeme_tarihi
 
     para_hareketi_olustur(
-        db, sirket_id, kullanici.id, "CIKIS", kalem.tutar,
+        db, sirket_id, kullanici.id, "CIKIS", istek.tutar,
         istek.odeme_yontemi, istek.banka_hesap_id,
-        aciklama=f"Akreditif {akreditif.akreditif_no or ''} - {kalem.tip.value}",
+        aciklama=f"Akreditif {akreditif.akreditif_no or ''} - {kalem.tip.value}" + (" (kısmi ödeme)" if not kalem.odendi_mi else ""),
         kaynak_tablo="AKREDITIF_KALEMI", kaynak_id=kalem.id,
         para_birimi=akreditif.para_birimi, kur=istek.kur,
     )
@@ -263,13 +320,20 @@ def akreditif_urun_secenekleri(
     sirket_id: int = Depends(aktif_sirket_id_getir),
     db: Session = Depends(get_db),
 ):
+    from app.models.stok import StokKarti
     akreditif = _akreditif_getir_veya_404(db, akreditif_id, sirket_id)
     urunler = list(db.execute(
         select(StokSeriNo).where(StokSeriNo.siparis_id == akreditif.siparis_id, StokSeriNo.sirket_id == sirket_id)
     ).scalars())
+    kart_haritasi = {
+        k.id: f"{k.marka} {k.model}".strip() for k in db.execute(
+            select(StokKarti).where(StokKarti.sirket_id == sirket_id)
+        ).scalars()
+    }
     return [
         AkreditifUrunSecenegi(
-            stok_seri_no_id=u.id, seri_no=u.seri_no,
+            stok_seri_no_id=u.id, seri_no=u.seri_no, stok_karti_id=u.stok_karti_id,
+            urun_adi=kart_haritasi.get(u.stok_karti_id),
             satinalma_maliyeti_try=u.satinalma_maliyeti_try,
             mevcut_diger_maliyet_try=u.diger_maliyet_try,
         )
@@ -491,7 +555,11 @@ def akreditif_kalem_taksiti_ode(
     if all(t.odendi_mi for t in tum_taksitler):
         kalem.odendi_mi = True
         kalem.odeme_tarihi = istek.odeme_tarihi
-        _durumu_yeniden_hesapla(db, akreditif)
+
+    # Her taksit odemesinde (kalem henuz tam kapanmamis olsa bile) akreditifin
+    # genel durumunu (Acik/Kismi Odendi/Kapandi) yeniden hesapla - artik bu,
+    # akreditifin KENDI toplam tutarina kiyasla yapiliyor (bkz. _durumu_yeniden_hesapla).
+    _durumu_yeniden_hesapla(db, akreditif)
 
     db.commit()
     db.refresh(taksit)
