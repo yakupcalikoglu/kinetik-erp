@@ -205,3 +205,48 @@ export function OtomatikTamamlamaGirdisi({ value, onChange, secenekler, placehol
     </>
   );
 }
+
+// Para/tutar girisi icin: kullanici yazarken bile binlik ayiracini (1.000.000
+// gibi) canli olarak gosterir. Disariya (onChange) HER ZAMAN ham, noktali
+// ondalikli bir string dondurur (orn. "1234.5") - form state'i hep temiz
+// sayisal deger tutar, gosterim ayri bir katmandir.
+// Kullanimi standart <input type="number"> ile ayni: value + onChange(deger).
+export function ParaGirdisi({ value, onChange, style, placeholder, required, disabled }) {
+  function hamDegerdenGorunume(hamStr) {
+    if (hamStr === '' || hamStr === null || hamStr === undefined) return '';
+    const [tamKisim, ondalikKisim] = String(hamStr).split('.');
+    const eksiMi = tamKisim.startsWith('-');
+    const tamKismiTemiz = eksiMi ? tamKisim.slice(1) : tamKisim;
+    const tamFormatli = tamKismiTemiz.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    const isaretli = eksiMi ? `-${tamFormatli}` : tamFormatli;
+    return ondalikKisim !== undefined ? `${isaretli},${ondalikKisim}` : isaretli;
+  }
+
+  function degisti(e) {
+    const girilen = e.target.value;
+    // Sadece rakam, eksi isareti ve virgul (ondalik ayiraci) kabul et; nokta
+    // (kullanicinin gordugu binlik ayiraci) yok sayilir - tekrar hesaplanir.
+    let sadeceGecerli = girilen.replace(/[^0-9,-]/g, '');
+    const eksiMi = sadeceGecerli.startsWith('-');
+    sadeceGecerli = sadeceGecerli.replace(/-/g, '');
+    const parcalar = sadeceGecerli.split(',');
+    const tamKisim = parcalar[0] || '';
+    const ondalikKisim = parcalar.length > 1 ? parcalar.slice(1).join('') : undefined;
+    let hamDeger = ondalikKisim !== undefined ? `${tamKisim}.${ondalikKisim}` : tamKisim;
+    if (eksiMi && hamDeger) hamDeger = `-${hamDeger}`;
+    onChange(hamDeger);
+  }
+
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      required={required}
+      disabled={disabled}
+      value={hamDegerdenGorunume(value)}
+      onChange={degisti}
+      placeholder={placeholder}
+      style={{ ...girdiStili, textAlign: 'right', ...style }}
+    />
+  );
+}
