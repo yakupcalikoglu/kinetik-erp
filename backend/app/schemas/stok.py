@@ -339,6 +339,7 @@ class GumrukBeyannamesiOlusturIstegi(BaseModel):
     tutar: Decimal
     para_birimi: str = "TRY"
     kur: Decimal = Decimal("1")
+    kdv_tutari: Decimal = Decimal("0")  # tutar_try icindeki KDV kismi - KDV Ozeti raporuna otomatik yansir
     notlar: str | None = None
 
 
@@ -353,6 +354,7 @@ class GumrukBeyannamesiYanit(BaseModel):
     para_birimi: str
     kur: Decimal
     tutar_try: Decimal
+    kdv_tutari: Decimal = Decimal("0")
     notlar: str | None
 
     class Config:
