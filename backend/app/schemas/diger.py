@@ -257,3 +257,30 @@ class FaturaYanit(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class KdvManuelGirisIstegi(BaseModel):
+    ay: str  # "2026-07"
+    tutar_try: Decimal
+    aciklama: str | None = None
+
+
+class KdvManuelGirisYanit(BaseModel):
+    id: int
+    ay: str
+    tutar_try: Decimal
+    aciklama: str | None
+
+    class Config:
+        from_attributes = True
+
+
+class KdvOzetSatiri(BaseModel):
+    ay: str
+    hesaplanan_kdv_try: Decimal  # satis faturalarindan
+    indirilecek_kdv_try: Decimal  # manuel girilen
+    net_kdv_try: Decimal  # pozitif: odenecek, negatif: devreden
+
+
+class KdvOzetYaniti(BaseModel):
+    satirlar: list[KdvOzetSatiri]
