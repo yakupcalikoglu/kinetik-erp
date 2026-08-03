@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx';
 import { api, hataMesajiCikar } from '../api/client';
 import {
   Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat, eylemChipStili, ParaGirdisi,
+  useKademelıGoster, DahaFazlaGosterButonu,
 } from '../components/Ortak';
 import AramaliSecici from '../components/AramaliSecici';
 import { excelIndir } from '../utils/disaAktarma';
@@ -666,6 +667,9 @@ export default function YedekParcaSayfasi() {
 
   const toplamDeger = liste.reduce((acc, p) => acc + Number(p.mevcut_miktar) * Number(p.birim_fiyat_try), 0);
   const azalanlar = liste.filter((p) => p.min_stok_seviyesi != null && Number(p.mevcut_miktar) <= Number(p.min_stok_seviyesi));
+  const filtrelenmisListe = liste.filter((p) => !parcaArama || p.ad.toLocaleLowerCase('tr').includes(parcaArama.toLocaleLowerCase('tr')));
+  const siraliListe = siralama.sirala(filtrelenmisListe, (item, alan) => item[alan]);
+  const kademe = useKademelıGoster(siraliListe, 50);
 
   return (
     <div>
@@ -785,10 +789,7 @@ export default function YedekParcaSayfasi() {
               </tr>
             </thead>
             <tbody>
-              {siralama.sirala(
-                liste.filter((p) => !parcaArama || p.ad.toLocaleLowerCase('tr').includes(parcaArama.toLocaleLowerCase('tr'))),
-                (item, alan) => item[alan]
-              ).map((p) => {
+              {kademe.gosterilecekler.map((p) => {
                 const azaldi = p.min_stok_seviyesi != null && Number(p.mevcut_miktar) <= Number(p.min_stok_seviyesi);
                 return (
                   <Fragment key={p.id}>
@@ -831,6 +832,7 @@ export default function YedekParcaSayfasi() {
             </tbody>
           </table>
         )}
+        <DahaFazlaGosterButonu kademe={kademe} />
       </Kart>
     </div>
   );
