@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx';
 import { api, hataMesajiCikar } from '../api/client';
 import {
   Kart, SayfaBasligi, Buton, Etiket, Alan, girdiStili, BosDurum, HataMesaji, paraFormat, eylemChipStili, ParaGirdisi,
+  useKademelıGoster, DahaFazlaGosterButonu,
 } from '../components/Ortak';
 import { useNavigate, useLocation } from 'react-router-dom';
 import AramaliSecici from '../components/AramaliSecici';
@@ -997,6 +998,7 @@ export default function CarilerSayfasi() {
   const [duzenlenenCari, setDuzenlenenCari] = useState(null);
   const location = useLocation();
   const [arama, setArama] = useState(new URLSearchParams(location.search).get('ara') || '');
+  const [filtreTip, setFiltreTip] = useState('');
   const [seciliCari, setSeciliCari] = useState(null);
   const [iceAktarAcik, setIceAktarAcik] = useState(false);
   const siralama = useSiralama();
@@ -1006,7 +1008,10 @@ export default function CarilerSayfasi() {
 
   function listeyiYukle() {
     setYukleniyor(true);
-    api.get('/cariler', { params: arama ? { arama } : {} })
+    const params = {};
+    if (arama) params.arama = arama;
+    if (filtreTip) params.tip = filtreTip;
+    api.get('/cariler', { params })
       .then((res) => setCariler(res.data))
       .catch((err) => setHata(hataMesajiCikar(err)))
       .finally(() => setYukleniyor(false));
@@ -1014,9 +1019,12 @@ export default function CarilerSayfasi() {
 
   useEffect(() => {
     listeyiYukle();
+  }, [filtreTip]); // eslint-disable-line
+
+  useEffect(() => {
     api.get('/cariler/ozet-listesi').then((r) => setOzetHaritasi(r.data)).catch(() => {});
     api.get('/kur/USD').then((r) => setUsdKur(Number(r.data.kur))).catch(() => {});
-  }, []); // eslint-disable-line
+  }, []);
 
   function yeniCariAc() {
     setDuzenlenenCari(null);
@@ -1042,6 +1050,11 @@ export default function CarilerSayfasi() {
       setHata(hataMesajiCikar(err));
     }
   }
+
+  const siraliCariler = siralama.sirala(cariler, (item, alan) => (
+    alan === 'bakiye_try' || alan === 'bakiye_usd' ? (ozetHaritasi[item.id] || 0) : item[alan]
+  ));
+  const kademe = useKademelıGoster(siraliCariler, 50);
 
   return (
     <div>
@@ -1083,6 +1096,24 @@ export default function CarilerSayfasi() {
         </>
       )}
 
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        {[['', 'Tümü'], ['MUSTERI', 'Müşteri'], ['TEDARIKCI', 'Tedarikçi']].map(([deger, etiket]) => (
+          <button
+            key={deger}
+            onClick={() => setFiltreTip(deger)}
+            style={{
+              padding: '7px 16px', borderRadius: 7, cursor: 'pointer', fontSize: 13,
+              border: filtreTip === deger ? '2px solid var(--lacivert)' : '1px solid var(--kenarlik)',
+              background: filtreTip === deger ? 'var(--lacivert)' : 'white',
+              color: filtreTip === deger ? 'white' : 'var(--metin-birincil)',
+              fontWeight: filtreTip === deger ? 600 : 400,
+            }}
+          >
+            {etiket}
+          </button>
+        ))}
+      </div>
+
       <Kart style={{ padding: 0 }}>
         <div style={{ padding: 16, borderBottom: '1px solid var(--kenarlik)' }}>
           <input
@@ -1112,9 +1143,7 @@ export default function CarilerSayfasi() {
               </tr>
             </thead>
             <tbody>
-              {siralama.sirala(cariler, (item, alan) => (
-                alan === 'bakiye_try' || alan === 'bakiye_usd' ? (ozetHaritasi[item.id] || 0) : item[alan]
-              )).map((c) => (
+              {kademe.gosterilecekler.map((c) => (
                 <tr key={c.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
                   <td style={{ padding: '12px 16px', fontWeight: 500 }}>{c.unvan}</td>
                   <td style={{ padding: '12px 16px' }}>
@@ -1140,6 +1169,7 @@ export default function CarilerSayfasi() {
             </tbody>
           </table>
         )}
+        <DahaFazlaGosterButonu kademe={kademe} />
       </Kart>
     </div>
   );
