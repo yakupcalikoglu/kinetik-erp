@@ -1040,6 +1040,10 @@ function MaliyetDagitimFormu({ akreditif, onKapat, onTamamlandi }) {
 function AkreditifKalemOdemeFormu({ kalem, akreditif, onKaydedildi, onVazgec }) {
   const [bankaHesaplari, setBankaHesaplari] = useState([]);
   const kalanBakiye = Number(kalem.tutar) - Number(kalem.odenen_tutar || 0);
+  // odemeParaBirimi: kullanicinin FIILEN hangi para biriminden odedigi -
+  // akreditifin kendi para birimi dovizliyse, kullanici isterse TL olarak
+  // da girebilsin (orn. TL banka hesabindan odeme yapiyorsa).
+  const [odemeParaBirimi, setOdemeParaBirimi] = useState(akreditif.para_birimi);
   const [form, setForm] = useState({
     tutar: String(kalanBakiye), odeme_yontemi: 'BANKA', banka_hesap_id: '', odeme_tarihi: new Date().toISOString().slice(0, 10), kur: '1',
   });
@@ -1053,13 +1057,20 @@ function AkreditifKalemOdemeFormu({ kalem, akreditif, onKaydedildi, onVazgec }) 
     }
   }, []); // eslint-disable-line
 
+  const tlGiriliyor = odemeParaBirimi === 'TRY' && akreditif.para_birimi !== 'TRY';
+  // Backend HER ZAMAN akreditifin KENDI para biriminde bir tutar bekler -
+  // kullanici TL girdiyse, kur'a bolerek doviz karsiligini hesapliyoruz.
+  const gonderilecekTutar = tlGiriliyor
+    ? (Number(form.tutar || 0) / Number(form.kur || 1))
+    : Number(form.tutar || 0);
+
   async function kaydet(e) {
     e.preventDefault();
     setHata(null);
     setKaydediliyor(true);
     try {
       await api.put(`/akreditif-kalemleri/${kalem.id}/ode`, {
-        tutar: Number(form.tutar),
+        tutar: gonderilecekTutar,
         odeme_tarihi: form.odeme_tarihi,
         odeme_yontemi: form.odeme_yontemi,
         banka_hesap_id: form.odeme_yontemi === 'BANKA' ? Number(form.banka_hesap_id) : null,
@@ -1082,9 +1093,35 @@ function AkreditifKalemOdemeFormu({ kalem, akreditif, onKaydedildi, onVazgec }) 
               Kalemi öde — kalan bakiye: {paraFormat(kalanBakiye, akreditif.para_birimi)}
             </div>
             <HataMesaji>{hata}</HataMesaji>
+            {akreditif.para_birimi !== 'TRY' && (
+              <div style={{ marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
+                <span style={{ fontSize: 12, color: 'var(--metin-ikincil)' }}>Tutarı hangi para biriminde giriyorsunuz?</span>
+                {[akreditif.para_birimi, 'TRY'].map((pb) => (
+                  <button
+                    key={pb}
+                    type="button"
+                    onClick={() => setOdemeParaBirimi(pb)}
+                    style={{
+                      padding: '5px 14px', borderRadius: 6, fontSize: 12.5, cursor: 'pointer',
+                      border: odemeParaBirimi === pb ? '1.5px solid var(--lacivert)' : '1px solid var(--kenarlik-koyu)',
+                      background: odemeParaBirimi === pb ? 'var(--lacivert)' : 'white',
+                      color: odemeParaBirimi === pb ? 'white' : 'var(--metin-birincil)',
+                      fontWeight: odemeParaBirimi === pb ? 600 : 400,
+                    }}
+                  >
+                    {pb === 'TRY' ? 'TL' : pb}
+                  </button>
+                ))}
+              </div>
+            )}
             <div style={{ display: 'grid', gridTemplateColumns: akreditif.para_birimi !== 'TRY' ? '1fr 1fr 1fr 1fr 1fr' : '1fr 1fr 1fr 1fr', gap: 12 }}>
-              <Alan etiket={`Ödenecek tutar (${akreditif.para_birimi}) — kısmi ödeme yapabilirsiniz`}>
+              <Alan etiket={`Ödenecek tutar (${odemeParaBirimi === 'TRY' ? 'TL' : odemeParaBirimi}) — kısmi ödeme yapabilirsiniz`}>
                 <ParaGirdisi required value={form.tutar} onChange={(v) => setForm((f) => ({ ...f, tutar: v }))} />
+                {tlGiriliyor && (
+                  <div style={{ fontSize: 11.5, color: 'var(--metin-ikincil)', marginTop: 4 }}>
+                    ≈ {gonderilecekTutar.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} {akreditif.para_birimi} karşılığı (kalemden bu kadar düşülecek)
+                  </div>
+                )}
               </Alan>
               <Alan etiket="Ödeme yöntemi">
                 <select value={form.odeme_yontemi} onChange={(e) => setForm((f) => ({ ...f, odeme_yontemi: e.target.value }))} style={girdiStili}>
