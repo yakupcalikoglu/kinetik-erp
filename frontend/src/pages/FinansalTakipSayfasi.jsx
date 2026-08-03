@@ -1150,9 +1150,9 @@ function AkreditifKalemOdemeFormu({ kalem, akreditif, onKaydedildi, onVazgec }) 
                 <input required type="date" value={form.odeme_tarihi} onChange={(e) => setForm((f) => ({ ...f, odeme_tarihi: e.target.value }))} style={girdiStili} />
               </Alan>
             </div>
-            {akreditif.para_birimi !== 'TRY' && form.kur && (
+            {!tlGiriliyor && akreditif.para_birimi !== 'TRY' && form.kur && (
               <div style={{ fontSize: 12.5, color: 'var(--metin-ikincil)', marginTop: 6 }}>
-                TL karşılığı: <strong>{paraFormat(Number(kalem.tutar) * (Number(form.kur) || 0))}</strong>
+                Girdiğiniz tutarın TL karşılığı: <strong>{paraFormat(Number(form.tutar || 0) * (Number(form.kur) || 0))}</strong>
               </div>
             )}
             <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
