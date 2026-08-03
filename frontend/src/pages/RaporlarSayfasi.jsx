@@ -408,6 +408,64 @@ function KdvOzetiKarti() {
   );
 }
 
+function YuzdeGosterge({ deger }) {
+  if (deger == null) return <span style={{ color: 'var(--metin-soluk)' }}>—</span>;
+  const sayi = Number(deger);
+  const renk = sayi >= 0 ? 'var(--yesil)' : 'var(--kirmizi)';
+  const ok = sayi >= 0 ? '▲' : '▼';
+  return <span style={{ color: renk, fontWeight: 600 }}>{ok} %{Math.abs(sayi).toFixed(1)}</span>;
+}
+
+function YillikKarsilastirmaKarti() {
+  const [veri, setVeri] = useState(null);
+  const [hata, setHata] = useState(null);
+
+  useEffect(() => {
+    api.get('/raporlar/yillik-karsilastirma').then((r) => setVeri(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
+  }, []);
+
+  return (
+    <Kart style={{ marginBottom: 16 }}>
+      <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Yıllık Karşılaştırma</div>
+      <div style={{ fontSize: 12.5, color: 'var(--metin-ikincil)', marginBottom: 14 }}>
+        {veri ? `${veri.donem_aciklamasi} dönemi — ${veri.bu_yil} vs ${veri.gecen_yil}` : 'Yükleniyor...'}
+      </div>
+      <HataMesaji>{hata}</HataMesaji>
+      {veri && (
+        <table>
+          <thead>
+            <tr style={{ background: 'var(--zemin)' }}>
+              {['', `${veri.bu_yil}`, `${veri.gecen_yil}`, 'Değişim'].map((b) => (
+                <th key={b} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 12, color: 'var(--metin-ikincil)' }}>{b}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
+              <td style={{ padding: '8px 12px', fontWeight: 500 }}>Toplam Gelir</td>
+              <td style={{ padding: '8px 12px' }}>{paraFormat(veri.bu_yil_toplam_gelir)}</td>
+              <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{paraFormat(veri.gecen_yil_toplam_gelir)}</td>
+              <td style={{ padding: '8px 12px' }}><YuzdeGosterge deger={veri.gelir_degisim_yuzde} /></td>
+            </tr>
+            <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
+              <td style={{ padding: '8px 12px', fontWeight: 500 }}>Toplam Gider</td>
+              <td style={{ padding: '8px 12px' }}>{paraFormat(veri.bu_yil_toplam_gider)}</td>
+              <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{paraFormat(veri.gecen_yil_toplam_gider)}</td>
+              <td style={{ padding: '8px 12px' }}><YuzdeGosterge deger={veri.gider_degisim_yuzde} /></td>
+            </tr>
+            <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
+              <td style={{ padding: '8px 12px', fontWeight: 700 }}>Net Kâr</td>
+              <td style={{ padding: '8px 12px', fontWeight: 700 }}>{paraFormat(veri.bu_yil_net_kar)}</td>
+              <td style={{ padding: '8px 12px', color: 'var(--metin-ikincil)' }}>{paraFormat(veri.gecen_yil_net_kar)}</td>
+              <td style={{ padding: '8px 12px' }}><YuzdeGosterge deger={veri.net_kar_degisim_yuzde} /></td>
+            </tr>
+          </tbody>
+        </table>
+      )}
+    </Kart>
+  );
+}
+
 function AylikNetKarKarti() {
   const [veri, setVeri] = useState(null);
   const [hata, setHata] = useState(null);
@@ -969,6 +1027,7 @@ export default function RaporlarSayfasi() {
     <div>
       <SayfaBasligi baslik="Raporlar" aciklama="Genel bakış, yaklaşan vadeler, envanter, hareket türü, ürün ve cari bazlı raporlar" />
       <GenelBakisKarti />
+      <YillikKarsilastirmaKarti />
       <AylikNetKarKarti />
       <NakitAkisTahminiKarti />
       <KdvOzetiKarti />
