@@ -2032,7 +2032,7 @@ function PersonelSekmesi() {
                 <td style={{ padding: '10px 16px' }}>{p.aylik_maas != null ? paraFormat(p.aylik_maas) : '—'}</td>
                 <td style={{ padding: '10px 16px' }}>
                   <div style={{ display: 'flex', gap: 6 }}>
-                    <button onClick={() => duzenlemeyeBasla(p)} style={eylemChipStili('notr')}>Düzenle</button>
+                    <button onClick={() => duzenlemeyeBasla(p)} style={eylemChipStili('lacivert')}>Düzenle</button>
                     <button onClick={() => odemeleriGoster(p.id)} style={eylemChipStili('lacivert')}>
                       Ödemeler
                     </button>
@@ -3834,7 +3834,7 @@ function SabitGiderSekmesi() {
                           <button onClick={() => odemeyiGeriAl(g.id)} style={eylemChipStili('kirmizi')}>Geri Al</button>
                         ) : (
                           <>
-                            <button onClick={() => duzenlemeyeBasla(g)} style={eylemChipStili('notr')}>Düzenle</button>
+                            <button onClick={() => duzenlemeyeBasla(g)} style={eylemChipStili('lacivert')}>Düzenle</button>
                             <button
                               onClick={() => setOdemeAcikId((mevcut) => (mevcut === g.id ? null : g.id))}
                               style={eylemChipStili('lacivert')}
