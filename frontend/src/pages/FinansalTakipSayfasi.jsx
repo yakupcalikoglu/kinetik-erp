@@ -1548,6 +1548,14 @@ function AkreditifSekmesi() {
   const [seciliAkreditif, setSeciliAkreditif] = useState(null);
   const [kalemler, setKalemler] = useState(null);
   const [kalemForm, setKalemForm] = useState({ tip: 'ODEME', aciklama: '', tutar: '', vade_tarihi: new Date().toISOString().slice(0, 10) });
+  const [kalemOdemeParaBirimi, setKalemOdemeParaBirimi] = useState('DOVIZ'); // 'DOVIZ' | 'TRY'
+  const [kalemKur, setKalemKur] = useState('1');
+
+  useEffect(() => {
+    if (seciliAkreditif && seciliAkreditif.para_birimi !== 'TRY') {
+      api.get(`/kur/${seciliAkreditif.para_birimi}`).then((r) => setKalemKur(String(r.data.kur))).catch(() => {});
+    }
+  }, [seciliAkreditif?.id]); // eslint-disable-line
   const [dagitimFormuAcik, setDagitimFormuAcik] = useState(false);
   const [odemeYapilacakKalemId, setOdemeYapilacakKalemId] = useState(null);
   const [taksitPaneliAcikKalemId, setTaksitPaneliAcikKalemId] = useState(null);
@@ -1629,7 +1637,12 @@ function AkreditifSekmesi() {
   async function kalemEkle(e) {
     e.preventDefault();
     try {
-      await api.post(`/akreditifler/${seciliAkreditif.id}/kalem`, { ...kalemForm, tutar: Number(kalemForm.tutar) });
+      // Backend HER ZAMAN akreditifin KENDI para biriminde bir tutar bekler -
+      // kullanici TL girdiyse, kur'a bolerek doviz karsiligini gonderiyoruz.
+      const gonderilecekTutar = kalemOdemeParaBirimi === 'TRY'
+        ? Number(kalemForm.tutar || 0) / Number(kalemKur || 1)
+        : Number(kalemForm.tutar || 0);
+      await api.post(`/akreditifler/${seciliAkreditif.id}/kalem`, { ...kalemForm, tutar: gonderilecekTutar });
       kalemleriGoster(seciliAkreditif.id);
       setKalemForm({ tip: 'ODEME', aciklama: '', tutar: '', vade_tarihi: new Date().toISOString().slice(0, 10) });
       yukle();
@@ -1812,6 +1825,27 @@ function AkreditifSekmesi() {
             />
           )}
 
+          {seciliAkreditif && seciliAkreditif.para_birimi !== 'TRY' && (
+            <div style={{ marginBottom: 10, display: 'flex', gap: 8, alignItems: 'center' }}>
+              <span style={{ fontSize: 12, color: 'var(--metin-ikincil)' }}>Tutarı hangi para biriminde giriyorsunuz?</span>
+              {[['DOVIZ', seciliAkreditif.para_birimi], ['TRY', 'TL']].map(([deger, etiket]) => (
+                <button
+                  key={deger}
+                  type="button"
+                  onClick={() => setKalemOdemeParaBirimi(deger)}
+                  style={{
+                    padding: '5px 14px', borderRadius: 6, fontSize: 12.5, cursor: 'pointer',
+                    border: kalemOdemeParaBirimi === deger ? '1.5px solid var(--lacivert)' : '1px solid var(--kenarlik-koyu)',
+                    background: kalemOdemeParaBirimi === deger ? 'var(--lacivert)' : 'white',
+                    color: kalemOdemeParaBirimi === deger ? 'white' : 'var(--metin-birincil)',
+                    fontWeight: kalemOdemeParaBirimi === deger ? 600 : 400,
+                  }}
+                >
+                  {etiket}
+                </button>
+              ))}
+            </div>
+          )}
           <form onSubmit={kalemEkle} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr auto', gap: 10, marginBottom: 14 }}>
             <Alan etiket="Tip">
               <select value={kalemForm.tip} onChange={(e) => setKalemForm((f) => ({ ...f, tip: e.target.value }))} style={girdiStili}>
@@ -1823,8 +1857,13 @@ function AkreditifSekmesi() {
             <Alan etiket="Açıklama">
               <input value={kalemForm.aciklama} onChange={(e) => setKalemForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
             </Alan>
-            <Alan etiket="Tutar">
+            <Alan etiket={`Tutar (${kalemOdemeParaBirimi === 'TRY' ? 'TL' : (seciliAkreditif?.para_birimi || '')})`}>
               <ParaGirdisi required value={kalemForm.tutar} onChange={(v) => setKalemForm((f) => ({ ...f, tutar: v }))} />
+              {kalemOdemeParaBirimi === 'TRY' && kalemForm.tutar && (
+                <div style={{ fontSize: 11, color: 'var(--metin-ikincil)', marginTop: 3 }}>
+                  ≈ {(Number(kalemForm.tutar || 0) / Number(kalemKur || 1)).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} {seciliAkreditif?.para_birimi}
+                </div>
+              )}
             </Alan>
             <Alan etiket="Vade tarihi">
               <input required type="date" value={kalemForm.vade_tarihi} onChange={(e) => setKalemForm((f) => ({ ...f, vade_tarihi: e.target.value }))} style={girdiStili} />
