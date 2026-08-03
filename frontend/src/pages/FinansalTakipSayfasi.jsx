@@ -1826,7 +1826,7 @@ function AkreditifSekmesi() {
           )}
 
           {seciliAkreditif && seciliAkreditif.para_birimi !== 'TRY' && (
-            <div style={{ marginBottom: 10, display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div style={{ marginBottom: 10, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <span style={{ fontSize: 12, color: 'var(--metin-ikincil)' }}>Tutarı hangi para biriminde giriyorsunuz?</span>
               {[['DOVIZ', seciliAkreditif.para_birimi], ['TRY', 'TL']].map(([deger, etiket]) => (
                 <button
@@ -1844,6 +1844,16 @@ function AkreditifSekmesi() {
                   {etiket}
                 </button>
               ))}
+              {kalemOdemeParaBirimi === 'TRY' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 12, color: 'var(--metin-ikincil)' }}>Kur ({seciliAkreditif.para_birimi} → TL):</span>
+                  <input
+                    type="number" step="0.0001" value={kalemKur}
+                    onChange={(e) => setKalemKur(e.target.value)}
+                    style={{ ...girdiStili, width: 100, padding: '5px 8px' }}
+                  />
+                </div>
+              )}
             </div>
           )}
           <form onSubmit={kalemEkle} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr auto', gap: 10, marginBottom: 14 }}>
