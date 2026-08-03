@@ -7,7 +7,7 @@ import {
   Building2, Bell,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { api, hataMesajiCikar, basariBildirimDinle } from '../api/client';
+import { api, hataMesajiCikar, basariBildirimDinle, yuklemeDurumuDinle } from '../api/client';
 
 const ARAMA_TUR_METIN = { CARI: 'Cari', SIPARIS: 'Sipariş', STOK: 'Stok', URUN_TANIMI: 'Ürün Tanımı', DEMIRBAS: 'Demirbaş', YEDEK_PARCA: 'Yedek Parça' };
 
@@ -273,6 +273,33 @@ function BasariToast() {
   );
 }
 
+function GenelYuklemeCubugu() {
+  const [yukleniyor, setYukleniyor] = useState(false);
+
+  useEffect(() => {
+    return yuklemeDurumuDinle((durum) => setYukleniyor(durum));
+  }, []);
+
+  if (!yukleniyor) return null;
+
+  return (
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, height: 3, zIndex: 300, background: 'rgba(30,58,110,0.12)', overflow: 'hidden' }}>
+      <div
+        style={{
+          height: '100%', width: '40%', background: 'var(--lacivert, #1e3a6e)',
+          animation: 'kinetikYuklemeKay 1s ease-in-out infinite',
+        }}
+      />
+      <style>{`
+        @keyframes kinetikYuklemeKay {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(250%); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 export default function AnaDuzen() {
   const { oturum, cikisYap, sirketDegistir, sirketleriTazele, izinVarMi } = useAuth();
   const navigate = useNavigate();
@@ -314,6 +341,7 @@ export default function AnaDuzen() {
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
       <BasariToast />
+      <GenelYuklemeCubugu />
       <style>{`
         @keyframes kinetikToastGir {
           from { opacity: 0; transform: translateY(-8px); }
@@ -470,20 +498,25 @@ export default function AnaDuzen() {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
               <Bildirimler />
               {oturum?.sirketler?.length > 1 ? (
-                <select
-                  value={oturum.aktifSirketId ?? ''}
-                  onChange={(e) => sirketDegistir(Number(e.target.value))}
-                  style={{
-                    padding: '6px 10px',
-                    borderRadius: 6,
-                    border: '1px solid var(--kenarlik-koyu)',
-                    background: 'white',
-                  }}
-                >
-                  {oturum.sirketler.map((s) => (
-                    <option key={s.id} value={s.id}>{s.unvan}</option>
-                  ))}
-                </select>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 11, color: 'var(--metin-ikincil)', fontWeight: 500 }}>Aktif Şirket:</span>
+                  <select
+                    value={oturum.aktifSirketId ?? ''}
+                    onChange={(e) => sirketDegistir(Number(e.target.value))}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: 6,
+                      border: '1.5px solid var(--lacivert, #1e3a6e)',
+                      background: 'white',
+                      fontWeight: 600,
+                      color: 'var(--lacivert, #1e3a6e)',
+                    }}
+                  >
+                    {oturum.sirketler.map((s) => (
+                      <option key={s.id} value={s.id}>{s.unvan}</option>
+                    ))}
+                  </select>
+                </div>
               ) : (
                 <span style={{ fontSize: 13, color: 'var(--metin-ikincil)' }}>
                   {oturum?.sirketler?.[0]?.unvan}
