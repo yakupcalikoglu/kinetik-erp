@@ -98,8 +98,37 @@ export const girdiStili = {
 export function BosDurum({ baslik, aciklama }) {
   return (
     <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--metin-soluk)' }}>
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" style={{ margin: '0 auto 12px', opacity: 0.35 }}>
+        <path d="M3 7l9-4 9 4v10l-9 4-9-4V7z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+        <path d="M3 7l9 4 9-4M12 11v10" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+      </svg>
       <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--metin-ikincil)', marginBottom: 4 }}>{baslik}</div>
       {aciklama && <div style={{ fontSize: 13 }}>{aciklama}</div>}
+    </div>
+  );
+}
+
+// Donen yukleniyor animasyonu - "Yukleniyor..." yazisinin yaninda/yerine
+// kullanilabilir, boyut prop'u ile kucultup buyutebilirsiniz.
+export function Spinner({ boyut = 18, renk = 'currentColor' }) {
+  return (
+    <svg
+      width={boyut} height={boyut} viewBox="0 0 24 24" fill="none"
+      style={{ animation: 'kinetikDonme 0.8s linear infinite', display: 'inline-block', verticalAlign: 'middle' }}
+    >
+      <circle cx="12" cy="12" r="9" stroke={renk} strokeWidth="2.5" strokeOpacity="0.2" />
+      <path d="M21 12a9 9 0 0 0-9-9" stroke={renk} strokeWidth="2.5" strokeLinecap="round" />
+      <style>{'@keyframes kinetikDonme { to { transform: rotate(360deg); } }'}</style>
+    </svg>
+  );
+}
+
+// Yukleniyor... yazisinin yerine kullanilabilecek, spinner+metin birlesimi
+export function YukleniyorGosterge({ metin = 'Yükleniyor...' }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--metin-soluk)', padding: '20px 0' }}>
+      <Spinner boyut={16} />
+      <span>{metin}</span>
     </div>
   );
 }
