@@ -677,11 +677,14 @@ def yaklasan_vadeler(
         )
     ).all())
     for kalem, akreditif_no, para_birimi, siparis_id in akreditif_kalemleri:
+        kalan = kalem.tutar - (kalem.odenen_tutar or Decimal("0"))
+        if kalan <= 0:
+            continue
         siparis = db.get(Siparis, siparis_id) if siparis_id else None
         odemeler.append(YaklasanVadeSatiri(
             tarih=kalem.vade_tarihi, tur="AKREDITIF",
-            aciklama=f"Akreditif {akreditif_no or ''} - {kalem.tip.value}" + (f" ({siparis.siparis_no})" if siparis else ""),
-            tutar=kalem.tutar, para_birimi=para_birimi,
+            aciklama=f"Akreditif {akreditif_no or ''} - {kalem.tip.value}" + (f" ({siparis.siparis_no})" if siparis else "") + (" (kısmi ödenmiş)" if kalem.odenen_tutar else ""),
+            tutar=kalan, para_birimi=para_birimi,
             cari_unvan=cari_unvani(siparis.tedarikci_cari_id) if siparis else None,
             kaynak_tablo="AKREDITIF_KALEMI", kaynak_id=kalem.id,
         ))
