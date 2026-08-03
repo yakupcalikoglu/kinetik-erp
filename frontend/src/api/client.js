@@ -46,6 +46,34 @@ api.interceptors.response.use((response) => {
   return response;
 });
 
+// ---------------------------------------------------------------- Genel Yukleniyor Cubugu
+// Sayfanin en ustunde ince bir "yukleniyor" cubugu gostermek icin, o an
+// devam eden istek sayisini takip ediyoruz. Sayac > 0 iken cubuk gorunur.
+let _aktifIstekSayisi = 0;
+const _yuklemeDinleyicileri = new Set();
+export function yuklemeDurumuDinle(fn) {
+  _yuklemeDinleyicileri.add(fn);
+  return () => _yuklemeDinleyicileri.delete(fn);
+}
+function _yuklemeDurumuBildir() {
+  _yuklemeDinleyicileri.forEach((fn) => fn(_aktifIstekSayisi > 0));
+}
+
+api.interceptors.request.use((config) => {
+  _aktifIstekSayisi += 1;
+  _yuklemeDurumuBildir();
+  return config;
+});
+
+function _istekBitti() {
+  _aktifIstekSayisi = Math.max(0, _aktifIstekSayisi - 1);
+  _yuklemeDurumuBildir();
+}
+api.interceptors.response.use(
+  (response) => { _istekBitti(); return response; },
+  (error) => { _istekBitti(); return Promise.reject(error); },
+);
+
 // 401/403 durumunda kullanicinin anlamasini saglayacak ortak hata mesaji cikarici.
 // Backend FastAPI hata formati genelde { "detail": "..." } seklindedir, ama
 // pydantic validasyon hatalarinda detail bir DIZI/OBJE olabilir
