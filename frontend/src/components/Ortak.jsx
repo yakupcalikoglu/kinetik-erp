@@ -1,3 +1,5 @@
+import { useState, useEffect } from 'react';
+
 export function Kart({ children, style }) {
   return (
     <div
@@ -277,5 +279,37 @@ export function ParaGirdisi({ value, onChange, style, placeholder, required, dis
       placeholder={placeholder}
       style={{ ...girdiStili, textAlign: 'right', ...style }}
     />
+  );
+}
+
+// Uzun listeleri (Cari, Stok, Siparis vb.) kisa tutmak icin: baslangicta
+// sadece ilk N kaydi gosterir, "Daha Fazla Goster" ile genisletir. Backend'e
+// dokunmadan, sadece GORUNUMU sinirlar (veri zaten yuklu).
+export function useKademelıGoster(liste, sayfaBoyu = 50) {
+  const [gosterilenSayi, setGosterilenSayi] = useState(sayfaBoyu);
+  useEffect(() => { setGosterilenSayi(sayfaBoyu); }, [liste.length]); // eslint-disable-line
+  return {
+    gosterilecekler: liste.slice(0, gosterilenSayi),
+    dahaFazlaVarMi: liste.length > gosterilenSayi,
+    dahaFazlaGoster: () => setGosterilenSayi((n) => n + sayfaBoyu),
+    toplamSayi: liste.length,
+    gosterilenSayi: Math.min(gosterilenSayi, liste.length),
+  };
+}
+
+export function DahaFazlaGosterButonu({ kademe }) {
+  if (!kademe.dahaFazlaVarMi) return null;
+  return (
+    <div style={{ textAlign: 'center', padding: '14px 0' }}>
+      <button
+        onClick={kademe.dahaFazlaGoster}
+        style={{
+          padding: '9px 20px', borderRadius: 7, border: '1px solid var(--kenarlik-koyu)',
+          background: 'white', cursor: 'pointer', fontSize: 13, color: 'var(--metin-birincil)',
+        }}
+      >
+        {kademe.gosterilenSayi} / {kademe.toplamSayi} gösteriliyor — daha fazla göster
+      </button>
+    </div>
   );
 }
