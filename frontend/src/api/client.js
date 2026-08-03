@@ -23,6 +23,29 @@ api.interceptors.request.use((config) => {
   }
   return config;
 });
+
+// ---------------------------------------------------------------- Basari Bildirimi (Toast)
+// client.js bir React bileseni degil, bu yuzden basit bir "yayinci/dinleyici"
+// (pub-sub) deseniyle basarili islemleri React tarafina (Toast bileseni)
+// bildiriyoruz. Sadece veri DEGISTIREN (POST/PUT/DELETE) istekler icin -
+// GET (sadece okuma) istekleri kullaniciyi ilgilendirmez, bildirim gostermez.
+const _basariDinleyicileri = new Set();
+export function basariBildirimDinle(fn) {
+  _basariDinleyicileri.add(fn);
+  return () => _basariDinleyicileri.delete(fn);
+}
+function _basariBildir() {
+  _basariDinleyicileri.forEach((fn) => fn());
+}
+
+api.interceptors.response.use((response) => {
+  const yontem = response.config?.method?.toLowerCase();
+  if (yontem === 'post' || yontem === 'put' || yontem === 'delete') {
+    _basariBildir();
+  }
+  return response;
+});
+
 // 401/403 durumunda kullanicinin anlamasini saglayacak ortak hata mesaji cikarici.
 // Backend FastAPI hata formati genelde { "detail": "..." } seklindedir, ama
 // pydantic validasyon hatalarinda detail bir DIZI/OBJE olabilir
@@ -44,7 +67,6 @@ function _pydanticHatasiniBicimlendir(d) {
   }
   return mesaj;
 }
-
 export function hataMesajiCikar(error) {
   const detail = error?.response?.data?.detail;
   if (typeof detail === 'string') return detail;
