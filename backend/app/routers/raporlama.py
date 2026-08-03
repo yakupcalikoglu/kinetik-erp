@@ -1178,6 +1178,21 @@ async def net_durum(
     )
 
 
+class YillikKarsilastirmaYaniti(BaseModel):
+    bu_yil: int
+    gecen_yil: int
+    donem_aciklamasi: str  # "Ocak - Agustos" gibi
+    bu_yil_net_kar: Decimal
+    gecen_yil_net_kar: Decimal
+    net_kar_degisim_yuzde: Decimal | None
+    bu_yil_toplam_gelir: Decimal
+    gecen_yil_toplam_gelir: Decimal
+    gelir_degisim_yuzde: Decimal | None
+    bu_yil_toplam_gider: Decimal
+    gecen_yil_toplam_gider: Decimal
+    gider_degisim_yuzde: Decimal | None
+
+
 class AylikKarSatiri(BaseModel):
     ay: str  # "2026-07" formatinda
     stok_satis_kari: Decimal
@@ -1310,3 +1325,57 @@ def aylik_net_kar(
 
     sonuc.sort(key=lambda s: s.ay, reverse=True)
     return sonuc[:ay_sayisi]
+
+
+@router.get("/yillik-karsilastirma", response_model=YillikKarsilastirmaYaniti,
+            dependencies=[Depends(izin_gerektir("RAPOR_GORUNTULE"))])
+def yillik_karsilastirma(
+    sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
+):
+    """
+    "Bu yil, gecen yilin AYNI donemine gore" karsilastirmasi: bugune kadar
+    gecen aylarin (orn. Ocak-Agustos) net kar/gelir/gider toplamini, gecen
+    yilin AYNI aylik penceresiyle kiyaslar. Boylece "buyuyor muyuz,
+    kucaliyor muyuz" sorusuna adil (mevsimsellik dahil) bir cevap verir.
+    """
+    tum_aylar = aylik_net_kar(ay_sayisi=24, sirket_id=sirket_id, db=db)
+
+    bugun = date.today()
+    bu_yil, gecen_yil, bu_ay = bugun.year, bugun.year - 1, bugun.month
+
+    bu_yil_satirlar = [s for s in tum_aylar if s.ay.startswith(f"{bu_yil}-")]
+    gecen_yil_satirlar = [
+        s for s in tum_aylar
+        if s.ay.startswith(f"{gecen_yil}-") and int(s.ay.split("-")[1]) <= bu_ay
+    ]
+
+    def toplam_gelir(satirlar):
+        return sum((s.stok_satis_kari + s.demirbas_satis_kari + s.yedek_parca_kari + s.bakim_geliri + s.kira_geliri for s in satirlar), Decimal("0"))
+
+    def toplam_gider(satirlar):
+        return sum((s.bakim_gideri + s.personel_gideri + s.diger_gider for s in satirlar), Decimal("0"))
+
+    def toplam_net_kar(satirlar):
+        return sum((s.net_kar for s in satirlar), Decimal("0"))
+
+    def yuzde_degisim(yeni, eski):
+        if eski == 0:
+            return None
+        return (yeni - eski) / abs(eski) * Decimal("100")
+
+    bu_yil_net_kar, gecen_yil_net_kar = toplam_net_kar(bu_yil_satirlar), toplam_net_kar(gecen_yil_satirlar)
+    bu_yil_gelir, gecen_yil_gelir = toplam_gelir(bu_yil_satirlar), toplam_gelir(gecen_yil_satirlar)
+    bu_yil_gider, gecen_yil_gider = toplam_gider(bu_yil_satirlar), toplam_gider(gecen_yil_satirlar)
+
+    ay_adlari = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık']
+    donem_aciklamasi = f"{ay_adlari[0]} - {ay_adlari[bu_ay - 1]}"
+
+    return YillikKarsilastirmaYaniti(
+        bu_yil=bu_yil, gecen_yil=gecen_yil, donem_aciklamasi=donem_aciklamasi,
+        bu_yil_net_kar=bu_yil_net_kar, gecen_yil_net_kar=gecen_yil_net_kar,
+        net_kar_degisim_yuzde=yuzde_degisim(bu_yil_net_kar, gecen_yil_net_kar),
+        bu_yil_toplam_gelir=bu_yil_gelir, gecen_yil_toplam_gelir=gecen_yil_gelir,
+        gelir_degisim_yuzde=yuzde_degisim(bu_yil_gelir, gecen_yil_gelir),
+        bu_yil_toplam_gider=bu_yil_gider, gecen_yil_toplam_gider=gecen_yil_gider,
+        gider_degisim_yuzde=yuzde_degisim(bu_yil_gider, gecen_yil_gider),
+    )
