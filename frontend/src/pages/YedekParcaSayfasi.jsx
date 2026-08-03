@@ -802,7 +802,7 @@ export default function YedekParcaSayfasi() {
                       <td style={{ padding: '12px 16px' }}>{paraFormat(Number(p.mevcut_miktar) * Number(p.birim_fiyat_try))}</td>
                       <td style={{ padding: '12px 16px' }}>
                         <div style={{ display: 'flex', gap: 6 }}>
-                          <button onClick={() => duzenlemeyeBasla(p)} style={eylemChipStili('notr')}>Düzenle</button>
+                          <button onClick={() => duzenlemeyeBasla(p)} style={eylemChipStili('lacivert')}>Düzenle</button>
                           <button
                             onClick={() => setHareketAcikId((mevcut) => (mevcut === p.id ? null : p.id))}
                             style={eylemChipStili('lacivert')}
