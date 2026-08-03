@@ -129,6 +129,7 @@ function GenelArama() {
   const kutuRef = useRef(null);
 
   const [aramaHata, setAramaHata] = useState(null);
+  const girdiRef = useRef(null);
 
   useEffect(() => {
     if (sorgu.trim().length < 2) {
@@ -152,6 +153,25 @@ function GenelArama() {
     return () => document.removeEventListener('mousedown', disaTikla);
   }, []);
 
+  // "/" tusuyla arama kutusuna odaklan (baska bir input/textarea'da
+  // yazarken tetiklenmesin diye kontrol ediyoruz), "Esc" ile kapat.
+  useEffect(() => {
+    function tusaBasildi(e) {
+      const hedefEtiket = e.target.tagName;
+      const yaziYaziyor = hedefEtiket === 'INPUT' || hedefEtiket === 'TEXTAREA' || e.target.isContentEditable;
+      if (e.key === '/' && !yaziYaziyor) {
+        e.preventDefault();
+        girdiRef.current?.focus();
+        setAcik(true);
+      } else if (e.key === 'Escape' && acik) {
+        setAcik(false);
+        girdiRef.current?.blur();
+      }
+    }
+    document.addEventListener('keydown', tusaBasildi);
+    return () => document.removeEventListener('keydown', tusaBasildi);
+  }, [acik]);
+
   // Bu turler icin, hedef sayfa "ara" query param'ini okuyup listeyi otomatik
   // filtreler - boylece genel aramadan bir sonuca tiklayinca tum listeyle
   // degil, DOGRUDAN aranan kayitla karsilasilir.
@@ -172,10 +192,11 @@ function GenelArama() {
       <div style={{ position: 'relative' }}>
         <Search size={15} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }} />
         <input
+          ref={girdiRef}
           value={sorgu}
           onChange={(e) => { setSorgu(e.target.value); setAcik(true); }}
           onFocus={() => setAcik(true)}
-          placeholder="Ara: cari, sipariş no, seri no, ürün..."
+          placeholder="Ara: cari, sipariş no, seri no, ürün... ( / )"
           style={{
             width: '100%', padding: '7px 10px 7px 32px', borderRadius: 7,
             border: '1px solid var(--kenarlik-koyu)', fontSize: 13, background: 'white',
@@ -273,6 +294,36 @@ function BasariToast() {
   );
 }
 
+function YukariCikButonu() {
+  const [gorunur, setGorunur] = useState(false);
+
+  useEffect(() => {
+    function kaydirmaKontrolu() {
+      setGorunur(window.scrollY > 400);
+    }
+    window.addEventListener('scroll', kaydirmaKontrolu);
+    return () => window.removeEventListener('scroll', kaydirmaKontrolu);
+  }, []);
+
+  if (!gorunur) return null;
+
+  return (
+    <button
+      onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+      title="Sayfanın başına dön"
+      style={{
+        position: 'fixed', bottom: 24, right: 24, zIndex: 150,
+        width: 40, height: 40, borderRadius: '50%',
+        background: 'var(--lacivert, #1e3a6e)', color: 'white', border: 'none',
+        fontSize: 18, cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}
+    >
+      ↑
+    </button>
+  );
+}
+
 function GenelYuklemeCubugu() {
   const [yukleniyor, setYukleniyor] = useState(false);
 
@@ -342,10 +393,14 @@ export default function AnaDuzen() {
     <div style={{ display: 'flex', minHeight: '100vh' }}>
       <BasariToast />
       <GenelYuklemeCubugu />
+      <YukariCikButonu />
       <style>{`
         @keyframes kinetikToastGir {
           from { opacity: 0; transform: translateY(-8px); }
           to { opacity: 1; transform: translateY(0); }
+        }
+        table tbody tr:hover {
+          background: var(--zemin, #f4f5f7);
         }
         .kinetik-hamburger { display: none; }
         .kinetik-sidebar-orten { display: none; }
