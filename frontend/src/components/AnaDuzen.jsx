@@ -7,7 +7,7 @@ import {
   Building2, Bell,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { api, hataMesajiCikar } from '../api/client';
+import { api, hataMesajiCikar, basariBildirimDinle } from '../api/client';
 
 const ARAMA_TUR_METIN = { CARI: 'Cari', SIPARIS: 'Sipariş', STOK: 'Stok', URUN_TANIMI: 'Ürün Tanımı', DEMIRBAS: 'Demirbaş', YEDEK_PARCA: 'Yedek Parça' };
 
@@ -240,6 +240,37 @@ const MODULLER = [
   { yol: '/yonetici-paneli', ad: 'Yönetici Paneli', Simge: Settings, gerekliIzin: 'KULLANICI_YONET' },
 ];
 
+function BasariToast() {
+  const [gorunur, setGorunur] = useState(false);
+
+  useEffect(() => {
+    let zamanlayici;
+    const iptal = basariBildirimDinle(() => {
+      setGorunur(true);
+      clearTimeout(zamanlayici);
+      zamanlayici = setTimeout(() => setGorunur(false), 2200);
+    });
+    return () => { iptal(); clearTimeout(zamanlayici); };
+  }, []);
+
+  if (!gorunur) return null;
+
+  return (
+    <div
+      style={{
+        position: 'fixed', top: 16, right: 16, zIndex: 200,
+        background: 'var(--yesil, #1c7c4c)', color: 'white',
+        padding: '10px 18px', borderRadius: 8, fontSize: 13.5, fontWeight: 500,
+        boxShadow: '0 4px 14px rgba(0,0,0,0.18)',
+        display: 'flex', alignItems: 'center', gap: 8,
+        animation: 'kinetikToastGir 0.2s ease-out',
+      }}
+    >
+      ✓ Kaydedildi
+    </div>
+  );
+}
+
 export default function AnaDuzen() {
   const { oturum, cikisYap, sirketDegistir, sirketleriTazele, izinVarMi } = useAuth();
   const navigate = useNavigate();
@@ -280,7 +311,12 @@ export default function AnaDuzen() {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
+      <BasariToast />
       <style>{`
+        @keyframes kinetikToastGir {
+          from { opacity: 0; transform: translateY(-8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
         .kinetik-hamburger { display: none; }
         .kinetik-sidebar-orten { display: none; }
 
