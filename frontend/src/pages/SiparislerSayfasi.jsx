@@ -2,7 +2,7 @@ import { useEffect, useState, Fragment } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, hataMesajiCikar } from '../api/client';
-import { Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat, eylemChipStili, ParaGirdisi } from '../components/Ortak';
+import { Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat, eylemChipStili, ParaGirdisi, useKademelıGoster, DahaFazlaGosterButonu } from '../components/Ortak';
 import BelgeSablonu from '../components/BelgeSablonu';
 import AramaliSecici from '../components/AramaliSecici';
 
@@ -664,6 +664,11 @@ export default function SiparislerSayfasi() {
     if (filtreBitis && s.siparis_tarihi > filtreBitis) return false;
     return true;
   });
+  const siraliSiparisler = siralama.sirala(gosterilecekSiparisler, (item, alan) => {
+    if (alan === '_toplam') return (item.urunler || []).reduce((acc, u) => acc + u.miktar * Number(u.birim_fiyat), 0);
+    return item[alan];
+  });
+  const kademe = useKademelıGoster(siraliSiparisler, 50);
 
   return (
     <div>
@@ -740,10 +745,7 @@ export default function SiparislerSayfasi() {
               </tr>
             </thead>
             <tbody>
-              {siralama.sirala(gosterilecekSiparisler, (item, alan) => {
-                if (alan === '_toplam') return (item.urunler || []).reduce((acc, u) => acc + u.miktar * Number(u.birim_fiyat), 0);
-                return item[alan];
-              }).map((s) => {
+              {kademe.gosterilecekler.map((s) => {
                 const toplam = (s.urunler || []).reduce((acc, u) => acc + u.miktar * Number(u.birim_fiyat), 0);
                 const sonDurumda = SON_DURUMLAR.includes(s.durum);
                 return (
@@ -983,6 +985,7 @@ export default function SiparislerSayfasi() {
             </tbody>
           </table>
         )}
+        <DahaFazlaGosterButonu kademe={kademe} />
       </Kart>
     </div>
   );
