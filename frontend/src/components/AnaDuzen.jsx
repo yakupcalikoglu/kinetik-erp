@@ -222,6 +222,8 @@ function GenelArama() {
   );
 }
 
+const API_TABAN_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
 const MODULLER = [
   { yol: '/', ad: 'Dashboard', Simge: LayoutDashboard },
   { yol: '/kasa', ad: 'Ana Kasa', Simge: Wallet, gerekliIzin: 'KASA_GORUNTULE' },
@@ -373,10 +375,20 @@ export default function AnaDuzen() {
           flexShrink: 0,
         }}
       >
-        <div style={{ padding: '20px 20px 16px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-          <div style={{ fontSize: 17, fontWeight: 600, letterSpacing: '-0.01em' }}>Kinetik ERP</div>
-          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', marginTop: 2 }}>
-            İthalat ön muhasebe
+        <div style={{ padding: '20px 20px 16px', borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', gap: 10 }}>
+          {oturum?.aktifSirketId && (
+            <img
+              src={`${API_TABAN_URL}/sirketler/${oturum.aktifSirketId}/logo`}
+              alt=""
+              style={{ width: 32, height: 32, borderRadius: 6, objectFit: 'contain', background: 'white', flexShrink: 0 }}
+              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+            />
+          )}
+          <div>
+            <div style={{ fontSize: 17, fontWeight: 600, letterSpacing: '-0.01em' }}>Kinetik ERP</div>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', marginTop: 2 }}>
+              İthalat ön muhasebe
+            </div>
           </div>
         </div>
 
