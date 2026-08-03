@@ -554,6 +554,7 @@ export default function SiparislerSayfasi() {
   const [filtreBaslangic, setFiltreBaslangic] = useState('');
   const [filtreBitis, setFiltreBitis] = useState('');
   const [filtreDurum, setFiltreDurum] = useState('');
+  const [filtreOdemeDurumu, setFiltreOdemeDurumu] = useState('');
   const [bilgiMesaji, setBilgiMesaji] = useState(
     location.state?.yeniSiparisNo
       ? location.state.guncellendiMi
@@ -656,10 +657,19 @@ export default function SiparislerSayfasi() {
     }
   }
 
+  function siparisinOdemeDurumu(s) {
+    const b = bakiyeHaritasi[s.id];
+    if (!b) return null;
+    if (Number(b.kalan_bakiye) <= 0) return 'TAM';
+    if (Number(b.toplam_odenen) > 0) return 'KISMI';
+    return 'HIC';
+  }
+
   const gosterilecekSiparisler = siparisler.filter((s) => {
     if (filtreSiparisNo && !s.siparis_no.toLocaleLowerCase('tr').includes(filtreSiparisNo.toLocaleLowerCase('tr'))) return false;
     if (filtreTedarikciId && String(s.tedarikci_cari_id) !== String(filtreTedarikciId)) return false;
     if (filtreDurum && s.durum !== filtreDurum) return false;
+    if (filtreOdemeDurumu && siparisinOdemeDurumu(s) !== filtreOdemeDurumu) return false;
     if (filtreBaslangic && s.siparis_tarihi < filtreBaslangic) return false;
     if (filtreBitis && s.siparis_tarihi > filtreBitis) return false;
     return true;
@@ -685,7 +695,7 @@ export default function SiparislerSayfasi() {
       )}
 
       <Kart style={{ marginBottom: 12 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr 1fr', gap: 10 }}>
           <Alan etiket="Sipariş no'ya göre filtrele">
             <input value={filtreSiparisNo} onChange={(e) => setFiltreSiparisNo(e.target.value)} placeholder="Örn: 2026-002" style={girdiStili} />
           </Alan>
@@ -702,6 +712,14 @@ export default function SiparislerSayfasi() {
               <option value="TESLIM_ALINDI">Teslim Alındı</option>
               <option value="TAMAMLANDI">Tamamlandı</option>
               <option value="IPTAL">İptal</option>
+            </select>
+          </Alan>
+          <Alan etiket="Ödeme durumuna göre filtrele">
+            <select value={filtreOdemeDurumu} onChange={(e) => setFiltreOdemeDurumu(e.target.value)} style={girdiStili}>
+              <option value="">Tümü</option>
+              <option value="TAM">Tam Ödendi</option>
+              <option value="KISMI">Kısmi Ödendi</option>
+              <option value="HIC">Hiç Ödenmedi</option>
             </select>
           </Alan>
           <Alan etiket="Tarih başlangıcı">
