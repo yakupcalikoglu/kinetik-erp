@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useEffect, useRef } from 'react';
 import {
   LayoutDashboard, Wallet, Users, Boxes, ShoppingCart, Landmark, ArrowLeftRight,
@@ -243,6 +243,16 @@ const MODULLER = [
 export default function AnaDuzen() {
   const { oturum, cikisYap, sirketDegistir, sirketleriTazele, izinVarMi } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Tarayici sekmesi basligini aktif sayfaya gore gunceller - boylece
+  // birden fazla sekme acikken hangi sekmenin hangi sayfa oldugu kolayca
+  // ayirt edilebilir (hepsi ayni "Kinetik ERP" yazisini gostermek yerine).
+  useEffect(() => {
+    const modul = MODULLER.find((m) => m.yol === location.pathname)
+      || MODULLER.find((m) => m.yol !== '/' && location.pathname.startsWith(m.yol));
+    document.title = modul ? `${modul.ad} — Kinetik ERP` : 'Kinetik ERP';
+  }, [location.pathname]);
   const [yeniSirketFormuAcik, setYeniSirketFormuAcik] = useState(false);
   const [yeniSirketAdi, setYeniSirketAdi] = useState('');
   const [hata, setHata] = useState(null);
