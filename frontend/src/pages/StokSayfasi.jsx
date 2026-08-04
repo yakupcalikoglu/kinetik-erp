@@ -1,4 +1,5 @@
 import { useEffect, useState, Fragment } from 'react';
+import * as XLSX from 'xlsx';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import AramaliSecici from '../components/AramaliSecici';
@@ -742,10 +743,152 @@ function UrunDuzenleFormu({ urun, stokKartlari, onKaydedildi, onVazgec }) {
   );
 }
 
+const STOK_SERI_ALAN_ESLESTIRME = {
+  seri_no: ['seri no', 'seri_no', 'serial', 'serino'],
+  marka: ['marka', 'brand'],
+  model: ['model'],
+  sasi_no: ['şasi no', 'sasi no', 'sasi_no', 'chassis'],
+  uretim_yili: ['üretim yılı', 'uretim yili', 'yil', 'year'],
+  satinalma_maliyeti_try: ['satınalma maliyeti', 'satinalma maliyeti', 'maliyet', 'birim fiyat', 'fiyat'],
+  sahiplik_tipi: ['sahiplik tipi', 'sahiplik_tipi', 'tip'],
+};
+
+function stokSeriNormallestir(s) {
+  return (s || '').toString().trim().toLocaleLowerCase('tr');
+}
+
+function stokSeriSutunEslestir(basliklar) {
+  const harita = {};
+  for (const [alan, adaylar] of Object.entries(STOK_SERI_ALAN_ESLESTIRME)) {
+    const bulunan = basliklar.find((b) => adaylar.includes(stokSeriNormallestir(b)));
+    if (bulunan) harita[alan] = bulunan;
+  }
+  return harita;
+}
+
+function StokSeriNoIceAktarPaneli({ onKapat, onTamamlandi }) {
+  const [satirlar, setSatirlar] = useState([]);
+  const [hata, setHata] = useState(null);
+  const [yukleniyor, setYukleniyor] = useState(false);
+  const [sonuc, setSonuc] = useState(null);
+
+  function dosyaSecildi(e) {
+    const dosya = e.target.files?.[0];
+    if (!dosya) return;
+    setHata(null);
+    setSonuc(null);
+    setSatirlar([]);
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const kitap = XLSX.read(evt.target.result, { type: 'array' });
+        const sayfa = kitap.Sheets[kitap.SheetNames[0]];
+        const veri = XLSX.utils.sheet_to_json(sayfa, { defval: '' });
+        if (veri.length === 0) { setHata('Dosyada veri bulunamadı.'); return; }
+        const basliklar = Object.keys(veri[0]);
+        const harita = stokSeriSutunEslestir(basliklar);
+        if (!harita.seri_no || !harita.marka || !harita.model) {
+          setHata("Seri No, Marka ve Model sütunları zorunludur - dosyanızda bunları bulamadım.");
+          return;
+        }
+        const donusturulmus = veri
+          .map((satir) => ({
+            seri_no: String(satir[harita.seri_no] || '').trim(),
+            marka: String(satir[harita.marka] || '').trim(),
+            model: String(satir[harita.model] || '').trim(),
+            sasi_no: harita.sasi_no ? String(satir[harita.sasi_no] || '').trim() || null : null,
+            uretim_yili: harita.uretim_yili ? Number(satir[harita.uretim_yili] || 0) || null : null,
+            satinalma_maliyeti_try: harita.satinalma_maliyeti_try ? Number(satir[harita.satinalma_maliyeti_try] || 0) : 0,
+            sahiplik_tipi: harita.sahiplik_tipi
+              ? (stokSeriNormallestir(satir[harita.sahiplik_tipi]).includes('öz') || stokSeriNormallestir(satir[harita.sahiplik_tipi]).includes('oz') ? 'OZ_MAL' : 'TICARI')
+              : 'TICARI',
+          }))
+          .filter((s) => s.seri_no);
+        setSatirlar(donusturulmus);
+      } catch (err) {
+        setHata('Dosya okunamadı. Geçerli bir Excel (.xlsx/.xls) dosyası olduğundan emin olun.');
+      }
+    };
+    reader.readAsArrayBuffer(dosya);
+  }
+
+  async function iceAktar() {
+    setYukleniyor(true);
+    setHata(null);
+    try {
+      const { data } = await api.post('/stok-seri-no/toplu-ice-aktar', { satirlar });
+      setSonuc(data);
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setYukleniyor(false);
+    }
+  }
+
+  return (
+    <Kart style={{ marginBottom: 20 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div style={{ fontSize: 14.5, fontWeight: 600 }}>Excel'den Stok (Seri No) İçe Aktar</div>
+        <Buton variant="ikincil" onClick={onKapat}>Kapat</Buton>
+      </div>
+      <HataMesaji>{hata}</HataMesaji>
+      <div style={{ fontSize: 12.5, color: 'var(--metin-ikincil)', marginBottom: 12 }}>
+        Excel dosyanızda: <strong>Seri No, Marka, Model</strong> (hepsi zorunlu — Marka/Model, Ürün Tanımları'nda
+        <strong> önceden kayıtlı</strong> bir ürünle eşleşmelidir), Şasi No, Üretim Yılı, Satınalma Maliyeti,
+        Sahiplik Tipi bulunabilir. İçe aktarılan kayıtlar "Depoda" durumunda başlar, Kasa/Banka'ya hiçbir hareket yansımaz.
+      </div>
+      <input type="file" accept=".xlsx,.xls" onChange={dosyaSecildi} style={{ marginBottom: 16 }} />
+      {satirlar.length > 0 && !sonuc && (
+        <>
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>{satirlar.length} satır bulundu — önizleme (ilk 10):</div>
+          <table style={{ marginBottom: 16 }}>
+            <thead>
+              <tr style={{ background: 'var(--zemin)' }}>
+                {['Seri No', 'Marka', 'Model', 'Şasi No', 'Yıl', 'Maliyet (TL)', 'Sahiplik'].map((b) => (
+                  <th key={b} style={{ textAlign: 'left', padding: '6px 10px', fontSize: 12, color: 'var(--metin-ikincil)' }}>{b}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {satirlar.slice(0, 10).map((s, i) => (
+                <tr key={i} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                  <td style={{ padding: '6px 10px' }}>{s.seri_no}</td>
+                  <td style={{ padding: '6px 10px' }}>{s.marka}</td>
+                  <td style={{ padding: '6px 10px' }}>{s.model}</td>
+                  <td style={{ padding: '6px 10px' }}>{s.sasi_no || '—'}</td>
+                  <td style={{ padding: '6px 10px' }}>{s.uretim_yili || '—'}</td>
+                  <td style={{ padding: '6px 10px' }}>{paraFormat(s.satinalma_maliyeti_try)}</td>
+                  <td style={{ padding: '6px 10px' }}>{s.sahiplik_tipi === 'OZ_MAL' ? 'Öz Mal' : 'Ticari'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <Buton onClick={iceAktar} disabled={yukleniyor}>{yukleniyor ? 'İçe aktarılıyor...' : `${satirlar.length} kaydı içe aktar`}</Buton>
+        </>
+      )}
+      {sonuc && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ color: 'var(--yesil)', fontWeight: 600, marginBottom: 8 }}>✓ {sonuc.basarili_sayisi} kayıt başarıyla eklendi.</div>
+          {sonuc.hatali_satirlar.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ color: 'var(--kirmizi)', fontWeight: 600, marginBottom: 6 }}>✗ {sonuc.hatali_satirlar.length} satırda hata oluştu:</div>
+              <ul style={{ fontSize: 12.5, color: 'var(--metin-ikincil)' }}>
+                {sonuc.hatali_satirlar.map((h) => <li key={h.satir_no}>Satır {h.satir_no} ({h.seri_no}): {h.hata}</li>)}
+              </ul>
+            </div>
+          )}
+          <Buton onClick={onTamamlandi}>Kapat ve listeyi yenile</Buton>
+        </div>
+      )}
+    </Kart>
+  );
+}
+
 export default function StokSayfasi() {
   const { oturum } = useAuth();
   const location = useLocation();
   const [seriNoArama, setSeriNoArama] = useState(new URLSearchParams(location.search).get('ara') || '');
+  const [iceAktarAcik, setIceAktarAcik] = useState(false);
   const [usdKur, setUsdKur] = useState(null);
   const [tumUrunler, setTumUrunler] = useState([]);
   const [urunler, setUrunler] = useState([]);
@@ -992,6 +1135,9 @@ export default function StokSayfasi() {
             <button onClick={stokExcelIndir} style={{ padding: '10px 16px', borderRadius: 8, border: '1px solid var(--kenarlik-koyu)', background: 'white', cursor: 'pointer' }}>
               Excel İndir
             </button>
+            <Buton variant="ikincil" onClick={() => setIceAktarAcik((a) => !a)}>
+              {iceAktarAcik ? 'İçe Aktarmayı Kapat' : "Excel'den İçe Aktar"}
+            </Buton>
             <Buton variant="ikincil" onClick={() => setOzMalFormuAcik((a) => !a)}>
               {ozMalFormuAcik ? 'Kapat' : '+ Öz Mal Ekle'}
             </Buton>
@@ -1000,6 +1146,13 @@ export default function StokSayfasi() {
         }
       />
       <HataMesaji>{hata}</HataMesaji>
+
+      {iceAktarAcik && (
+        <StokSeriNoIceAktarPaneli
+          onKapat={() => setIceAktarAcik(false)}
+          onTamamlandi={() => { setIceAktarAcik(false); urunleriYukle(); tumUrunleriYukle(); }}
+        />
+      )}
 
       {ozMalFormuAcik && (
         <OzMalIlkKayitFormu
