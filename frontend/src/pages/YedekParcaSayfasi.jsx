@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx';
 import { api, hataMesajiCikar } from '../api/client';
 import {
   Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat, eylemChipStili, ParaGirdisi,
-  useKademelıGoster, DahaFazlaGosterButonu,
+  useKademelıGoster, DahaFazlaGosterButonu, DahaFazlaMenu,
 } from '../components/Ortak';
 import AramaliSecici from '../components/AramaliSecici';
 import { excelIndir } from '../utils/disaAktarma';
@@ -678,22 +678,17 @@ export default function YedekParcaSayfasi() {
         aciklama="Seri no'suz, adet/miktar bazında takip edilen küçük parçalar (lastik, akü, hidrolik yağ vb.)"
         eylem={!formAcik && (
           <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              onClick={() => excelIndir(
-                liste.map((p) => ({
-                  'Ad': p.ad, 'Birim': p.birim, 'Mevcut Miktar': Number(p.mevcut_miktar),
-                  'Birim Fiyat (TL)': Number(p.birim_fiyat_try), 'Min Stok': Number(p.min_stok_seviyesi || 0),
-                  'Toplam Değer (TL)': Number(p.mevcut_miktar) * Number(p.birim_fiyat_try),
-                })),
-                'yedek_parca_listesi', 'Yedek Parça',
-              )}
-              style={{ padding: '10px 16px', borderRadius: 8, border: '1px solid var(--kenarlik-koyu)', background: 'white', cursor: 'pointer' }}
-            >
-              Excel İndir
-            </button>
-            <Buton variant="ikincil" onClick={() => setIceAktarAcik((a) => !a)}>
-              {iceAktarAcik ? 'İçe Aktarmayı Kapat' : "Excel'den İçe Aktar"}
-            </Buton>
+            <DahaFazlaMenu ogeler={[
+              { etiket: 'Excel İndir', onClick: () => excelIndir(
+                  liste.map((p) => ({
+                    'Ad': p.ad, 'Birim': p.birim, 'Mevcut Miktar': Number(p.mevcut_miktar),
+                    'Birim Fiyat (TL)': Number(p.birim_fiyat_try), 'Min Stok': Number(p.min_stok_seviyesi || 0),
+                    'Toplam Değer (TL)': Number(p.mevcut_miktar) * Number(p.birim_fiyat_try),
+                  })),
+                  'yedek_parca_listesi', 'Yedek Parça',
+                ) },
+              { etiket: "Excel'den İçe Aktar", onClick: () => setIceAktarAcik((a) => !a) },
+            ]} />
             <Buton onClick={yeniAc}>+ Yeni parça</Buton>
           </div>
         )}
