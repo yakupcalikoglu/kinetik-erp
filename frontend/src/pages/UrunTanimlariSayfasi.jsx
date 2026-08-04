@@ -42,7 +42,7 @@ function SiraliBaslik({ children, alanAdi, siralama, style }) {
 }
 import {
   Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji,
-  eylemChipStili, BIRIM_SECENEKLERI, paraFormat,
+  eylemChipStili, BIRIM_SECENEKLERI, paraFormat, DahaFazlaMenu,
 } from '../components/Ortak';
 
 function bosForm() {
@@ -482,22 +482,17 @@ export default function UrunTanimlariSayfasi() {
         aciklama="Marka, model, birim ve gümrük bilgileri — fiziksel envanterden bağımsız ürün kataloğu"
         eylem={!formAcik && (
           <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              onClick={() => excelIndir(
-                kartlar.map((k) => ({
-                  'Marka': k.marka, 'Model': k.model, 'Birim': k.birim,
-                  'Birim Ağırlık (kg)': k.birim_agirlik_kg || '', 'Menşei Ülke': k.mense_ulke || '',
-                  'GTİP Kodu': k.gtip_kodu || '', 'Açıklama': k.aciklama || '',
-                })),
-                'urun_tanimlari', 'Ürün Tanımları',
-              )}
-              style={{ padding: '10px 16px', borderRadius: 8, border: '1px solid var(--kenarlik-koyu)', background: 'white', cursor: 'pointer' }}
-            >
-              Excel İndir
-            </button>
-            <Buton variant="ikincil" onClick={() => setIceAktarAcik((a) => !a)}>
-              {iceAktarAcik ? 'İçe Aktarmayı Kapat' : "Excel'den İçe Aktar"}
-            </Buton>
+            <DahaFazlaMenu ogeler={[
+              { etiket: 'Excel İndir', onClick: () => excelIndir(
+                  kartlar.map((k) => ({
+                    'Marka': k.marka, 'Model': k.model, 'Birim': k.birim,
+                    'Birim Ağırlık (kg)': k.birim_agirlik_kg || '', 'Menşei Ülke': k.mense_ulke || '',
+                    'GTİP Kodu': k.gtip_kodu || '', 'Açıklama': k.aciklama || '',
+                  })),
+                  'urun_tanimlari', 'Ürün Tanımları',
+                ) },
+              { etiket: "Excel'den İçe Aktar", onClick: () => setIceAktarAcik((a) => !a) },
+            ]} />
             <Buton onClick={yeniAc}>+ Yeni ürün tanımı</Buton>
           </div>
         )}
