@@ -24,7 +24,8 @@ function Bildirimler() {
       api.get('/yedek-parcalar').catch(() => ({ data: [] })),
       api.get('/kiralama-sozlesmeleri').catch(() => ({ data: [] })),
       api.get('/cekler').catch(() => ({ data: [] })),
-    ]).then(([yp, kira, cek]) => {
+      api.get('/raporlar/yaklasan-vadeler', { params: { gun: 30 } }).catch(() => ({ data: { odemeler: [] } })),
+    ]).then(([yp, kira, cek, vadeler]) => {
       const bugun = new Date().toISOString().slice(0, 10);
       const liste = [];
 
@@ -50,6 +51,14 @@ function Bildirimler() {
           id: `cek-${c.id}`,
           mesaj: `Çek ${c.cek_no || '#' + c.id} vadesi geçti (${c.vade_tarihi})`,
           yol: '/finansal?sekme=cek',
+        }));
+
+      (vadeler.data?.odemeler || [])
+        .filter((v) => v.tur === 'AKREDITIF' && v.tarih < bugun)
+        .forEach((v) => liste.push({
+          id: `akr-${v.kaynak_id}`,
+          mesaj: `${v.aciklama} vadesi geçti (${v.tarih}) — ${Number(v.tutar).toLocaleString('tr-TR')} ${v.para_birimi}`,
+          yol: '/finansal?sekme=akreditif',
         }));
 
       setBildirimler(liste);
