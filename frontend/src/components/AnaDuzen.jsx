@@ -254,23 +254,53 @@ function GenelArama() {
 
 const API_TABAN_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
-const MODULLER = [
-  { yol: '/', ad: 'Dashboard', Simge: LayoutDashboard },
-  { yol: '/kasa', ad: 'Ana Kasa', Simge: Wallet, gerekliIzin: 'KASA_GORUNTULE' },
-  { yol: '/cariler', ad: 'Cari', Simge: Users, gerekliIzin: 'CARI_GORUNTULE' },
-  { yol: '/stok', ad: 'Stok', Simge: Boxes, gerekliIzin: 'STOK_GORUNTULE' },
-  { yol: '/siparisler', ad: 'Siparişler', Simge: ShoppingCart },
-  { yol: '/banka', ad: 'Banka', Simge: Landmark, gerekliIzin: 'BANKA_GORUNTULE' },
-  { yol: '/virman', ad: 'Virman', Simge: ArrowLeftRight },
-  { yol: '/finansal', ad: 'Finansal Takip', Simge: Receipt },
-  { yol: '/proforma-fatura', ad: 'Proforma / Fatura', Simge: FileSpreadsheet, gerekliIzin: 'FATURA_GORUNTULE' },
-  { yol: '/raporlar', ad: 'Raporlar', Simge: BarChart3 },
-  { yol: '/satis-yap', ad: 'Satış Yap', Simge: HandCoins, gerekliIzin: 'STOK_DUZENLE' },
-  { yol: '/urun-tanimlari', ad: 'Ürün Tanımları', Simge: Tag, gerekliIzin: 'STOK_GORUNTULE' },
-  { yol: '/yedek-parcalar', ad: 'Yedek Parça / Sarf', Simge: Wrench, gerekliIzin: 'STOK_GORUNTULE' },
-  { yol: '/oz-mal', ad: 'Öz Mal / Demirbaş', Simge: Building2, gerekliIzin: 'STOK_GORUNTULE' },
-  { yol: '/yonetici-paneli', ad: 'Yönetici Paneli', Simge: Settings, gerekliIzin: 'KULLANICI_YONET' },
+// Menu, mantiksal gruplara ayrildi - Finansal Takip sayfasindaki sekme
+// gruplamasiyla ayni mantik (once duz 14 ogelik bir listeydi).
+const MODUL_GRUPLARI = [
+  {
+    baslik: null, // grup basligi olmadan direkt gosterilir (en ust seviye)
+    moduller: [
+      { yol: '/', ad: 'Dashboard', Simge: LayoutDashboard },
+    ],
+  },
+  {
+    baslik: 'Finansal',
+    moduller: [
+      { yol: '/kasa', ad: 'Ana Kasa', Simge: Wallet, gerekliIzin: 'KASA_GORUNTULE' },
+      { yol: '/banka', ad: 'Banka', Simge: Landmark, gerekliIzin: 'BANKA_GORUNTULE' },
+      { yol: '/virman', ad: 'Virman', Simge: ArrowLeftRight },
+      { yol: '/finansal', ad: 'Finansal Takip', Simge: Receipt },
+    ],
+  },
+  {
+    baslik: 'Ticaret',
+    moduller: [
+      { yol: '/cariler', ad: 'Cari', Simge: Users, gerekliIzin: 'CARI_GORUNTULE' },
+      { yol: '/siparisler', ad: 'Siparişler', Simge: ShoppingCart },
+      { yol: '/proforma-fatura', ad: 'Proforma / Fatura', Simge: FileSpreadsheet, gerekliIzin: 'FATURA_GORUNTULE' },
+      { yol: '/satis-yap', ad: 'Satış Yap', Simge: HandCoins, gerekliIzin: 'STOK_DUZENLE' },
+    ],
+  },
+  {
+    baslik: 'Envanter',
+    moduller: [
+      { yol: '/stok', ad: 'Stok', Simge: Boxes, gerekliIzin: 'STOK_GORUNTULE' },
+      { yol: '/urun-tanimlari', ad: 'Ürün Tanımları', Simge: Tag, gerekliIzin: 'STOK_GORUNTULE' },
+      { yol: '/yedek-parcalar', ad: 'Yedek Parça / Sarf', Simge: Wrench, gerekliIzin: 'STOK_GORUNTULE' },
+      { yol: '/oz-mal', ad: 'Öz Mal / Demirbaş', Simge: Building2, gerekliIzin: 'STOK_GORUNTULE' },
+    ],
+  },
+  {
+    baslik: 'Genel',
+    moduller: [
+      { yol: '/raporlar', ad: 'Raporlar', Simge: BarChart3 },
+      { yol: '/yonetici-paneli', ad: 'Yönetici Paneli', Simge: Settings, gerekliIzin: 'KULLANICI_YONET' },
+    ],
+  },
 ];
+// Duz liste - eski kod (baslik/sonucaGit/document.title mantigi) MODULLER
+// uzerinden calisiyor, gruplamayi bozmadan hepsini birlestiriyoruz.
+const MODULLER = MODUL_GRUPLARI.flatMap((g) => g.moduller);
 
 function BasariToast() {
   const [gorunur, setGorunur] = useState(false);
@@ -397,6 +427,9 @@ export default function AnaDuzen() {
   }
 
   const gorunurModuller = MODULLER.filter((m) => izinVarMi(m.gerekliIzin));
+  const gorunurGruplar = MODUL_GRUPLARI
+    .map((g) => ({ ...g, moduller: g.moduller.filter((m) => izinVarMi(m.gerekliIzin)) }))
+    .filter((g) => g.moduller.length > 0);
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
@@ -485,7 +518,17 @@ export default function AnaDuzen() {
         </div>
 
         <nav style={{ flex: 1, padding: '12px 8px', display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
-          {gorunurModuller.map((m) => (
+          {gorunurGruplar.map((grup, i) => (
+            <div key={grup.baslik || 'ust'} style={{ marginTop: i === 0 ? 0 : 14 }}>
+              {grup.baslik && (
+                <div style={{
+                  padding: '4px 12px 6px', fontSize: 10.5, fontWeight: 600, letterSpacing: '0.04em',
+                  color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase',
+                }}>
+                  {grup.baslik}
+                </div>
+              )}
+              {grup.moduller.map((m) => (
             <NavLink
               key={m.yol}
               to={m.yol}
@@ -506,6 +549,8 @@ export default function AnaDuzen() {
               <m.Simge size={16} style={{ opacity: 0.85, flexShrink: 0 }} />
               {m.ad}
             </NavLink>
+              ))}
+            </div>
           ))}
         </nav>
 
