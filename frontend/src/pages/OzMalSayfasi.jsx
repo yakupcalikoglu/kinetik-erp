@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { api, hataMesajiCikar } from '../api/client';
 import {
   Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat, eylemChipStili, ParaGirdisi,
+  DahaFazlaMenu,
 } from '../components/Ortak';
 import * as XLSX from 'xlsx';
 import AramaliSecici from '../components/AramaliSecici';
@@ -546,12 +547,10 @@ export default function OzMalSayfasi() {
         aciklama="Şirket araçları, gayrimenkul, ofis ekipmanı ve kendi kullanımımız/kiralamamız için ayırdığımız ürünler — tek ekrandan takip"
         eylem={!formAcik && (
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={excelIndirYap} style={{ padding: '10px 16px', borderRadius: 8, border: '1px solid var(--kenarlik-koyu)', background: 'white', cursor: 'pointer' }}>
-              Excel İndir
-            </button>
-            <Buton variant="ikincil" onClick={() => setIceAktarAcik((a) => !a)}>
-              {iceAktarAcik ? "İçe Aktarmayı Kapat" : "Excel'den İçe Aktar"}
-            </Buton>
+            <DahaFazlaMenu ogeler={[
+              { etiket: 'Excel İndir', onClick: excelIndirYap },
+              { etiket: "Excel'den İçe Aktar", onClick: () => setIceAktarAcik((a) => !a) },
+            ]} />
             <Buton onClick={yeniAc}>+ Yeni Demirbaş</Buton>
           </div>
         )}
