@@ -55,7 +55,7 @@ import { excelIndir } from '../utils/disaAktarma';
 const API_TABAN_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 import {
   Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat,
-  eylemChipStili, ParaGirdisi,
+  eylemChipStili, ParaGirdisi, DahaFazlaMenu,
 } from '../components/Ortak';
 
 const DURUM_ETIKET = {
@@ -1129,15 +1129,11 @@ export default function StokSayfasi() {
         aciklama="Fiziksel envanter — konum/duruma göre gruplanmış ve filtrelenebilir"
         eylem={
           <div className="no-print" style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => window.print()} style={{ padding: '10px 16px', borderRadius: 8, border: '1px solid var(--kenarlik-koyu)', background: 'white', cursor: 'pointer' }}>
-              Yazdır
-            </button>
-            <button onClick={stokExcelIndir} style={{ padding: '10px 16px', borderRadius: 8, border: '1px solid var(--kenarlik-koyu)', background: 'white', cursor: 'pointer' }}>
-              Excel İndir
-            </button>
-            <Buton variant="ikincil" onClick={() => setIceAktarAcik((a) => !a)}>
-              {iceAktarAcik ? 'İçe Aktarmayı Kapat' : "Excel'den İçe Aktar"}
-            </Buton>
+            <DahaFazlaMenu ogeler={[
+              { etiket: 'Yazdır', onClick: () => window.print() },
+              { etiket: 'Excel İndir', onClick: stokExcelIndir },
+              { etiket: "Excel'den İçe Aktar", onClick: () => setIceAktarAcik((a) => !a) },
+            ]} />
             <Buton variant="ikincil" onClick={() => setOzMalFormuAcik((a) => !a)}>
               {ozMalFormuAcik ? 'Kapat' : '+ Öz Mal Ekle'}
             </Buton>
