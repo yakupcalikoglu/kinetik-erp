@@ -317,7 +317,7 @@ export function DahaFazlaGosterButonu({ kademe }) {
 // "..." (uc nokta) acilir menusu - az kullanilan islemleri (Yazdir, Excel
 // Indir/Ice Aktar vb.) tek bir kompakt buton altinda toplamak icin.
 // ogeler: [{ etiket, onClick }]
-export function DahaFazlaMenu({ ogeler, etiket = '⋯' }) {
+export function DahaFazlaMenu({ ogeler, etiket = '⋯', kompakt = false }) {
   const [acik, setAcik] = useState(false);
   const kutuRef = useRef(null);
 
@@ -333,7 +333,10 @@ export function DahaFazlaMenu({ ogeler, etiket = '⋯' }) {
     <div ref={kutuRef} style={{ position: 'relative' }}>
       <button
         onClick={() => setAcik((a) => !a)}
-        style={{
+        style={kompakt ? {
+          padding: '5px 10px', borderRadius: 6, border: '1px solid var(--kenarlik-koyu)',
+          background: 'white', cursor: 'pointer', fontSize: 13, lineHeight: 1, color: 'var(--metin-birincil)',
+        } : {
           padding: '10px 14px', borderRadius: 8, border: '1px solid var(--kenarlik-koyu)',
           background: 'white', cursor: 'pointer', fontSize: 15, lineHeight: 1,
         }}
