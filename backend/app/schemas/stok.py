@@ -383,3 +383,22 @@ class StokKartiTopluIceAktarIstegi(BaseModel):
 class StokKartiTopluIceAktarSonucu(BaseModel):
     basarili_sayisi: int
     hatali_satirlar: list[dict]
+
+
+class StokSeriNoIceAktarSatiri(BaseModel):
+    seri_no: str
+    marka: str
+    model: str
+    sasi_no: str | None = None
+    uretim_yili: int | None = None
+    satinalma_maliyeti_try: Decimal = Decimal("0")
+    sahiplik_tipi: str = "TICARI"  # "TICARI" | "OZ_MAL"
+
+
+class StokSeriNoIceAktarIstegi(BaseModel):
+    satirlar: list[StokSeriNoIceAktarSatiri]
+
+
+class StokSeriNoIceAktarSonucu(BaseModel):
+    basarili_sayisi: int
+    hatali_satirlar: list[dict]
