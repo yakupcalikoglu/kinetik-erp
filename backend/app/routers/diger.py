@@ -870,3 +870,4 @@ def kdv_manuel_giris_sil(
     db.delete(kayit)
     db.commit()
     return {"silindi": True}
+
