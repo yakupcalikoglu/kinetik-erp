@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 export function Kart({ children, style }) {
   return (
@@ -310,6 +310,58 @@ export function DahaFazlaGosterButonu({ kademe }) {
       >
         {kademe.gosterilenSayi} / {kademe.toplamSayi} gösteriliyor — daha fazla göster
       </button>
+    </div>
+  );
+}
+
+// "..." (uc nokta) acilir menusu - az kullanilan islemleri (Yazdir, Excel
+// Indir/Ice Aktar vb.) tek bir kompakt buton altinda toplamak icin.
+// ogeler: [{ etiket, onClick }]
+export function DahaFazlaMenu({ ogeler, etiket = '⋯' }) {
+  const [acik, setAcik] = useState(false);
+  const kutuRef = useRef(null);
+
+  useEffect(() => {
+    function disaTikla(e) {
+      if (kutuRef.current && !kutuRef.current.contains(e.target)) setAcik(false);
+    }
+    document.addEventListener('mousedown', disaTikla);
+    return () => document.removeEventListener('mousedown', disaTikla);
+  }, []);
+
+  return (
+    <div ref={kutuRef} style={{ position: 'relative' }}>
+      <button
+        onClick={() => setAcik((a) => !a)}
+        style={{
+          padding: '10px 14px', borderRadius: 8, border: '1px solid var(--kenarlik-koyu)',
+          background: 'white', cursor: 'pointer', fontSize: 15, lineHeight: 1,
+        }}
+        title="Diğer işlemler"
+      >
+        {etiket}
+      </button>
+      {acik && (
+        <div style={{
+          position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'white',
+          border: '1px solid var(--kenarlik)', borderRadius: 8, boxShadow: '0 4px 14px rgba(0,0,0,0.14)',
+          zIndex: 50, minWidth: 200, overflow: 'hidden',
+        }}>
+          {ogeler.map((oge, i) => (
+            <button
+              key={i}
+              onClick={() => { oge.onClick(); setAcik(false); }}
+              style={{
+                display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px',
+                border: 'none', borderTop: i > 0 ? '1px solid var(--kenarlik)' : 'none',
+                background: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--metin-birincil)',
+              }}
+            >
+              {oge.etiket}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
