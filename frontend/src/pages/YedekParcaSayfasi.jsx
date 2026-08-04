@@ -797,15 +797,17 @@ export default function YedekParcaSayfasi() {
                       <td style={{ padding: '12px 16px' }}>{paraFormat(p.birim_fiyat_try)}</td>
                       <td style={{ padding: '12px 16px' }}>{paraFormat(Number(p.mevcut_miktar) * Number(p.birim_fiyat_try))}</td>
                       <td style={{ padding: '12px 16px' }}>
-                        <div style={{ display: 'flex', gap: 6 }}>
-                          <button onClick={() => duzenlemeyeBasla(p)} style={eylemChipStili('lacivert')}>Düzenle</button>
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                           <button
                             onClick={() => setHareketAcikId((mevcut) => (mevcut === p.id ? null : p.id))}
                             style={eylemChipStili('lacivert')}
                           >
                             {hareketAcikId === p.id ? 'Kapat' : 'Hareketler'}
                           </button>
-                          <button onClick={() => sil(p)} style={eylemChipStili('kirmizi')}>Sil</button>
+                          <DahaFazlaMenu kompakt ogeler={[
+                            { etiket: 'Düzenle', onClick: () => duzenlemeyeBasla(p) },
+                            { etiket: 'Sil', onClick: () => sil(p) },
+                          ]} />
                         </div>
                       </td>
                     </tr>

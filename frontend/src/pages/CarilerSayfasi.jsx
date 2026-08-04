@@ -1167,10 +1167,12 @@ export default function CarilerSayfasi() {
                     {usdKur ? paraFormat((ozetHaritasi[c.id] || 0) / usdKur, 'USD') : '—'}
                   </td>
                   <td style={{ padding: '12px 16px' }}>
-                    <div style={{ display: 'flex', gap: 6 }}>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                       <button onClick={() => setSeciliCari(c)} style={eylemChipStili('lacivert')}>Alacak/Borç</button>
-                      <button onClick={() => duzenle(c)} style={eylemChipStili('lacivert')}>Düzenle</button>
-                      <button onClick={() => cariyiSil(c)} style={eylemChipStili('kirmizi')}>Sil</button>
+                      <DahaFazlaMenu kompakt ogeler={[
+                        { etiket: 'Düzenle', onClick: () => duzenle(c) },
+                        { etiket: 'Sil', onClick: () => cariyiSil(c) },
+                      ]} />
                     </div>
                   </td>
                 </tr>
