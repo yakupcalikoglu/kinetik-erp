@@ -17,6 +17,7 @@ from app.schemas.stok import (StokKartiOlusturIstegi, StokKartiYanit,
                                StokMaliyetKalemiYanit, TopluDurumGuncelleIstegi,
                                StokSeriNoDuzenleIstegi, StokSeriNoDuzenleSifreliIstegi,
                                StokKartiTopluIceAktarIstegi, StokKartiTopluIceAktarSonucu,
+                               StokSeriNoIceAktarIstegi, StokSeriNoIceAktarSonucu,
                                OzMalIlkKayitIstegi, HurdayaCikarIstegi,
                                UrunOzetYaniti, UrunOzetDurumSatiri, UrunOzetSatisSatiri)
 from app.services.para_hareketi import para_hareketi_olustur
@@ -130,6 +131,60 @@ def stok_karti_toplu_ice_aktar(
             db.rollback()
             hatalar.append({"satir_no": i, "marka": satir.marka, "model": satir.model, "hata": str(e)})
     return StokKartiTopluIceAktarSonucu(basarili_sayisi=basarili, hatali_satirlar=hatalar)
+
+@router.post("/stok-seri-no/toplu-ice-aktar", response_model=StokSeriNoIceAktarSonucu,
+             dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
+def stok_seri_no_toplu_ice_aktar(
+    istek: StokSeriNoIceAktarIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
+):
+    """
+    Excel'den fiziksel envanter (seri no bazli) kayitlarini toplu ekler.
+    Her satirdaki marka+model, ONCEDEN Urun Tanimlari'nda kayitli bir
+    StokKarti ile ESLESTIRILIR (yeni urun tanimi OLUSTURULMAZ) - eslesme
+    bulunamazsa o satir hata olarak isaretlenir. Eklenen kayitlar varsayilan
+    olarak DEPODA durumunda baslar (kasa/banka hareketi OLUSTURULMAZ - bu
+    gecmis/mevcut envanterin sisteme ilk kez girisi, yeni bir satinalma degil).
+    """
+    basarili = 0
+    hatalar = []
+    for i, satir in enumerate(istek.satirlar, start=1):
+        try:
+            if not (satir.seri_no or "").strip():
+                raise ValueError("Seri no zorunlu.")
+            mevcut = db.execute(
+                select(StokSeriNo).where(StokSeriNo.seri_no == satir.seri_no)
+            ).scalar_one_or_none()
+            if mevcut is not None:
+                raise ValueError(f"'{satir.seri_no}' seri numarası zaten kayıtlı.")
+
+            kart = db.execute(
+                select(StokKarti).where(
+                    StokKarti.sirket_id == sirket_id,
+                    func.lower(StokKarti.marka) == (satir.marka or "").strip().lower(),
+                    func.lower(StokKarti.model) == (satir.model or "").strip().lower(),
+                )
+            ).scalar_one_or_none()
+            if kart is None:
+                raise ValueError(
+                    f"'{satir.marka} {satir.model}' ile eşleşen bir ürün tanımı bulunamadı - "
+                    "önce Ürün Tanımları sayfasından bu marka/modeli ekleyin."
+                )
+
+            yeni = StokSeriNo(
+                sirket_id=sirket_id, stok_karti_id=kart.id, seri_no=satir.seri_no,
+                sasi_no=satir.sasi_no, uretim_yili=satir.uretim_yili,
+                kaynak=StokKaynak.YURTICI_ALIM, durum=StokDurum.DEPODA,
+                sahiplik_tipi=satir.sahiplik_tipi or "TICARI",
+                satinalma_maliyeti_try=satir.satinalma_maliyeti_try or Decimal("0"),
+            )
+            db.add(yeni)
+            db.commit()
+            basarili += 1
+        except Exception as e:
+            db.rollback()
+            hatalar.append({"satir_no": i, "seri_no": satir.seri_no, "hata": str(e)})
+    return StokSeriNoIceAktarSonucu(basarili_sayisi=basarili, hatali_satirlar=hatalar)
 
 
 @router.get("/stok-kartlari", response_model=list[StokKartiYanit],
