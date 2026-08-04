@@ -1,9 +1,10 @@
 import { useEffect, useState, Fragment } from 'react';
 import * as XLSX from 'xlsx';
 import { api, hataMesajiCikar } from '../api/client';
+import { excelIndir } from '../utils/disaAktarma';
 import {
   Kart, SayfaBasligi, Buton, Etiket, Alan, girdiStili, BosDurum, HataMesaji, paraFormat, eylemChipStili, ParaGirdisi,
-  useKademelıGoster, DahaFazlaGosterButonu,
+  useKademelıGoster, DahaFazlaGosterButonu, DahaFazlaMenu,
 } from '../components/Ortak';
 import { useNavigate, useLocation } from 'react-router-dom';
 import AramaliSecici from '../components/AramaliSecici';
@@ -1063,9 +1064,17 @@ export default function CarilerSayfasi() {
         aciklama="Müşteri, tedarikçi, personel ve ortak kayıtları"
         eylem={!formAcik && (
           <div style={{ display: 'flex', gap: 8 }}>
-            <Buton variant="ikincil" onClick={() => setIceAktarAcik((a) => !a)}>
-              {iceAktarAcik ? 'İçe Aktarmayı Kapat' : "Excel'den İçe Aktar"}
-            </Buton>
+            <DahaFazlaMenu ogeler={[
+              { etiket: 'Excel İndir', onClick: () => excelIndir(
+                  cariler.map((c) => ({
+                    'Unvan': c.unvan, 'Tip': CARI_TIP_METIN[c.tip] || c.tip, 'Vergi No': c.vergi_no || '',
+                    'Vergi Dairesi': c.vergi_dairesi || '', 'Telefon': c.telefon || '', 'E-posta': c.email || '',
+                    'Adres': c.adres || '', 'Bakiye (TL)': Number(ozetHaritasi[c.id] || 0),
+                  })),
+                  'cari_listesi', 'Cariler',
+                ) },
+              { etiket: "Excel'den İçe Aktar", onClick: () => setIceAktarAcik((a) => !a) },
+            ]} />
             <Buton onClick={yeniCariAc}>+ Yeni cari</Buton>
           </div>
         )}
