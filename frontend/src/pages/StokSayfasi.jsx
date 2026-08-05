@@ -73,105 +73,6 @@ const MALIYET_TIP_METIN = {
   MILLILESTIRME: 'Millileştirme', LEASING: 'Leasing', DIGER: 'Diğer',
 };
 
-function MaliyetKalemiEkleFormu({ urun, onKaydedildi }) {
-  const [cariler, setCariler] = useState([]);
-  const [form, setForm] = useState({
-    tip: 'NAKLIYE', tutar: '', para_birimi: 'TRY', kur: '1', referans_usd_kuru: '',
-    tedarikci_cari_id: '', belge_no: '', tarih: new Date().toISOString().slice(0, 10), aciklama: '',
-  });
-  const [hata, setHata] = useState(null);
-  const [kaydediliyor, setKaydediliyor] = useState(false);
-
-  useEffect(() => {
-    api.get('/cariler').then((r) => setCariler(r.data)).catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    if (form.para_birimi === 'TRY') {
-      setForm((f) => ({ ...f, kur: '1' }));
-      // TL kalemler icin, o gunku USD kurunu referans olarak otomatik cekiyoruz -
-      // boylece bu TL tutarin USD karsiligi ileride CANLI kurla degil, o
-      // gunku GERCEK kurla hesaplanabilir.
-      api.get('/kur/USD').then((r) => setForm((f) => ({ ...f, referans_usd_kuru: r.data.kur }))).catch(() => {});
-      return;
-    }
-    api.get(`/kur/${form.para_birimi}`).then((r) => setForm((f) => ({ ...f, kur: r.data.kur }))).catch(() => {});
-  }, [form.para_birimi]); // eslint-disable-line
-
-  async function kaydet(e) {
-    e.preventDefault();
-    setHata(null);
-    setKaydediliyor(true);
-    try {
-      await api.post(`/stok-seri-no/${urun.id}/maliyet-kalemi`, {
-        tip: form.tip,
-        tutar: Number(form.tutar),
-        para_birimi: form.para_birimi,
-        kur: Number(form.kur),
-        tedarikci_cari_id: form.tedarikci_cari_id ? Number(form.tedarikci_cari_id) : null,
-        belge_no: form.belge_no || null,
-        tarih: form.tarih,
-        aciklama: form.aciklama || null,
-        referans_usd_kuru: form.para_birimi === 'TRY' && form.referans_usd_kuru ? Number(form.referans_usd_kuru) : null,
-      });
-      setForm((f) => ({ ...f, tutar: '', belge_no: '', aciklama: '' }));
-      onKaydedildi();
-    } catch (err) {
-      setHata(hataMesajiCikar(err));
-    } finally {
-      setKaydediliyor(false);
-    }
-  }
-
-  return (
-    <form onSubmit={kaydet} style={{ marginBottom: 16 }}>
-      <HataMesaji>{hata}</HataMesaji>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12 }}>
-        <Alan etiket="Maliyet tipi">
-          <select value={form.tip} onChange={(e) => setForm((f) => ({ ...f, tip: e.target.value }))} style={girdiStili}>
-            {Object.entries(MALIYET_TIP_METIN).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
-        </Alan>
-        <Alan etiket="Para birimi">
-          <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={girdiStili}>
-            <option value="TRY">TRY</option>
-            <option value="USD">USD</option>
-            <option value="EUR">EUR</option>
-          </select>
-        </Alan>
-        <Alan etiket="Tutar">
-          <ParaGirdisi required value={form.tutar} onChange={(v) => setForm((f) => ({ ...f, tutar: v }))} />
-        </Alan>
-        {form.para_birimi !== 'TRY' ? (
-          <Alan etiket="Kur (otomatik, elle değiştirilebilir)">
-            <input required type="number" step="0.0001" value={form.kur} onChange={(e) => setForm((f) => ({ ...f, kur: e.target.value }))} style={girdiStili} />
-          </Alan>
-        ) : (
-          <Alan etiket="O günkü USD kuru (opsiyonel — USD karşılığını doğru hesaplamak için)">
-            <input type="number" step="0.0001" value={form.referans_usd_kuru} onChange={(e) => setForm((f) => ({ ...f, referans_usd_kuru: e.target.value }))} style={girdiStili} />
-          </Alan>
-        )}
-        <Alan etiket="Tedarikçi/firma (opsiyonel)">
-          <select value={form.tedarikci_cari_id} onChange={(e) => setForm((f) => ({ ...f, tedarikci_cari_id: e.target.value }))} style={girdiStili}>
-            <option value="">Seçin...</option>
-            {cariler.map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
-          </select>
-        </Alan>
-        <Alan etiket="Belge/fatura no">
-          <input value={form.belge_no} onChange={(e) => setForm((f) => ({ ...f, belge_no: e.target.value }))} style={girdiStili} />
-        </Alan>
-        <Alan etiket="Tarih">
-          <input required type="date" value={form.tarih} onChange={(e) => setForm((f) => ({ ...f, tarih: e.target.value }))} style={girdiStili} />
-        </Alan>
-        <Alan etiket="Açıklama">
-          <input value={form.aciklama} onChange={(e) => setForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
-        </Alan>
-      </div>
-      <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Kaydediliyor...' : '+ Maliyet kalemi ekle'}</Buton>
-    </form>
-  );
-}
-
 function MaliyetKalemiDuzenleFormu({ kalem, urunId, onKaydedildi, onVazgec }) {
   const [cariler, setCariler] = useState([]);
   const [form, setForm] = useState({
@@ -373,7 +274,10 @@ function MaliyetDetayi({ urun, stokKartlari, onKapat }) {
         </div>
       )}
 
-      <MaliyetKalemiEkleFormu urun={urun} onKaydedildi={yukle} />
+      <div style={{ padding: '10px 14px', background: 'var(--zemin)', borderRadius: 8, fontSize: 12.5, color: 'var(--metin-ikincil)', marginBottom: 16 }}>
+        Yeni maliyet kalemi eklemek için <strong>Siparişler</strong> sayfasında ilgili siparişin içeriğini açın —
+        maliyetler artık sipariş bazlı, ilgili ürüne oradan ekleniyor (bu sayfa sadece görüntüleme/düzenleme içindir).
+      </div>
 
       {yukleniyor ? (
         <div style={{ padding: 20, color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
