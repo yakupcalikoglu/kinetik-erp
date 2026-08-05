@@ -3891,6 +3891,9 @@ function SabitGiderSekmesi() {
     } catch (err) { setHata(hataMesajiCikar(err)); }
   }
 
+  const siraliSabitGiderler = siralama.sirala(liste, (item, alan) => item[alan]);
+  const sabitGiderTarihGrup = useTarihGruplama(siraliSabitGiderler, 'donem');
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 12 }}>
@@ -3977,7 +3980,31 @@ function SabitGiderSekmesi() {
               </tr>
             </thead>
             <tbody>
-              {siralama.sirala(liste, (item, alan) => item[alan]).map((g) => (
+              {sabitGiderTarihGrup.yillar.map((yil) => (
+                <Fragment key={yil}>
+                  <tr>
+                    <td colSpan={7} style={{ padding: 0 }}>
+                      <YilBasligi
+                        yil={yil}
+                        kayitSayisi={Object.values(sabitGiderTarihGrup.gruplar[yil]).flat().length}
+                        acik={sabitGiderTarihGrup.acikYillar.has(yil)}
+                        onTikla={() => sabitGiderTarihGrup.yilAcKapat(yil)}
+                      />
+                    </td>
+                  </tr>
+                  {sabitGiderTarihGrup.acikYillar.has(yil) && Object.keys(sabitGiderTarihGrup.gruplar[yil]).sort().reverse().map((ayAnahtari) => (
+                    <Fragment key={ayAnahtari}>
+                      <tr>
+                        <td colSpan={7} style={{ padding: 0 }}>
+                          <AyBasligi
+                            ayAnahtari={ayAnahtari}
+                            kayitSayisi={sabitGiderTarihGrup.gruplar[yil][ayAnahtari].length}
+                            acik={sabitGiderTarihGrup.acikAylar.has(ayAnahtari)}
+                            onTikla={() => sabitGiderTarihGrup.ayAcKapat(ayAnahtari)}
+                          />
+                        </td>
+                      </tr>
+                      {sabitGiderTarihGrup.acikAylar.has(ayAnahtari) && sabitGiderTarihGrup.gruplar[yil][ayAnahtari].map((g) => (
                 <Fragment key={g.id}>
                   <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
                     <td style={{ padding: '10px 16px', fontWeight: 500 }}>{g.kategori || '—'}</td>
@@ -4034,6 +4061,10 @@ function SabitGiderSekmesi() {
                       </td>
                     </tr>
                   )}
+                </Fragment>
+              ))}
+                    </Fragment>
+                  ))}
                 </Fragment>
               ))}
             </tbody>
