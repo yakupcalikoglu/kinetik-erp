@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, hataMesajiCikar, ozelOnayIste } from '../api/client';
+import { api, hataMesajiCikar, ozelOnayIste, ozelAlert, ozelPrompt } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, BosDurum, Sekmeler, Etiket, eylemChipStili } from '../components/Ortak';
 
@@ -173,11 +173,11 @@ function KullanicilarSekmesi() {
   }
 
   async function sifreSifirla(kullanici) {
-    const yeniSifre = window.prompt(`${kullanici.ad_soyad} için yeni şifre (en az 6 karakter):`);
+    const yeniSifre = await ozelPrompt(`${kullanici.ad_soyad} için yeni şifre (en az 6 karakter):`);
     if (!yeniSifre) return;
     try {
       await api.put(`/kullanicilar/${kullanici.id}/sifre-sifirla`, { yeni_sifre: yeniSifre });
-      window.alert('Şifre güncellendi.');
+      await ozelAlert('Şifre güncellendi.');
     } catch (err) {
       setHata(hataMesajiCikar(err));
     }
