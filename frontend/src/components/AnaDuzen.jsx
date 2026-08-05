@@ -7,7 +7,7 @@ import {
   Building2, Bell,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { api, hataMesajiCikar, basariBildirimDinle, yuklemeDurumuDinle, onayIstegiDinle, _onayYaniti } from '../api/client';
+import { api, hataMesajiCikar, basariBildirimDinle, yuklemeDurumuDinle, onayIstegiDinle, _onayYaniti, alertIstegiDinle, _alertYaniti, promptIstegiDinle, _promptYaniti } from '../api/client';
 
 const ARAMA_TUR_METIN = { CARI: 'Cari', SIPARIS: 'Sipariş', STOK: 'Stok', URUN_TANIMI: 'Ürün Tanımı', DEMIRBAS: 'Demirbaş', YEDEK_PARCA: 'Yedek Parça' };
 
@@ -420,6 +420,130 @@ function OzelOnayPaneli() {
   );
 }
 
+function OzelAlertPaneli() {
+  const [mesaj, setMesaj] = useState(null);
+
+  useEffect(() => {
+    return alertIstegiDinle((m) => setMesaj(m));
+  }, []);
+
+  function kapat() {
+    _alertYaniti();
+    setMesaj(null);
+  }
+
+  if (!mesaj) return null;
+
+  return (
+    <div
+      onClick={kapat}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(20,25,40,0.45)', zIndex: 500,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: 'white', borderRadius: 12, padding: 22, minWidth: 300, maxWidth: 420,
+          boxShadow: '0 16px 48px rgba(0,0,0,0.3)',
+        }}
+      >
+        <div style={{ fontSize: 14, lineHeight: 1.55, color: 'var(--metin-birincil)', marginBottom: 20 }}>
+          {mesaj}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <button
+            onClick={kapat}
+            style={{
+              padding: '8px 18px', borderRadius: 7, fontSize: 13.5, fontWeight: 500, cursor: 'pointer',
+              background: 'var(--lacivert, #1e3a6e)', color: 'white', border: '1px solid var(--lacivert, #1e3a6e)',
+            }}
+          >
+            Tamam
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OzelPromptPaneli() {
+  const [istek, setIstek] = useState(null);
+  const [deger, setDeger] = useState('');
+
+  useEffect(() => {
+    return promptIstegiDinle((i) => { setIstek(i); setDeger(i.varsayilanDeger || ''); });
+  }, []);
+
+  function gonder(e) {
+    e.preventDefault();
+    _promptYaniti(deger);
+    setIstek(null);
+  }
+
+  function vazgec() {
+    _promptYaniti(null);
+    setIstek(null);
+  }
+
+  if (!istek) return null;
+
+  return (
+    <div
+      onClick={vazgec}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(20,25,40,0.45)', zIndex: 500,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+      }}
+    >
+      <form
+        onSubmit={gonder}
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: 'white', borderRadius: 12, padding: 22, minWidth: 300, maxWidth: 420,
+          boxShadow: '0 16px 48px rgba(0,0,0,0.3)',
+        }}
+      >
+        <div style={{ fontSize: 14, lineHeight: 1.55, color: 'var(--metin-birincil)', marginBottom: 12 }}>
+          {istek.mesaj}
+        </div>
+        <input
+          autoFocus
+          type="text"
+          value={deger}
+          onChange={(e) => setDeger(e.target.value)}
+          style={{
+            width: '100%', padding: '9px 12px', borderRadius: 7, border: '1px solid var(--kenarlik-koyu)',
+            fontSize: 13.5, marginBottom: 18, boxSizing: 'border-box',
+          }}
+        />
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button
+            type="button"
+            onClick={vazgec}
+            style={{
+              padding: '8px 16px', borderRadius: 7, fontSize: 13.5, fontWeight: 500, cursor: 'pointer',
+              background: 'white', color: 'var(--metin-birincil)', border: '1px solid var(--kenarlik-koyu)',
+            }}
+          >
+            Vazgeç
+          </button>
+          <button
+            type="submit"
+            style={{
+              padding: '8px 16px', borderRadius: 7, fontSize: 13.5, fontWeight: 500, cursor: 'pointer',
+              background: 'var(--lacivert, #1e3a6e)', color: 'white', border: '1px solid var(--lacivert, #1e3a6e)',
+            }}
+          >
+            Onayla
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 function GenelYuklemeCubugu() {
   const [yukleniyor, setYukleniyor] = useState(false);
 
@@ -551,6 +675,8 @@ export default function AnaDuzen() {
       <BasariToast />
       <GenelYuklemeCubugu />
       <OzelOnayPaneli />
+      <OzelAlertPaneli />
+      <OzelPromptPaneli />
       <YukariCikButonu />
       {kisayollarAcik && <KisayollarPaneli onKapat={() => setKisayollarAcik(false)} />}
       <style>{`
