@@ -94,6 +94,17 @@ function YedekParcaIceAktarPaneli({ onKapat, onTamamlandi }) {
       <HataMesaji>{hata}</HataMesaji>
       <div style={{ fontSize: 12.5, color: 'var(--metin-ikincil)', marginBottom: 12 }}>
         Excel dosyanızda: <strong>Ad</strong> (zorunlu), Birim, Mevcut Miktar (varsa başlangıç stoğu olarak kaydedilir — kasaya hiçbir hareket yansımaz), Birim Fiyat, Min Stok bulunabilir.
+        {' '}
+        <button
+          type="button"
+          onClick={() => excelIndir(
+            [{ 'Ad': 'Örnek Parça', 'Birim': 'ADET', 'Mevcut Miktar': 10, 'Birim Fiyat': 150, 'Min Stok': 3 }],
+            'yedek_parca_sablon', 'Yedek Parça Şablonu',
+          )}
+          style={{ background: 'none', border: 'none', color: 'var(--lacivert)', textDecoration: 'underline', cursor: 'pointer', fontSize: 12.5, padding: 0 }}
+        >
+          Örnek şablon indir
+        </button>
       </div>
       <input type="file" accept=".xlsx,.xls" onChange={dosyaSecildi} style={{ marginBottom: 16 }} />
       {satirlar.length > 0 && !sonuc && (
