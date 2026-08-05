@@ -583,6 +583,8 @@ export default function KasaSayfasi() {
   const [kasaHareketleri, setKasaHareketleri] = useState([]);
   const [yonFiltre, setYonFiltre] = useState('');
   const [paraBirimiFiltre, setParaBirimiFiltre] = useState('');
+  const [tumGecmisGosteriliyor, setTumGecmisGosteriliyor] = useState(false);
+  const otuzGunOncesi = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const [hata, setHata] = useState(null);
   const [yukleniyor, setYukleniyor] = useState(true);
   const [formAcik, setFormAcik] = useState(false);
@@ -623,6 +625,7 @@ export default function KasaSayfasi() {
   let gosterilecekHareketler = kasaHareketleri;
   if (yonFiltre) gosterilecekHareketler = gosterilecekHareketler.filter((h) => h.yon === yonFiltre);
   if (paraBirimiFiltre) gosterilecekHareketler = gosterilecekHareketler.filter((h) => h.para_birimi === paraBirimiFiltre);
+  if (!tumGecmisGosteriliyor) gosterilecekHareketler = gosterilecekHareketler.filter((h) => h.tarih >= otuzGunOncesi);
   const siraliKasaHareketleri = siralama.sirala(gosterilecekHareketler, (item, alan) => {
     if (alan === '_cari') return item.cari_id ? (cariHaritasi[item.cari_id] || '') : '';
     return item[alan];
@@ -670,8 +673,19 @@ export default function KasaSayfasi() {
             </select>
           </Alan>
         </div>
-        <Buton onClick={() => setFormAcik((a) => !a)}>{formAcik ? 'Kapat' : '+ Yeni kasa hareketi'}</Buton>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Buton variant="ikincil" onClick={() => setTumGecmisGosteriliyor((a) => !a)}>
+            {tumGecmisGosteriliyor ? 'Son 30 Güne Dön' : 'Tüm Geçmişi Göster'}
+          </Buton>
+          <Buton onClick={() => setFormAcik((a) => !a)}>{formAcik ? 'Kapat' : '+ Yeni kasa hareketi'}</Buton>
+        </div>
       </div>
+
+      {!tumGecmisGosteriliyor && (
+        <div style={{ fontSize: 12, color: 'var(--metin-ikincil)', marginBottom: 12 }}>
+          Son 30 gün gösteriliyor — daha eski hareketler için "Tüm Geçmişi Göster"e tıklayın.
+        </div>
+      )}
 
       {formAcik && (
         <YeniKasaHareketiFormu onKaydedildi={() => { setFormAcik(false); yukle(); }} onVazgec={() => setFormAcik(false)} />
