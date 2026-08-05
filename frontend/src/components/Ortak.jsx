@@ -33,20 +33,39 @@ export function SayfaBasligi({ baslik, aciklama, eylem }) {
 }
 
 export function Buton({ children, variant = 'birincil', ...props }) {
+  const [hover, setHover] = useState(false);
+  const aktifHover = hover && !props.disabled;
   const stiller = {
-    birincil: { background: 'var(--lacivert)', color: 'white', border: '1px solid var(--lacivert)' },
-    ikincil: { background: 'white', color: 'var(--metin-birincil)', border: '1px solid var(--kenarlik-koyu)' },
-    tehlike: { background: 'var(--kirmizi-acik)', color: 'var(--kirmizi)', border: '1px solid var(--kirmizi-acik)' },
+    birincil: {
+      background: aktifHover ? '#16305c' : 'var(--lacivert)',
+      color: 'white', border: '1px solid var(--lacivert)',
+      boxShadow: aktifHover ? '0 5px 14px rgba(30,58,110,0.3)' : '0 1px 2px rgba(30,58,110,0.12)',
+    },
+    ikincil: {
+      background: aktifHover ? 'var(--zemin, #eef1f7)' : 'white',
+      color: 'var(--metin-birincil)', border: '1px solid var(--kenarlik-koyu)',
+      boxShadow: aktifHover ? '0 3px 10px rgba(0,0,0,0.08)' : 'none',
+    },
+    tehlike: {
+      background: aktifHover ? '#fadbdb' : 'var(--kirmizi-acik)',
+      color: 'var(--kirmizi)', border: '1px solid var(--kirmizi-acik)',
+      boxShadow: aktifHover ? '0 3px 10px rgba(192,57,43,0.18)' : 'none',
+    },
   };
   return (
     <button
       {...props}
+      onMouseEnter={(e) => { setHover(true); props.onMouseEnter?.(e); }}
+      onMouseLeave={(e) => { setHover(false); props.onMouseLeave?.(e); }}
       style={{
         padding: '8px 16px',
         borderRadius: 7,
         fontSize: 13.5,
         fontWeight: 500,
         opacity: props.disabled ? 0.55 : 1,
+        cursor: props.disabled ? 'default' : 'pointer',
+        transition: 'background 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease',
+        transform: aktifHover ? 'translateY(-1px)' : 'none',
         ...stiller[variant],
         ...props.style,
       }}
