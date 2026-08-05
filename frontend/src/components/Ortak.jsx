@@ -639,3 +639,39 @@ export function GrupBasligi({ baslik, altBaslik, acik, onTikla }) {
     </div>
   );
 }
+
+// "Yukleniyor..." yazisi yerine, verinin seklini taklit eden hafif
+// parlayan gri kutucuklar - daha canli/profesyonel bir yukleme hissi verir.
+export function TabloIskeleti({ satirSayisi = 5, sutunSayisi = 6 }) {
+  return (
+    <div>
+      {Array.from({ length: satirSayisi }).map((_, i) => (
+        <div
+          key={i}
+          style={{
+            display: 'flex', gap: 16, padding: '14px 16px', alignItems: 'center',
+            borderTop: i > 0 ? '1px solid var(--kenarlik)' : 'none',
+          }}
+        >
+          {Array.from({ length: sutunSayisi }).map((_, j) => (
+            <div
+              key={j}
+              style={{
+                height: 13, borderRadius: 4, flex: j === 0 ? 2 : 1,
+                background: 'linear-gradient(90deg, #eef0f3 25%, #f7f8f9 50%, #eef0f3 75%)',
+                backgroundSize: '200% 100%',
+                animation: 'kinetikIskelet 1.4s ease-in-out infinite',
+              }}
+            />
+          ))}
+        </div>
+      ))}
+      <style>{`
+        @keyframes kinetikIskelet {
+          0% { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
+      `}</style>
+    </div>
+  );
+}
