@@ -1420,33 +1420,28 @@ export default function StokSayfasi() {
                         {karZarar != null ? paraFormat(karZarar) : '—'}
                       </td>
                       <td style={{ padding: '12px 16px' }}>
-                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                          <button
-                            onClick={() => {
-                              setMaliyetGosterilecekUrun(u);
-                              window.scrollTo({ top: 0, behavior: 'smooth' });
-                            }}
-                            style={eylemChipStili('lacivert')}
-                          >
-                            Maliyet Detayı
-                          </button>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                           {satilabilir && (
                             <Link to={`/satis-yap?urun=${u.id}`}><button style={eylemChipStili('yesil')} type="button">Satış yap</button></Link>
                           )}
                           {u.durum !== 'SATILDI' && (
                             <button onClick={() => setDurumDegistirilenId(u.id)} style={eylemChipStili('amber')}>Durum Değiştir</button>
                           )}
-                          <button onClick={() => setDuzenlenenUrunId(u.id)} style={eylemChipStili('lacivert')}>Düzenle</button>
-                          {u.durum !== 'SATILDI' && u.durum !== 'HURDA' && (
-                            <button onClick={() => setHurdaAcikId(u.id)} style={eylemChipStili('kirmizi')}>Hurdaya Çıkar</button>
-                          )}
-                          {(u.durum === 'SATILDI' || u.durum === 'HURDA') ? (
-                            <button onClick={() => satisiGeriAl(u)} style={eylemChipStili('kirmizi')}>
-                              {u.durum === 'HURDA' ? 'Hurdayı Geri Al' : 'Satışı Geri Al'}
-                            </button>
-                          ) : (
-                            <button onClick={() => urunuSil(u)} style={eylemChipStili('kirmizi')}>Sil</button>
-                          )}
+                          <DahaFazlaMenu kompakt ogeler={[
+                            { etiket: 'Maliyet Detayı', onClick: () => {
+                                setMaliyetGosterilecekUrun(u);
+                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                              } },
+                            { etiket: 'Düzenle', onClick: () => setDuzenlenenUrunId(u.id) },
+                            ...(u.durum !== 'SATILDI' && u.durum !== 'HURDA' ? [
+                              { etiket: 'Hurdaya Çıkar', onClick: () => setHurdaAcikId(u.id) },
+                            ] : []),
+                            ...(u.durum === 'SATILDI' || u.durum === 'HURDA' ? [
+                              { etiket: u.durum === 'HURDA' ? 'Hurdayı Geri Al' : 'Satışı Geri Al', onClick: () => satisiGeriAl(u) },
+                            ] : [
+                              { etiket: 'Sil', onClick: () => urunuSil(u) },
+                            ]),
+                          ]} />
                         </div>
                       </td>
                     </tr>
