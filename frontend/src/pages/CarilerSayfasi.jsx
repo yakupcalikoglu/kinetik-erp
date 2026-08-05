@@ -1012,6 +1012,7 @@ export default function CarilerSayfasi() {
   const [arama, setArama] = useState(new URLSearchParams(location.search).get('ara') || '');
   const [filtreTip, setFiltreTip] = useState('');
   const [seciliCari, setSeciliCari] = useState(null);
+  const [secilenIdler, setSecilenIdler] = useState(new Set());
   const [iceAktarAcik, setIceAktarAcik] = useState(false);
   const siralama = useSiralama();
 
@@ -1061,6 +1062,44 @@ export default function CarilerSayfasi() {
     } catch (err) {
       setHata(hataMesajiCikar(err));
     }
+  }
+
+  function satirSecimiDegistir(id) {
+    setSecilenIdler((s) => {
+      const yeni = new Set(s);
+      if (yeni.has(id)) yeni.delete(id); else yeni.add(id);
+      return yeni;
+    });
+  }
+
+  async function topluSil() {
+    if (!(await ozelOnayIste(`${secilenIdler.size} cariyi silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`))) return;
+    setHata(null);
+    const basarisizlar = [];
+    for (const id of secilenIdler) {
+      try {
+        await api.delete(`/cariler/${id}`);
+      } catch (err) {
+        basarisizlar.push(id);
+      }
+    }
+    setSecilenIdler(new Set());
+    listeyiYukle();
+    if (basarisizlar.length > 0) {
+      setHata(`${basarisizlar.length} kayıt silinemedi (muhtemelen ilişkili hareketleri var).`);
+    }
+  }
+
+  function secilenleriExceleAktar() {
+    const secilenCariler = cariler.filter((c) => secilenIdler.has(c.id));
+    excelIndir(
+      secilenCariler.map((c) => ({
+        'Unvan': c.unvan, 'Tip': CARI_TIP_METIN[c.tip] || c.tip, 'Vergi No': c.vergi_no || '',
+        'Vergi Dairesi': c.vergi_dairesi || '', 'Telefon': c.telefon || '', 'E-posta': c.email || '',
+        'Adres': c.adres || '', 'Bakiye (TL)': Number(ozetHaritasi[c.id] || 0),
+      })),
+      'secilen_cariler', 'Cariler',
+    );
   }
 
   const siraliCariler = siralama.sirala(cariler, (item, alan) => (
@@ -1134,6 +1173,17 @@ export default function CarilerSayfasi() {
         ))}
       </div>
 
+      {secilenIdler.size > 0 && (
+        <Kart style={{ marginBottom: 12, background: 'var(--zemin)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px' }}>
+          <span style={{ fontSize: 13, fontWeight: 500 }}>{secilenIdler.size} kayıt seçili</span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Buton variant="ikincil" onClick={secilenleriExceleAktar}>Excel'e Aktar</Buton>
+            <Buton variant="tehlike" onClick={topluSil}>Seçilenleri Sil</Buton>
+            <Buton variant="ikincil" onClick={() => setSecilenIdler(new Set())}>Seçimi Temizle</Buton>
+          </div>
+        </Kart>
+      )}
+
       <Kart style={{ padding: 0 }}>
         <div style={{ padding: 16, borderBottom: '1px solid var(--kenarlik)' }}>
           <input
@@ -1153,6 +1203,16 @@ export default function CarilerSayfasi() {
           <table>
             <thead>
               <tr style={{ background: 'var(--zemin)' }}>
+                <th style={{ padding: '10px 16px', width: 32 }}>
+                  <input
+                    type="checkbox"
+                    checked={kademe.gosterilecekler.length > 0 && kademe.gosterilecekler.every((c) => secilenIdler.has(c.id))}
+                    onChange={(e) => {
+                      if (e.target.checked) setSecilenIdler(new Set(kademe.gosterilecekler.map((c) => c.id)));
+                      else setSecilenIdler(new Set());
+                    }}
+                  />
+                </th>
                 <SiraliBaslik alanAdi="unvan" siralama={siralama}>Unvan</SiraliBaslik>
                 <SiraliBaslik alanAdi="tip" siralama={siralama}>Tip</SiraliBaslik>
                 <SiraliBaslik alanAdi="vergi_no" siralama={siralama}>Vergi No</SiraliBaslik>
@@ -1164,7 +1224,10 @@ export default function CarilerSayfasi() {
             </thead>
             <tbody>
               {kademe.gosterilecekler.map((c) => (
-                <tr key={c.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                <tr key={c.id} style={{ borderTop: '1px solid var(--kenarlik)', background: secilenIdler.has(c.id) ? 'var(--zemin)' : 'transparent' }}>
+                  <td style={{ padding: '12px 16px' }}>
+                    <input type="checkbox" checked={secilenIdler.has(c.id)} onChange={() => satirSecimiDegistir(c.id)} />
+                  </td>
                   <td style={{ padding: '12px 16px', fontWeight: 500 }}>{c.unvan}</td>
                   <td style={{ padding: '12px 16px' }}>
                     <Etiket ton={TIP_ETIKET[c.tip]?.ton}>{TIP_ETIKET[c.tip]?.metin}</Etiket>
