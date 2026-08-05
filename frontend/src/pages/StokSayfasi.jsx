@@ -919,6 +919,15 @@ export default function StokSayfasi() {
   const [duzenlenenUrunId, setDuzenlenenUrunId] = useState(null);
   const [durumDegistirilenId, setDurumDegistirilenId] = useState(null);
   const [seciliIdler, setSeciliIdler] = useState([]);
+  const [kapaliSiparisGruplari, setKapaliSiparisGruplari] = useState(new Set());
+
+  function siparisGrubuAcKapat(siparisId) {
+    setKapaliSiparisGruplari((s) => {
+      const yeni = new Set(s);
+      if (yeni.has(siparisId)) yeni.delete(siparisId); else yeni.add(siparisId);
+      return yeni;
+    });
+  }
   const [topluDurum, setTopluDurum] = useState('DEPODA');
   const [topluHata, setTopluHata] = useState(null);
   const siralama = useSiralama();
@@ -1367,6 +1376,27 @@ export default function StokSayfasi() {
                 const satilabilir = u.durum === 'DEPODA' || u.durum === 'ANTREPODA';
                 const oncekiUrun = gruplananUrunler[index - 1];
                 const grupBasi = !siralama.alan && (index === 0 || (oncekiUrun && oncekiUrun.siparis_id !== u.siparis_id));
+                // Grup kapaliysa, o gruba ait BASLIK DISINDAKI satirlari (urun
+                // satiri, duzenleme/durum formlari dahil) hic render etme.
+                const grupKapali = !siralama.alan && u.siparis_id != null && kapaliSiparisGruplari.has(u.siparis_id);
+                if (grupKapali && !grupBasi) {
+                  return null;
+                }
+                if (grupBasi && grupKapali) {
+                  const ozet = u.siparis_id != null ? siparisOzetleri[u.siparis_id] : null;
+                  return (
+                    <tr key={`grup-${u.siparis_id}`}>
+                      <td colSpan={12} style={{ padding: 0 }}>
+                        <GrupBasligi
+                          baslik={`Sipariş: ${siparisNoGoster(u.siparis_id)}`}
+                          altBaslik={ozet ? `${ozet.toplam} üründen ${ozet.elde_kalan} tanesi elimizde` : null}
+                          acik={false}
+                          onTikla={() => siparisGrubuAcKapat(u.siparis_id)}
+                        />
+                      </td>
+                    </tr>
+                  );
+                }
                 if (durumDegistirilenId === u.id) {
                   return (
                     <DurumDegistirFormu
@@ -1408,7 +1438,7 @@ export default function StokSayfasi() {
                             baslik={`Sipariş: ${siparisNoGoster(u.siparis_id)}`}
                             altBaslik={`${ozet.toplam} üründen ${ozet.elde_kalan} tanesi elimizde`}
                             acik
-                            onTikla={() => {}}
+                            onTikla={() => u.siparis_id != null && siparisGrubuAcKapat(u.siparis_id)}
                           />
                         </td>
                       </tr>
