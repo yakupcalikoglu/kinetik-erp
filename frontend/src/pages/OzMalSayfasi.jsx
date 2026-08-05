@@ -1,6 +1,6 @@
 import { useEffect, useState, Fragment } from 'react';
 import { useLocation } from 'react-router-dom';
-import { api, hataMesajiCikar } from '../api/client';
+import { api, hataMesajiCikar, ozelOnayIste } from '../api/client';
 import {
   Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat, eylemChipStili, ParaGirdisi,
   DahaFazlaMenu,
@@ -517,7 +517,7 @@ export default function OzMalSayfasi() {
     setFormAcik(true);
   }
   async function satisiGeriAl(kayit) {
-    if (!window.confirm(`${kayit.ad} için satışı geri almak istediğinize emin misiniz? Kasaya/Bankaya işlenen tutar silinecek.`)) return;
+    if (!(await ozelOnayIste(`${kayit.ad} için satışı geri almak istediğinize emin misiniz? Kasaya/Bankaya işlenen tutar silinecek.`))) return;
     try {
       await api.put(`/demirbaslar/${kayit.id}/satisi-geri-al`);
       yukle();
@@ -531,7 +531,7 @@ export default function OzMalSayfasi() {
       window.alert("Bu bir ekipman kaydı (Stok modülünden geliyor) — silmek için Stok sayfasını kullanın.");
       return;
     }
-    if (!window.confirm(`${kayit.ad} demirbaşını silmek istediğinize emin misiniz?`)) return;
+    if (!(await ozelOnayIste(`${kayit.ad} demirbaşını silmek istediğinize emin misiniz?`))) return;
     try {
       await api.delete(`/demirbaslar/${kayit.id}`);
       yukle();

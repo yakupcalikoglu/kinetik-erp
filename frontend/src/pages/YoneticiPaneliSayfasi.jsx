@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, hataMesajiCikar } from '../api/client';
+import { api, hataMesajiCikar, ozelOnayIste } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, BosDurum, Sekmeler, Etiket, eylemChipStili } from '../components/Ortak';
 
@@ -163,7 +163,7 @@ function KullanicilarSekmesi() {
     const uyari = yeniDurum
       ? `${kullanici.ad_soyad} kullanıcısını tekrar aktif etmek istediğinize emin misiniz?`
       : `${kullanici.ad_soyad} kullanıcısını pasif yapmak istediğinize emin misiniz? Pasif kullanıcı sisteme giriş yapamaz.`;
-    if (!window.confirm(uyari)) return;
+    if (!(await ozelOnayIste(uyari))) return;
     try {
       await api.put(`/kullanicilar/${kullanici.id}/durum`, { aktif: yeniDurum });
       yukle();
@@ -330,7 +330,7 @@ function RolIzinleriSekmesi() {
   }
 
   async function rolSil(rol) {
-    if (!window.confirm(`"${rol.ad}" rolünü silmek istediğinize emin misiniz?`)) return;
+    if (!(await ozelOnayIste(`"${rol.ad}" rolünü silmek istediğinize emin misiniz?`))) return;
     try {
       await api.delete(`/roller/${rol.id}`);
       if (seciliRolId === rol.id) setSeciliRolId(null);
@@ -531,7 +531,7 @@ function AciklamalariYenidenUretKarti() {
   const [hata, setHata] = useState(null);
 
   async function calistir() {
-    if (!window.confirm('Kiralama ve Taksitli Satış kaynaklı eski Kasa/Banka hareketlerinin açıklamaları, ürün/müşteri adı eklenerek yeniden yazılacak. Devam edilsin mi?')) return;
+    if (!(await ozelOnayIste('Kiralama ve Taksitli Satış kaynaklı eski Kasa/Banka hareketlerinin açıklamaları, ürün/müşteri adı eklenerek yeniden yazılacak. Devam edilsin mi?'))) return;
     setHata(null);
     setSonuc(null);
     setCalisiyor(true);
@@ -576,7 +576,7 @@ function TehlikeliIslemlerSekmesi() {
       setHata('Devam etmek için kutuya tam olarak "EVET SİL" yazmalısınız.');
       return;
     }
-    if (!window.confirm('Bu işlem TÜM cari/sipariş/stok/finansal takip/kasa-banka verilerini KALICI olarak silecek. Emin misiniz?')) return;
+    if (!(await ozelOnayIste('Bu işlem TÜM cari/sipariş/stok/finansal takip/kasa-banka verilerini KALICI olarak silecek. Emin misiniz?'))) return;
     setHata(null);
     setSonuc(null);
     setCalisiyor(true);
@@ -634,13 +634,42 @@ function TehlikeliIslemlerSekmesi() {
 
 export default function YoneticiPaneliSayfasi() {
   const [sekme, setSekme] = useState('sirket');
+  const [yedekIndiriliyor, setYedekIndiriliyor] = useState(false);
+  const [yedekHata, setYedekHata] = useState(null);
+
+  async function veritabaniniYedekle() {
+    setYedekIndiriliyor(true);
+    setYedekHata(null);
+    try {
+      const yanit = await api.get('/yonetim/veritabani-yedek', { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([yanit.data]));
+      const bugun = new Date().toISOString().slice(0, 10);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `kinetik_erp_yedek_${bugun}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setYedekHata(hataMesajiCikar(err));
+    } finally {
+      setYedekIndiriliyor(false);
+    }
+  }
 
   return (
     <div>
       <SayfaBasligi
         baslik="Yönetici paneli"
         aciklama="Şirket bilgileri, kullanıcılar ve rol bazlı ekran izinleri"
+        eylem={
+          <Buton variant="ikincil" onClick={veritabaniniYedekle} disabled={yedekIndiriliyor}>
+            {yedekIndiriliyor ? 'Hazırlanıyor...' : '💾 Veritabanını Yedekle'}
+          </Buton>
+        }
       />
+      <HataMesaji>{yedekHata}</HataMesaji>
       <Sekmeler sekmeler={YONETICI_SEKMELERI} aktif={sekme} onDegistir={setSekme} />
 
       {sekme === 'sirket' && <SirketBilgileriSekmesi />}

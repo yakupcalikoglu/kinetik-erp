@@ -1,7 +1,7 @@
 import { useEffect, useState, Fragment } from 'react';
 import { useLocation } from 'react-router-dom';
 import * as XLSX from 'xlsx';
-import { api, hataMesajiCikar } from '../api/client';
+import { api, hataMesajiCikar, ozelOnayIste } from '../api/client';
 import { excelIndir } from '../utils/disaAktarma';
 
 function useSiralama() {
@@ -462,7 +462,7 @@ export default function UrunTanimlariSayfasi() {
   }
 
   async function sil(kart) {
-    if (!window.confirm(`${kart.marka} ${kart.model} ürün tanımını silmek istediğinize emin misiniz?`)) return;
+    if (!(await ozelOnayIste(`${kart.marka} ${kart.model} ürün tanımını silmek istediğinize emin misiniz?`))) return;
     try {
       await api.delete(`/stok-kartlari/${kart.id}`);
       kartlariYukle();

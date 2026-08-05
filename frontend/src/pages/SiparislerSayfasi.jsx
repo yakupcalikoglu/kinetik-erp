@@ -1,7 +1,7 @@
 import { useEffect, useState, Fragment } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { api, hataMesajiCikar } from '../api/client';
+import { api, hataMesajiCikar, ozelOnayIste } from '../api/client';
 import { Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat, eylemChipStili, ParaGirdisi, useKademelıGoster, DahaFazlaGosterButonu, DahaFazlaMenu } from '../components/Ortak';
 import BelgeSablonu from '../components/BelgeSablonu';
 import AramaliSecici from '../components/AramaliSecici';
@@ -233,7 +233,7 @@ function GumrukBeyannameleriPaneli({ siparis, cariler, onKapat }) {
   }
 
   async function sil(id) {
-    if (!window.confirm('Bu gümrük beyannamesi kaydını silmek istediğinize emin misiniz?')) return;
+    if (!(await ozelOnayIste('Bu gümrük beyannamesi kaydını silmek istediğinize emin misiniz?'))) return;
     try {
       await api.delete(`/siparisler/gumruk-beyannameleri/${id}`);
       yukle();
@@ -394,7 +394,7 @@ function SiparisOdemeleriPaneli({ siparis, onKapat }) {
   }
 
   async function odemeyiSil(odemeId) {
-    if (!window.confirm('Bu ödeme kaydını silmek istediğinize emin misiniz? Oluşan Kasa/Banka hareketi de silinecek.')) return;
+    if (!(await ozelOnayIste('Bu ödeme kaydını silmek istediğinize emin misiniz? Oluşan Kasa/Banka hareketi de silinecek.'))) return;
     try {
       await api.delete(`/siparisler/odemeler/${odemeId}`);
       yukle();
@@ -620,13 +620,13 @@ export default function SiparislerSayfasi() {
   }
 
   async function siparisiIptalEt(siparisId, siparisNo) {
-    if (!window.confirm(`${siparisNo} numaralı siparişi iptal etmek istediğinize emin misiniz? Bu işlem geri alınamaz.`)) return;
+    if (!(await ozelOnayIste(`${siparisNo} numaralı siparişi iptal etmek istediğinize emin misiniz? Bu işlem geri alınamaz.`))) return;
     await durumDegistir(siparisId, 'IPTAL');
     setBilgiMesaji(`${siparisNo} numaralı sipariş iptal edildi.`);
   }
 
   async function siparisiSil(siparisId, siparisNo) {
-    if (!window.confirm(`${siparisNo} numaralı siparişi silmek istediğinize emin misiniz?`)) return;
+    if (!(await ozelOnayIste(`${siparisNo} numaralı siparişi silmek istediğinize emin misiniz?`))) return;
     try {
       await api.delete(`/siparisler/${siparisId}`);
       setBilgiMesaji(`${siparisNo} numaralı sipariş silindi.`);

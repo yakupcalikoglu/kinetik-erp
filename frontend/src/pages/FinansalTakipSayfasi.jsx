@@ -1,6 +1,6 @@
 import { useEffect, useState, Fragment } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { api, hataMesajiCikar } from '../api/client';
+import { api, hataMesajiCikar, ozelOnayIste } from '../api/client';
 import {
   Kart, SayfaBasligi, Buton, Etiket, Alan, girdiStili, BosDurum, HataMesaji, paraFormat, Sekmeler, eylemChipStili,
   OtomatikTamamlamaGirdisi, ParaGirdisi,
@@ -279,7 +279,7 @@ function HarcamaTurleriPaneli({ onKapat, onDegisti }) {
   }
 
   async function sil(kayit) {
-    if (!window.confirm(`"${kayit.ad}" harcama türünü silmek istediğinize emin misiniz?`)) return;
+    if (!(await ozelOnayIste(`"${kayit.ad}" harcama türünü silmek istediğinize emin misiniz?`))) return;
     try {
       await api.delete(`/harcama-turleri/${kayit.id}`);
       yukle();
@@ -673,7 +673,7 @@ function CekSekmesi() {
   }
 
   async function cekDurumunuGeriAl(cekId) {
-    if (!window.confirm('Bu çekin durumunu "Portföyde"ye geri almak istediğinize emin misiniz? Oluşan Kasa/Banka hareketi silinecek.')) return;
+    if (!(await ozelOnayIste('Bu çekin durumunu "Portföyde"ye geri almak istediğinize emin misiniz? Oluşan Kasa/Banka hareketi silinecek.'))) return;
     try {
       await api.put(`/cekler/${cekId}/durumu-geri-al`);
       yukle();
@@ -681,7 +681,7 @@ function CekSekmesi() {
   }
 
   async function cekSil(cekId) {
-    if (!window.confirm('Bu çeki silmek istediğinize emin misiniz?')) return;
+    if (!(await ozelOnayIste('Bu çeki silmek istediğinize emin misiniz?'))) return;
     try {
       await api.delete(`/cekler/${cekId}`);
       yukle();
@@ -939,7 +939,7 @@ function MaliyetDagitimFormu({ akreditif, onKapat, onTamamlandi }) {
   }
 
   async function geriAl(dagitimId) {
-    if (!window.confirm('Bu dağıtımı geri almak istediğinize emin misiniz? Tutar, ürünün maliyetinden düşülecek.')) return;
+    if (!(await ozelOnayIste('Bu dağıtımı geri almak istediğinize emin misiniz? Tutar, ürünün maliyetinden düşülecek.'))) return;
     try {
       await api.delete(`/akreditif-maliyet-dagitimlari/${dagitimId}`);
       gecmisiYukle();
@@ -1416,7 +1416,7 @@ function KalemTaksitPaneli({ kalem, akreditif, onKapat }) {
   const [hata, setHata] = useState(null);
 
   async function taksitiSil(taksitId) {
-    if (!window.confirm('Bu taksidi silmek istediğinize emin misiniz?')) return;
+    if (!(await ozelOnayIste('Bu taksidi silmek istediğinize emin misiniz?'))) return;
     try {
       await api.delete(`/akreditif-kalem-taksitleri/${taksitId}`);
       yukle();
@@ -1426,7 +1426,7 @@ function KalemTaksitPaneli({ kalem, akreditif, onKapat }) {
   }
 
   async function taksitOdemesiniGeriAl(taksitId) {
-    if (!window.confirm('Bu taksidin ödemesini geri almak istediğinize emin misiniz? Oluşan Kasa/Banka hareketi silinecek.')) return;
+    if (!(await ozelOnayIste('Bu taksidin ödemesini geri almak istediğinize emin misiniz? Oluşan Kasa/Banka hareketi silinecek.'))) return;
     try {
       await api.put(`/akreditif-kalem-taksitleri/${taksitId}/odemeyi-geri-al`);
       yukle();
@@ -1619,7 +1619,7 @@ function AkreditifSekmesi() {
   }
 
   async function akreditifiSil(a) {
-    if (!window.confirm(`${a.akreditif_no || '#' + a.id} akreditifini silmek istediğinize emin misiniz?`)) return;
+    if (!(await ozelOnayIste(`${a.akreditif_no || '#' + a.id} akreditifini silmek istediğinize emin misiniz?`))) return;
     try {
       await api.delete(`/akreditifler/${a.id}`);
       yukle();
@@ -1650,7 +1650,7 @@ function AkreditifSekmesi() {
   }
 
   async function kalemiSil(kalemId) {
-    if (!window.confirm('Bu kalemi silmek istediğinize emin misiniz?')) return;
+    if (!(await ozelOnayIste('Bu kalemi silmek istediğinize emin misiniz?'))) return;
     try {
       await api.delete(`/akreditif-kalemleri/${kalemId}`);
       kalemleriGoster(seciliAkreditif.id);
@@ -1661,7 +1661,7 @@ function AkreditifSekmesi() {
   }
 
   async function kalemOdemesiniGeriAl(kalemId) {
-    if (!window.confirm('Bu kalemin ödemesini geri almak istediğinize emin misiniz? Oluşan Kasa/Banka hareketi silinecek.')) return;
+    if (!(await ozelOnayIste('Bu kalemin ödemesini geri almak istediğinize emin misiniz? Oluşan Kasa/Banka hareketi silinecek.'))) return;
     try {
       await api.put(`/akreditif-kalemleri/${kalemId}/odemeyi-geri-al`);
       kalemleriGoster(seciliAkreditif.id);
@@ -2050,7 +2050,7 @@ function PersonelSekmesi() {
   }
 
   async function odemeGeriAl(odemeId) {
-    if (!window.confirm('Bu ödemeyi geri almak istediğinize emin misiniz? Oluşan Kasa/Banka hareketi silinecek.')) return;
+    if (!(await ozelOnayIste('Bu ödemeyi geri almak istediğinize emin misiniz? Oluşan Kasa/Banka hareketi silinecek.'))) return;
     try {
       await api.put(`/personel-odemeleri/${odemeId}/odemeyi-geri-al`);
       odemeleriGoster(seciliPersonel);
@@ -2058,7 +2058,7 @@ function PersonelSekmesi() {
   }
 
   async function odemeSil(odemeId) {
-    if (!window.confirm('Bu tahakkuk kaydını silmek istediğinize emin misiniz?')) return;
+    if (!(await ozelOnayIste('Bu tahakkuk kaydını silmek istediğinize emin misiniz?'))) return;
     try {
       await api.delete(`/personel-odemeleri/${odemeId}`);
       odemeleriGoster(seciliPersonel);
@@ -2273,7 +2273,7 @@ function BakimSekmesi() {
   }
 
   async function sil(bakimId) {
-    if (!window.confirm('Bu bakım kaydını silmek istediğinize emin misiniz? Oluşan Kasa/Banka hareketi bu işlemle silinmez.')) return;
+    if (!(await ozelOnayIste('Bu bakım kaydını silmek istediğinize emin misiniz? Oluşan Kasa/Banka hareketi bu işlemle silinmez.'))) return;
     try {
       await api.delete(`/bakim-kayitlari/${bakimId}`);
       yukle();
@@ -2495,7 +2495,7 @@ function LeasingSekmesi() {
   }
 
   async function sozlesmeSil(id) {
-    if (!window.confirm('Bu leasing sözleşmesini silmek istediğinize emin misiniz?')) return;
+    if (!(await ozelOnayIste('Bu leasing sözleşmesini silmek istediğinize emin misiniz?'))) return;
     try {
       await api.delete(`/leasing-sozlesmeleri/${id}`);
       if (seciliPlan?.id === id) setSeciliPlan(null);
@@ -2517,7 +2517,7 @@ function LeasingSekmesi() {
   }
 
   async function odemeyiGeriAl(odemeId) {
-    if (!window.confirm('Bu ödemeyi geri almak istediğinize emin misiniz? Oluşan Kasa/Banka hareketi silinecek.')) return;
+    if (!(await ozelOnayIste('Bu ödemeyi geri almak istediğinize emin misiniz? Oluşan Kasa/Banka hareketi silinecek.'))) return;
     try {
       await api.put(`/leasing-odemeleri/${odemeId}/odemeyi-geri-al`);
       planiGoster(seciliPlan.id);
@@ -2995,7 +2995,7 @@ function KiralamaSekmesi() {
   }
 
   async function tahsilatiGeriAl(odemeId) {
-    if (!window.confirm('Bu tahsilatı geri almak istediğinize emin misiniz? Oluşan Kasa/Banka hareketi silinecek.')) return;
+    if (!(await ozelOnayIste('Bu tahsilatı geri almak istediğinize emin misiniz? Oluşan Kasa/Banka hareketi silinecek.'))) return;
     try {
       await api.put(`/kiralama-odemeleri/${odemeId}/tahsilati-geri-al`);
       odemeleriGoster(seciliSozlesme);
@@ -3391,7 +3391,7 @@ function TaksitSekmesi() {
   }
 
   async function tahsilatiGeriAl(taksitId) {
-    if (!window.confirm('Bu tahsilatı geri almak istediğinize emin misiniz? Oluşan Kasa/Banka hareketi silinecek. Bu ödeme başka taksitlere de yansımışsa, onlar da birlikte geri alınacaktır.')) return;
+    if (!(await ozelOnayIste('Bu tahsilatı geri almak istediğinize emin misiniz? Oluşan Kasa/Banka hareketi silinecek. Bu ödeme başka taksitlere de yansımışsa, onlar da birlikte geri alınacaktır.'))) return;
     try {
       const { data: sonuc } = await api.put(`/taksit-detay/${taksitId}/tahsilati-geri-al`);
       const { data } = await api.get(`/taksitli-satis-planlari/${olusanPlan.id}/taksitler`);
@@ -3804,7 +3804,7 @@ function SabitGiderSekmesi() {
   }
 
   async function odemeyiGeriAl(giderId) {
-    if (!window.confirm('Bu ödemeyi geri almak istediğinize emin misiniz? Oluşan Kasa/Banka hareketi silinecek.')) return;
+    if (!(await ozelOnayIste('Bu ödemeyi geri almak istediğinize emin misiniz? Oluşan Kasa/Banka hareketi silinecek.'))) return;
     try {
       await api.put(`/sabit-giderler/${giderId}/odemeyi-geri-al`);
       yukle();
@@ -3812,7 +3812,7 @@ function SabitGiderSekmesi() {
   }
 
   async function sil(giderId) {
-    if (!window.confirm('Bu gider kaydını silmek istediğinize emin misiniz?')) return;
+    if (!(await ozelOnayIste('Bu gider kaydını silmek istediğinize emin misiniz?'))) return;
     try {
       await api.delete(`/sabit-giderler/${giderId}`);
       yukle();

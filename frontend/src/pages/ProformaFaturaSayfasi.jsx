@@ -1,6 +1,6 @@
 import { useEffect, useState, Fragment } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { api, hataMesajiCikar } from '../api/client';
+import { api, hataMesajiCikar, ozelOnayIste } from '../api/client';
 import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, BosDurum, Etiket, paraFormat, eylemChipStili, Sekmeler, ParaGirdisi } from '../components/Ortak';
 import BelgeSablonu from '../components/BelgeSablonu';
 import AramaliSecici from '../components/AramaliSecici';
@@ -519,7 +519,7 @@ function GecmisProformalar({ cariler, yenidenYukleTetik, onGoruntule }) {
   }
 
   async function sil(proforma) {
-    if (!window.confirm(`${proforma.proforma_no} numaralı proformayı silmek istediğinize emin misiniz?`)) return;
+    if (!(await ozelOnayIste(`${proforma.proforma_no} numaralı proformayı silmek istediğinize emin misiniz?`))) return;
     try {
       await api.delete(`/proforma-faturalar/${proforma.id}`);
       yukle();
@@ -635,7 +635,7 @@ function GecmisFaturalar({ cariler, yenidenYukleTetik }) {
   }
 
   async function iptalEt(fatura) {
-    if (!window.confirm(`${fatura.fatura_no} numaralı faturayı iptal etmek istediğinize emin misiniz? Bağlı proforma tekrar faturalaştırılabilir hale gelecek.`)) return;
+    if (!(await ozelOnayIste(`${fatura.fatura_no} numaralı faturayı iptal etmek istediğinize emin misiniz? Bağlı proforma tekrar faturalaştırılabilir hale gelecek.`))) return;
     try {
       await api.delete(`/faturalar/${fatura.id}`);
       yukle();

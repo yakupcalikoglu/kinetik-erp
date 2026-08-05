@@ -1,6 +1,6 @@
 import { useEffect, useState, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api, hataMesajiCikar } from '../api/client';
+import { api, hataMesajiCikar, ozelOnayIste } from '../api/client';
 import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat, eylemChipStili, OtomatikTamamlamaGirdisi, Etiket, ParaGirdisi } from '../components/Ortak';
 
 function tarihFormat(iso) {
@@ -155,7 +155,7 @@ function KaynakDetayi({ kaynakTablo, kaynakId, onIslemTamamlandi }) {
   const geriAlBilgisi = GERI_AL_HARITASI[kaynakTablo];
 
   async function geriAl() {
-    if (!window.confirm('Bu işlemi geri almak istediğinize emin misiniz? Oluşan Kasa/Banka hareketi silinecek.')) return;
+    if (!(await ozelOnayIste('Bu işlemi geri almak istediğinize emin misiniz? Oluşan Kasa/Banka hareketi silinecek.'))) return;
     setIslemYapiliyor(true);
     setHata(null);
     try {
@@ -611,7 +611,7 @@ export default function KasaSayfasi() {
   }
 
   async function hareketiSil(hareketId) {
-    if (!window.confirm('Bu kasa hareketini silmek istediğinize emin misiniz?')) return;
+    if (!(await ozelOnayIste('Bu kasa hareketini silmek istediğinize emin misiniz?'))) return;
     try {
       await api.delete(`/kasa-hareketleri/${hareketId}`);
       yukle();

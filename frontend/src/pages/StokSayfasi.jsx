@@ -49,7 +49,7 @@ function SiraliBaslik({ children, alanAdi, siralama, style }) {
     </th>
   );
 }
-import { api, hataMesajiCikar } from '../api/client';
+import { api, hataMesajiCikar, ozelOnayIste } from '../api/client';
 import { excelIndir } from '../utils/disaAktarma';
 
 const API_TABAN_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -289,7 +289,7 @@ function MaliyetDetayi({ urun, stokKartlari, onKapat }) {
   useEffect(yukle, [urun.id]); // eslint-disable-line
 
   async function sil(kalemId) {
-    if (!window.confirm('Bu maliyet kalemini silmek istediğinize emin misiniz? Ürünün toplam maliyeti buna göre azaltılacak.')) return;
+    if (!(await ozelOnayIste('Bu maliyet kalemini silmek istediğinize emin misiniz? Ürünün toplam maliyeti buna göre azaltılacak.'))) return;
     try {
       await api.delete(`/stok-seri-no/${urun.id}/maliyet-kalemi/${kalemId}`);
       yukle();
@@ -987,7 +987,7 @@ export default function StokSayfasi() {
   }
 
   async function urunuSil(urun) {
-    if (!window.confirm(`${urun.seri_no} seri numaralı ürünü silmek istediğinize emin misiniz?`)) return;
+    if (!(await ozelOnayIste(`${urun.seri_no} seri numaralı ürünü silmek istediğinize emin misiniz?`))) return;
     try {
       await api.delete(`/stok-seri-no/${urun.id}`);
       urunleriYukle();
@@ -998,7 +998,7 @@ export default function StokSayfasi() {
   }
 
   async function satisiGeriAl(urun) {
-    if (!window.confirm(`${urun.seri_no} seri numaralı ürünün satışını geri almak istediğinize emin misiniz? Ürün "Depoda" durumuna dönecek ve oluşan Kasa/Banka hareketi silinecek.`)) return;
+    if (!(await ozelOnayIste(`${urun.seri_no} seri numaralı ürünün satışını geri almak istediğinize emin misiniz? Ürün "Depoda" durumuna dönecek ve oluşan Kasa/Banka hareketi silinecek.`))) return;
     try {
       await api.put(`/stok-seri-no/${urun.id}/satisi-geri-al`);
       urunleriYukle();

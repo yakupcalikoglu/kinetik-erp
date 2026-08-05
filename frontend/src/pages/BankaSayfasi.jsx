@@ -1,6 +1,6 @@
 import { useEffect, useState, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api, hataMesajiCikar } from '../api/client';
+import { api, hataMesajiCikar, ozelOnayIste } from '../api/client';
 import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat, eylemChipStili, Sekmeler, OtomatikTamamlamaGirdisi, Etiket, ParaGirdisi } from '../components/Ortak';
 
 function tarihFormat(iso) {
@@ -214,7 +214,7 @@ function KaynakDetayi({ kaynakTablo, kaynakId, onIslemTamamlandi }) {
   const geriAlBilgisi = GERI_AL_HARITASI[kaynakTablo];
 
   async function geriAl() {
-    if (!window.confirm('Bu işlemi geri almak istediğinize emin misiniz? Oluşan Kasa/Banka hareketi silinecek.')) return;
+    if (!(await ozelOnayIste('Bu işlemi geri almak istediğinize emin misiniz? Oluşan Kasa/Banka hareketi silinecek.'))) return;
     setIslemYapiliyor(true);
     setHata(null);
     try {
@@ -364,7 +364,7 @@ function HesaplarSekmesi() {
   }
 
   async function hesabiSil(hesap) {
-    if (!window.confirm(`${hesap.banka_adi} hesabını silmek istediğinize emin misiniz?`)) return;
+    if (!(await ozelOnayIste(`${hesap.banka_adi} hesabını silmek istediğinize emin misiniz?`))) return;
     try {
       await api.delete(`/banka-hesaplari/${hesap.banka_hesap_id}`);
       yukle();
@@ -846,7 +846,7 @@ function HareketlerSekmesi() {
     const uyari = ['HESAPLAR_ARASI_TRANSFER', 'DOVIZ_ALIM', 'DOVIZ_SATIM'].includes(hareket.tip)
       ? '\n\nNOT: Bu bir transfer/döviz işlemi. Karşı hesaptaki eş kaydı bu işlemle silinmez, gerekirse onu da ayrıca silin.'
       : '';
-    if (!window.confirm(`Bu banka hareketini silmek istediğinize emin misiniz?${uyari}`)) return;
+    if (!(await ozelOnayIste(`Bu banka hareketini silmek istediğinize emin misiniz?${uyari}`))) return;
     try {
       await api.delete(`/banka-hareketleri/${hareketId}`);
       yukle();

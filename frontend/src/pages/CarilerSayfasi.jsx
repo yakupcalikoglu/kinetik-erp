@@ -1,6 +1,6 @@
 import { useEffect, useState, Fragment } from 'react';
 import * as XLSX from 'xlsx';
-import { api, hataMesajiCikar } from '../api/client';
+import { api, hataMesajiCikar, ozelOnayIste } from '../api/client';
 import { excelIndir } from '../utils/disaAktarma';
 import {
   Kart, SayfaBasligi, Buton, Etiket, Alan, girdiStili, BosDurum, HataMesaji, paraFormat, eylemChipStili, ParaGirdisi,
@@ -1043,7 +1043,7 @@ export default function CarilerSayfasi() {
   }
 
   async function cariyiSil(cari) {
-    if (!window.confirm(`${cari.unvan} adlı cariyi silmek istediğinize emin misiniz?`)) return;
+    if (!(await ozelOnayIste(`${cari.unvan} adlı cariyi silmek istediğinize emin misiniz?`))) return;
     try {
       await api.delete(`/cariler/${cari.id}`);
       listeyiYukle();

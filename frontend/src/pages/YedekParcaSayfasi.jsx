@@ -1,7 +1,7 @@
 import { useEffect, useState, Fragment } from 'react';
 import { useLocation } from 'react-router-dom';
 import * as XLSX from 'xlsx';
-import { api, hataMesajiCikar } from '../api/client';
+import { api, hataMesajiCikar, ozelOnayIste } from '../api/client';
 import {
   Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat, eylemChipStili, ParaGirdisi,
   useKademelıGoster, DahaFazlaGosterButonu, DahaFazlaMenu,
@@ -400,7 +400,7 @@ function HareketlerPaneli({ parca, cariler, onKapat, onDegisti }) {
   }
 
   async function sil(id) {
-    if (!window.confirm('Bu hareketi silmek istediğinize emin misiniz? Stok miktarı ve varsa ilişkili Kasa/Banka hareketi geri alınacak.')) return;
+    if (!(await ozelOnayIste('Bu hareketi silmek istediğinize emin misiniz? Stok miktarı ve varsa ilişkili Kasa/Banka hareketi geri alınacak.'))) return;
     try {
       await api.delete(`/yedek-parcalar/hareketler/${id}`);
       yukle();
@@ -656,7 +656,7 @@ export default function YedekParcaSayfasi() {
   }
 
   async function sil(p) {
-    if (!window.confirm(`${p.ad} kaydını silmek istediğinize emin misiniz?`)) return;
+    if (!(await ozelOnayIste(`${p.ad} kaydını silmek istediğinize emin misiniz?`))) return;
     try {
       await api.delete(`/yedek-parcalar/${p.id}`);
       yukle();
