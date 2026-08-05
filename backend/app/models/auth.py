@@ -3,7 +3,7 @@ Auth/Yetki modulu - SQLAlchemy modelleri.
 veritabani_semasi.sql dosyasindaki ilgili tablolarla birebir eslesir.
 """
 from sqlalchemy import (Column, BigInteger, String, Boolean, DateTime,
-                         ForeignKey, Table, Text)
+                         ForeignKey, Table, Text, LargeBinary)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db.session import Base
@@ -18,7 +18,15 @@ class Sirket(Base):
     adres = Column(Text)
     telefon = Column(String(50))
     email = Column(String(100))
+    # NOT: logo_dosya_yolu ESKI yaklasimdi (sunucunun /tmp diskine yaziyordu) -
+    # Render gibi platformlarda /tmp KALICI DEGIL, her yeni deploy'da
+    # SIFIRLANIYOR, bu yuzden her deploy sonrasi logo "kayboluyordu". Artik
+    # logonun kendisi (binary icerik) dogrudan veritabaninda saklaniyor -
+    # deploy'lardan tamamen bagimsiz, kalici bir cozum. Eski alan, olasi
+    # eski kayitlarla uyumluluk icin duruyor ama artik KULLANILMIYOR.
     logo_dosya_yolu = Column(String(500))
+    logo_verisi = Column(LargeBinary)
+    logo_content_type = Column(String(100))
     aktif = Column(Boolean, default=True)
     olusturma_tarihi = Column(DateTime, server_default=func.now())
 
