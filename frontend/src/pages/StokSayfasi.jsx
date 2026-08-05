@@ -55,7 +55,7 @@ import { excelIndir } from '../utils/disaAktarma';
 const API_TABAN_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 import {
   Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat,
-  eylemChipStili, ParaGirdisi, DahaFazlaMenu, GrupBasligi,
+  eylemChipStili, ParaGirdisi, DahaFazlaMenu, GrupBasligi, TabloIskeleti,
 } from '../components/Ortak';
 
 const DURUM_ETIKET = {
@@ -1339,7 +1339,7 @@ export default function StokSayfasi() {
         </div>
 
         {yukleniyor ? (
-          <div style={{ padding: 20, color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
+          <TabloIskeleti sutunSayisi={9} />
         ) : urunler.length === 0 ? (
           <BosDurum baslik="Bu filtrede ürün bulunamadı" />
         ) : (
