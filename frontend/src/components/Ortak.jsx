@@ -166,9 +166,20 @@ export function HataMesaji({ children }) {
         borderRadius: 7,
         fontSize: 13,
         marginBottom: 16,
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: 8,
+        animation: 'kinetikHataGir 0.2s ease-out',
       }}
     >
-      {children}
+      <span style={{ flexShrink: 0, fontSize: 14, lineHeight: 1.4 }}>⚠</span>
+      <span style={{ lineHeight: 1.5 }}>{children}</span>
+      <style>{`
+        @keyframes kinetikHataGir {
+          from { opacity: 0; transform: translateY(-4px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
     </div>
   );
 }
