@@ -390,10 +390,68 @@ function GenelYuklemeCubugu() {
   );
 }
 
+const KISAYOLLAR = [
+  { tus: '/', aciklama: 'Genel aramaya odaklan' },
+  { tus: 'Esc', aciklama: 'Açık aramayı / pencereyi kapat' },
+  { tus: '?', aciklama: 'Bu yardım penceresini aç/kapat' },
+];
+
+function KisayollarPaneli({ onKapat }) {
+  return (
+    <div
+      onClick={onKapat}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 400,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: 'white', borderRadius: 12, padding: 24, minWidth: 320,
+          boxShadow: '0 10px 40px rgba(0,0,0,0.25)',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <div style={{ fontSize: 15, fontWeight: 600 }}>Klavye Kısayolları</div>
+          <button onClick={onKapat} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--metin-ikincil)' }}>×</button>
+        </div>
+        {KISAYOLLAR.map((k) => (
+          <div key={k.tus} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderTop: '1px solid var(--kenarlik)' }}>
+            <span style={{ fontSize: 13, color: 'var(--metin-ikincil)' }}>{k.aciklama}</span>
+            <kbd style={{
+              background: 'var(--zemin)', border: '1px solid var(--kenarlik-koyu)', borderRadius: 5,
+              padding: '3px 8px', fontSize: 12.5, fontFamily: 'monospace', fontWeight: 600,
+            }}>
+              {k.tus}
+            </kbd>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function AnaDuzen() {
   const { oturum, cikisYap, sirketDegistir, sirketleriTazele, izinVarMi } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [kisayollarAcik, setKisayollarAcik] = useState(false);
+
+  useEffect(() => {
+    function tusaBasildi(e) {
+      const hedefEtiket = e.target.tagName;
+      const yaziYaziyor = hedefEtiket === 'INPUT' || hedefEtiket === 'TEXTAREA' || e.target.isContentEditable;
+      if (e.key === '?' && !yaziYaziyor) {
+        e.preventDefault();
+        setKisayollarAcik((a) => !a);
+      } else if (e.key === 'Escape' && kisayollarAcik) {
+        setKisayollarAcik(false);
+      }
+    }
+    document.addEventListener('keydown', tusaBasildi);
+    return () => document.removeEventListener('keydown', tusaBasildi);
+  }, [kisayollarAcik]);
 
   // Tarayici sekmesi basligini aktif sayfaya gore gunceller - boylece
   // birden fazla sekme acikken hangi sekmenin hangi sayfa oldugu kolayca
@@ -436,6 +494,7 @@ export default function AnaDuzen() {
       <BasariToast />
       <GenelYuklemeCubugu />
       <YukariCikButonu />
+      {kisayollarAcik && <KisayollarPaneli onKapat={() => setKisayollarAcik(false)} />}
       <style>{`
         @keyframes kinetikToastGir {
           from { opacity: 0; transform: translateY(-8px); }
