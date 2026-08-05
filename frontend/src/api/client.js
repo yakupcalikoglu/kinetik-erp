@@ -74,6 +74,31 @@ api.interceptors.response.use(
   (error) => { _istekBitti(); return Promise.reject(error); },
 );
 
+// ---------------------------------------------------------------- Ozel Onay Penceresi
+// window.confirm() tarayicinin CIRKIN, sade native penceresini gosterir ve
+// uygulamanin tasarimina uymaz. Bunun yerine, Promise tabanli bir sistem
+// kurup React tarafinda (AnaDuzen.jsx) GUZEL bir onay penceresi gosteriyoruz.
+// Kullanimi window.confirm ile AYNI ama ASENKRON:
+//   if (!(await ozelOnayIste('Emin misiniz?'))) return;
+let _onayCozucu = null;
+const _onayIstegiDinleyicileri = new Set();
+export function onayIstegiDinle(fn) {
+  _onayIstegiDinleyicileri.add(fn);
+  return () => _onayIstegiDinleyicileri.delete(fn);
+}
+export function ozelOnayIste(mesaj) {
+  return new Promise((resolve) => {
+    _onayCozucu = resolve;
+    _onayIstegiDinleyicileri.forEach((fn) => fn(mesaj));
+  });
+}
+export function _onayYaniti(sonuc) {
+  if (_onayCozucu) {
+    _onayCozucu(sonuc);
+    _onayCozucu = null;
+  }
+}
+
 // 401/403 durumunda kullanicinin anlamasini saglayacak ortak hata mesaji cikarici.
 // Backend FastAPI hata formati genelde { "detail": "..." } seklindedir, ama
 // pydantic validasyon hatalarinda detail bir DIZI/OBJE olabilir
