@@ -131,8 +131,18 @@ function GruplananSekmeler({ aktif, onDegistir }) {
   );
 }
 
-function BasitTablo({ basliklar, satirlar, render, siralama }) {
+// tarihAlani verilirse, satirlar Yil -> Ay seviyesinde katlanabilir
+// basliklar altinda gruplanir (en son ay varsayilan acik). Verilmezse eski
+// davranis (duz liste) aynen calisir - geriye donuk uyumluluk icin.
+function BasitTablo({ basliklar, satirlar, render, siralama, tarihAlani }) {
+  // Hook kurali geregi kosulsuz cagriliyor - tarihAlani yoksa bos liste ile
+  // (zararsiz) calisir, sonucu asagida sadece tarihAlani varsa kullaniyoruz.
+  const tarihGrup = useTarihGruplama(tarihAlani ? satirlar : [], tarihAlani || 'tarih');
+
   if (satirlar.length === 0) return <BosDurum baslik="Kayıt bulunamadı" />;
+
+  const sutunSayisi = basliklar.length;
+
   return (
     <table>
       <thead>
@@ -158,7 +168,37 @@ function BasitTablo({ basliklar, satirlar, render, siralama }) {
           })}
         </tr>
       </thead>
-      <tbody>{satirlar.map(render)}</tbody>
+      <tbody>
+        {!tarihAlani ? satirlar.map(render) : tarihGrup.yillar.map((yil) => (
+          <Fragment key={yil}>
+            <tr>
+              <td colSpan={sutunSayisi} style={{ padding: 0 }}>
+                <YilBasligi
+                  yil={yil}
+                  kayitSayisi={Object.values(tarihGrup.gruplar[yil]).flat().length}
+                  acik={tarihGrup.acikYillar.has(yil)}
+                  onTikla={() => tarihGrup.yilAcKapat(yil)}
+                />
+              </td>
+            </tr>
+            {tarihGrup.acikYillar.has(yil) && Object.keys(tarihGrup.gruplar[yil]).sort().reverse().map((ayAnahtari) => (
+              <Fragment key={ayAnahtari}>
+                <tr>
+                  <td colSpan={sutunSayisi} style={{ padding: 0 }}>
+                    <AyBasligi
+                      ayAnahtari={ayAnahtari}
+                      kayitSayisi={tarihGrup.gruplar[yil][ayAnahtari].length}
+                      acik={tarihGrup.acikAylar.has(ayAnahtari)}
+                      onTikla={() => tarihGrup.ayAcKapat(ayAnahtari)}
+                    />
+                  </td>
+                </tr>
+                {tarihGrup.acikAylar.has(ayAnahtari) && tarihGrup.gruplar[yil][ayAnahtari].map(render)}
+              </Fragment>
+            ))}
+          </Fragment>
+        ))}
+      </tbody>
     </table>
   );
 }
@@ -1793,6 +1833,7 @@ function AkreditifSekmesi() {
 
       <Kart style={{ padding: 0, marginBottom: 16 }}>
         <BasitTablo
+          tarihAlani="acilis_tarihi"
           basliklar={[
             { etiket: 'Akreditif No', alan: 'akreditif_no' },
             { etiket: 'Sipariş', alan: '_siparis' },
@@ -2384,6 +2425,7 @@ function BakimSekmesi() {
 
       <Kart style={{ padding: 0 }}>
         <BasitTablo
+          tarihAlani="tarih"
           basliklar={[
             { etiket: 'Ürün', alan: '_urun' },
             { etiket: 'İlgili Cari', alan: 'ilgili_cari_unvan' },
