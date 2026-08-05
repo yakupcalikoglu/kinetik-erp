@@ -1,7 +1,7 @@
 import { useEffect, useState, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, hataMesajiCikar, ozelOnayIste } from '../api/client';
-import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat, eylemChipStili, OtomatikTamamlamaGirdisi, Etiket, ParaGirdisi } from '../components/Ortak';
+import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat, eylemChipStili, OtomatikTamamlamaGirdisi, Etiket, ParaGirdisi, useKademelıGoster, DahaFazlaGosterButonu } from '../components/Ortak';
 
 function tarihFormat(iso) {
   if (!iso || typeof iso !== 'string' || !iso.includes('-')) return iso || '—';
@@ -623,6 +623,11 @@ export default function KasaSayfasi() {
   let gosterilecekHareketler = kasaHareketleri;
   if (yonFiltre) gosterilecekHareketler = gosterilecekHareketler.filter((h) => h.yon === yonFiltre);
   if (paraBirimiFiltre) gosterilecekHareketler = gosterilecekHareketler.filter((h) => h.para_birimi === paraBirimiFiltre);
+  const siraliKasaHareketleri = siralama.sirala(gosterilecekHareketler, (item, alan) => {
+    if (alan === '_cari') return item.cari_id ? (cariHaritasi[item.cari_id] || '') : '';
+    return item[alan];
+  });
+  const kademe = useKademelıGoster(siraliKasaHareketleri, 50);
 
   return (
     <div>
@@ -691,10 +696,7 @@ export default function KasaSayfasi() {
               </tr>
             </thead>
             <tbody>
-              {siralama.sirala(gosterilecekHareketler, (item, alan) => {
-                if (alan === '_cari') return item.cari_id ? (cariHaritasi[item.cari_id] || '') : '';
-                return item[alan];
-              }).map((h) => {
+              {kademe.gosterilecekler.map((h) => {
                 const tiklanabilir = !!(h.kaynak_tablo && h.kaynak_id);
                 const otomatikGeldi = !!h.kaynak_tablo;
                 if (duzenlenenId === h.id) {
@@ -765,6 +767,7 @@ export default function KasaSayfasi() {
             </tbody>
           </table>
         )}
+        <DahaFazlaGosterButonu kademe={kademe} />
       </Kart>
     </div>
   );
