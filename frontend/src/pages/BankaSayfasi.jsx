@@ -1,7 +1,7 @@
 import { useEffect, useState, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, hataMesajiCikar, ozelOnayIste } from '../api/client';
-import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat, eylemChipStili, Sekmeler, OtomatikTamamlamaGirdisi, Etiket, ParaGirdisi, useKademelıGoster, DahaFazlaGosterButonu } from '../components/Ortak';
+import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat, eylemChipStili, Sekmeler, OtomatikTamamlamaGirdisi, Etiket, ParaGirdisi, useTarihGruplama, YilBasligi, AyBasligi } from '../components/Ortak';
 
 function tarihFormat(iso) {
   if (!iso || typeof iso !== 'string' || !iso.includes('-')) return iso || '—';
@@ -805,10 +805,6 @@ function HareketlerSekmesi() {
   const [hesaplar, setHesaplar] = useState([]);
   const [bankaHareketleri, setBankaHareketleri] = useState([]);
   const [hesapFiltre, setHesapFiltre] = useState('');
-  // Varsayilan olarak sadece son 30 gunu goster - liste her zaman anlamsizca
-  // uzamasin. Kullanici isterse "Tum Gecmisi Goster" ile bu siniri kaldirabilir.
-  const [tumGecmisGosteriliyor, setTumGecmisGosteriliyor] = useState(false);
-  const otuzGunOncesi = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const [hata, setHata] = useState(null);
   const [yukleniyor, setYukleniyor] = useState(true);
   const [bankaFormuAcik, setBankaFormuAcik] = useState(false);
@@ -860,15 +856,14 @@ function HareketlerSekmesi() {
   }
 
   const gosterilecekHareketler = bankaHareketleri
-    .filter((h) => !hesapFiltre || String(h.banka_hesap_id) === hesapFiltre)
-    .filter((h) => tumGecmisGosteriliyor || h.tarih >= otuzGunOncesi);
+    .filter((h) => !hesapFiltre || String(h.banka_hesap_id) === hesapFiltre);
   const siraliHareketler = siralama.sirala(gosterilecekHareketler, (item, alan) => {
     if (alan === '_hesap') return hesapAdiGoster(item.banka_hesap_id);
     if (alan === '_cari') return item.cari_id ? (cariHaritasi[item.cari_id] || '') : '';
     if (alan === '_kategori') return kategoriGoster(item.kaynak_tablo);
     return item[alan];
   });
-  const kademe = useKademelıGoster(siraliHareketler, 50);
+  const tarihGrup = useTarihGruplama(siraliHareketler, 'tarih');
 
   return (
     <div>
@@ -896,19 +891,8 @@ function HareketlerSekmesi() {
             ))}
           </select>
         </Alan>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <Buton variant="ikincil" onClick={() => setTumGecmisGosteriliyor((a) => !a)}>
-            {tumGecmisGosteriliyor ? 'Son 30 Güne Dön' : 'Tüm Geçmişi Göster'}
-          </Buton>
-          <Buton onClick={() => setBankaFormuAcik((a) => !a)}>{bankaFormuAcik ? 'Kapat' : '+ Yeni banka hareketi'}</Buton>
-        </div>
+        <Buton onClick={() => setBankaFormuAcik((a) => !a)}>{bankaFormuAcik ? 'Kapat' : '+ Yeni banka hareketi'}</Buton>
       </div>
-
-      {!tumGecmisGosteriliyor && (
-        <div style={{ fontSize: 12, color: 'var(--metin-ikincil)', marginBottom: 12 }}>
-          Son 30 gün gösteriliyor — daha eski hareketler için "Tüm Geçmişi Göster"e tıklayın.
-        </div>
-      )}
 
       <HataMesaji>{hata}</HataMesaji>
 
@@ -936,7 +920,31 @@ function HareketlerSekmesi() {
               </tr>
             </thead>
             <tbody>
-              {kademe.gosterilecekler.map((h) => {
+              {tarihGrup.yillar.map((yil) => (
+                <Fragment key={yil}>
+                  <tr>
+                    <td colSpan={8} style={{ padding: 0 }}>
+                      <YilBasligi
+                        yil={yil}
+                        kayitSayisi={Object.values(tarihGrup.gruplar[yil]).flat().length}
+                        acik={tarihGrup.acikYillar.has(yil)}
+                        onTikla={() => tarihGrup.yilAcKapat(yil)}
+                      />
+                    </td>
+                  </tr>
+                  {tarihGrup.acikYillar.has(yil) && Object.keys(tarihGrup.gruplar[yil]).sort().reverse().map((ayAnahtari) => (
+                    <Fragment key={ayAnahtari}>
+                      <tr>
+                        <td colSpan={8} style={{ padding: 0 }}>
+                          <AyBasligi
+                            ayAnahtari={ayAnahtari}
+                            kayitSayisi={tarihGrup.gruplar[yil][ayAnahtari].length}
+                            acik={tarihGrup.acikAylar.has(ayAnahtari)}
+                            onTikla={() => tarihGrup.ayAcKapat(ayAnahtari)}
+                          />
+                        </td>
+                      </tr>
+                      {tarihGrup.acikAylar.has(ayAnahtari) && tarihGrup.gruplar[yil][ayAnahtari].map((h) => {
                 const tiklanabilir = !!(h.kaynak_tablo && h.kaynak_id);
                 const otomatikGeldi = !!h.kaynak_tablo;
                 if (duzenlenenId === h.id) {
@@ -1007,10 +1015,13 @@ function HareketlerSekmesi() {
                   </Fragment>
                 );
               })}
+                    </Fragment>
+                  ))}
+                </Fragment>
+              ))}
             </tbody>
           </table>
         )}
-        <DahaFazlaGosterButonu kademe={kademe} />
       </Kart>
     </div>
   );
