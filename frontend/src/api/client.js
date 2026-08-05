@@ -99,6 +99,49 @@ export function _onayYaniti(sonuc) {
   }
 }
 
+// ---------------------------------------------------------------- Ozel Bilgi (Alert) Penceresi
+// window.alert() yerine - kullanimi ayni ama ASENKRON: await ozelAlert('Kaydedildi.');
+let _alertCozucu = null;
+const _alertIstegiDinleyicileri = new Set();
+export function alertIstegiDinle(fn) {
+  _alertIstegiDinleyicileri.add(fn);
+  return () => _alertIstegiDinleyicileri.delete(fn);
+}
+export function ozelAlert(mesaj) {
+  return new Promise((resolve) => {
+    _alertCozucu = resolve;
+    _alertIstegiDinleyicileri.forEach((fn) => fn(mesaj));
+  });
+}
+export function _alertYaniti() {
+  if (_alertCozucu) {
+    _alertCozucu();
+    _alertCozucu = null;
+  }
+}
+
+// ---------------------------------------------------------------- Ozel Metin Girisi (Prompt) Penceresi
+// window.prompt() yerine - kullanimi ayni ama ASENKRON:
+//   const deger = await ozelPrompt('Yeni sifre:'); if (!deger) return;
+let _promptCozucu = null;
+const _promptIstegiDinleyicileri = new Set();
+export function promptIstegiDinle(fn) {
+  _promptIstegiDinleyicileri.add(fn);
+  return () => _promptIstegiDinleyicileri.delete(fn);
+}
+export function ozelPrompt(mesaj, varsayilanDeger = '') {
+  return new Promise((resolve) => {
+    _promptCozucu = resolve;
+    _promptIstegiDinleyicileri.forEach((fn) => fn({ mesaj, varsayilanDeger }));
+  });
+}
+export function _promptYaniti(deger) {
+  if (_promptCozucu) {
+    _promptCozucu(deger);
+    _promptCozucu = null;
+  }
+}
+
 // 401/403 durumunda kullanicinin anlamasini saglayacak ortak hata mesaji cikarici.
 // Backend FastAPI hata formati genelde { "detail": "..." } seklindedir, ama
 // pydantic validasyon hatalarinda detail bir DIZI/OBJE olabilir
