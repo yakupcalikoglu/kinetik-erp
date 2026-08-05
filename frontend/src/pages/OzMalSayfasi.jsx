@@ -386,6 +386,17 @@ function DemirbasIceAktarPaneli({ onKapat, onTamamlandi }) {
       <div style={{ fontSize: 12.5, color: 'var(--metin-ikincil)', marginBottom: 12 }}>
         Excel dosyanızda (herhangi bir sütun sırasıyla): <strong>Ad</strong> (zorunlu), Kategori, Tanımlayıcı No, Konum, Maliyet bulunabilir.
         Maliyet, TL cinsinden kabul edilir — döviz cinsinden girmek isterseniz "Yeni Demirbaş" formunu kullanın.
+        {' '}
+        <button
+          type="button"
+          onClick={() => excelIndir(
+            [{ 'Ad': 'Örnek Forklift', 'Kategori': 'Araç', 'Tanımlayıcı No': '34 ABC 123', 'Konum': 'Merkez Depo', 'Maliyet': 250000, 'Alım Tarihi': '2026-01-15' }],
+            'demirbas_sablon', 'Demirbaş Şablonu',
+          )}
+          style={{ background: 'none', border: 'none', color: 'var(--lacivert)', textDecoration: 'underline', cursor: 'pointer', fontSize: 12.5, padding: 0 }}
+        >
+          Örnek şablon indir
+        </button>
       </div>
       <input type="file" accept=".xlsx,.xls" onChange={dosyaSecildi} style={{ marginBottom: 16 }} />
       {satirlar.length > 0 && !sonuc && (
