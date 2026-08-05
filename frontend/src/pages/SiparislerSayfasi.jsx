@@ -1,7 +1,7 @@
 import { useEffect, useState, Fragment } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { api, hataMesajiCikar, ozelOnayIste } from '../api/client';
+import { api, hataMesajiCikar, ozelOnayIste, ozelPrompt } from '../api/client';
 import { Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat, eylemChipStili, ParaGirdisi, useKademelıGoster, DahaFazlaGosterButonu, DahaFazlaMenu } from '../components/Ortak';
 import BelgeSablonu from '../components/BelgeSablonu';
 import AramaliSecici from '../components/AramaliSecici';
@@ -656,7 +656,7 @@ export default function SiparislerSayfasi() {
   }
 
   async function kopyala(siparisId) {
-    const yeniNo = window.prompt('Yeni sipariş numarası:');
+    const yeniNo = await ozelPrompt('Yeni sipariş numarası:');
     if (!yeniNo) return;
     try {
       await api.post(`/siparisler/${siparisId}/kopyala`, null, { params: { yeni_siparis_no: yeniNo } });
