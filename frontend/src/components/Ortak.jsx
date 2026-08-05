@@ -620,3 +620,22 @@ export function YilBasligi({ yil, kayitSayisi, ozetMetni, acik, onTikla }) {
     </div>
   );
 }
+
+// Genel amacli, tek seviyeli katlanabilir grup basligi (Yil/Ay disindaki
+// gruplamalar icin - orn. "Siparis No" bazli gruplama). YilBasligi ile
+// ayni gorsel dile sahip.
+export function GrupBasligi({ baslik, altBaslik, acik, onTikla }) {
+  return (
+    <div
+      onClick={onTikla}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px',
+        cursor: 'pointer', background: 'var(--lacivert, #1e3a6e)', color: 'white', userSelect: 'none',
+      }}
+    >
+      <span style={{ fontSize: 11, width: 12 }}>{acik ? '▼' : '▶'}</span>
+      <span style={{ fontWeight: 700, fontSize: 13.5 }}>{baslik}</span>
+      {altBaslik && <span style={{ fontSize: 12, opacity: 0.85 }}>{altBaslik}</span>}
+    </div>
+  );
+}
