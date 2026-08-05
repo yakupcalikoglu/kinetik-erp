@@ -147,6 +147,17 @@ function IceAktarPaneli({ onKapat, onTamamlandi }) {
       <div style={{ fontSize: 12.5, color: 'var(--metin-ikincil)', marginBottom: 12 }}>
         Excel dosyanızda (herhangi bir sütun sırasıyla) şunlar bulunabilir: <strong>Marka</strong>, <strong>Model</strong> (en az biri zorunlu),
         Birim, Menşei Ülke, GTİP Kodu. Akınsoft Wolvox gibi başka bir sistemden Excel'e aktardığınız ürün listesini doğrudan yükleyebilirsiniz.
+        {' '}
+        <button
+          type="button"
+          onClick={() => excelIndir(
+            [{ 'Marka': 'Örnek Marka', 'Model': 'ABC-100', 'Birim': 'ADET', 'Menşei Ülke': 'Türkiye', 'GTİP Kodu': '8427.20' }],
+            'urun_tanimi_sablon', 'Ürün Tanımı Şablonu',
+          )}
+          style={{ background: 'none', border: 'none', color: 'var(--lacivert)', textDecoration: 'underline', cursor: 'pointer', fontSize: 12.5, padding: 0 }}
+        >
+          Örnek şablon indir
+        </button>
       </div>
 
       <input type="file" accept=".xlsx,.xls" onChange={dosyaSecildi} style={{ marginBottom: 16 }} />
