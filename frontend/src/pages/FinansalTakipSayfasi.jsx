@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { api, hataMesajiCikar, ozelOnayIste, ozelAlert } from '../api/client';
 import {
   Kart, SayfaBasligi, Buton, Etiket, Alan, girdiStili, BosDurum, HataMesaji, paraFormat, Sekmeler, eylemChipStili,
-  OtomatikTamamlamaGirdisi, ParaGirdisi,
+  OtomatikTamamlamaGirdisi, ParaGirdisi, useTarihGruplama, YilBasligi, AyBasligi,
 } from '../components/Ortak';
 import AramaliSecici from '../components/AramaliSecici';
 
@@ -695,6 +695,8 @@ function CekSekmesi() {
     if (filtreBitis && c.vade_tarihi > filtreBitis) return false;
     return true;
   });
+  const siraliCekler = siralama.sirala(gosterilecekCekler, (item, alan) => (alan === '_cari_unvan' ? (cariHaritasi[item.cari_id] || '') : item[alan]));
+  const cekTarihGrup = useTarihGruplama(siraliCekler, 'vade_tarihi');
 
   const bugun = new Date().toISOString().slice(0, 10);
   const vadesiGecenler = cekler.filter((c) => c.durum === 'PORTFOYDE' && c.vade_tarihi < bugun);
@@ -804,7 +806,31 @@ function CekSekmesi() {
               </tr>
             </thead>
             <tbody>
-              {siralama.sirala(gosterilecekCekler, (item, alan) => (alan === '_cari_unvan' ? (cariHaritasi[item.cari_id] || '') : item[alan])).map((c) => (
+              {cekTarihGrup.yillar.map((yil) => (
+                <Fragment key={yil}>
+                  <tr>
+                    <td colSpan={9} style={{ padding: 0 }}>
+                      <YilBasligi
+                        yil={yil}
+                        kayitSayisi={Object.values(cekTarihGrup.gruplar[yil]).flat().length}
+                        acik={cekTarihGrup.acikYillar.has(yil)}
+                        onTikla={() => cekTarihGrup.yilAcKapat(yil)}
+                      />
+                    </td>
+                  </tr>
+                  {cekTarihGrup.acikYillar.has(yil) && Object.keys(cekTarihGrup.gruplar[yil]).sort().reverse().map((ayAnahtari) => (
+                    <Fragment key={ayAnahtari}>
+                      <tr>
+                        <td colSpan={9} style={{ padding: 0 }}>
+                          <AyBasligi
+                            ayAnahtari={ayAnahtari}
+                            kayitSayisi={cekTarihGrup.gruplar[yil][ayAnahtari].length}
+                            acik={cekTarihGrup.acikAylar.has(ayAnahtari)}
+                            onTikla={() => cekTarihGrup.ayAcKapat(ayAnahtari)}
+                          />
+                        </td>
+                      </tr>
+                      {cekTarihGrup.acikAylar.has(ayAnahtari) && cekTarihGrup.gruplar[yil][ayAnahtari].map((c) => (
                 <Fragment key={c.id}>
                   <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
                     <td style={{ padding: '10px 16px' }}>{c.cek_no || '—'}</td>
@@ -875,6 +901,10 @@ function CekSekmesi() {
                       </td>
                     </tr>
                   )}
+                </Fragment>
+              ))}
+                    </Fragment>
+                  ))}
                 </Fragment>
               ))}
             </tbody>
