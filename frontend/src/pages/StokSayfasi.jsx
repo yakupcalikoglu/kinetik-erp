@@ -55,7 +55,7 @@ import { excelIndir } from '../utils/disaAktarma';
 const API_TABAN_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 import {
   Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat,
-  eylemChipStili, ParaGirdisi, DahaFazlaMenu,
+  eylemChipStili, ParaGirdisi, DahaFazlaMenu, GrupBasligi,
 } from '../components/Ortak';
 
 const DURUM_ETIKET = {
@@ -1092,6 +1092,17 @@ export default function StokSayfasi() {
       return a.siparis_id - b.siparis_id;
     });
 
+  // Siparis bazli ozet: bu siparisten (tum urunler.map(), filtreden BAGIMSIZ,
+  // gercek toplam) kac tanesi HALA satilmamis (elimizde) - grup basliginda
+  // "X üründen Y'si elimizde" seklinde gostermek icin.
+  const siparisOzetleri = {};
+  urunler.forEach((u) => {
+    if (u.siparis_id == null) return;
+    if (!siparisOzetleri[u.siparis_id]) siparisOzetleri[u.siparis_id] = { toplam: 0, elde_kalan: 0 };
+    siparisOzetleri[u.siparis_id].toplam += 1;
+    if (u.durum !== 'SATILDI') siparisOzetleri[u.siparis_id].elde_kalan += 1;
+  });
+
   const durumOzet = {};
   tumUrunler.forEach((u) => {
     durumOzet[u.durum] = (durumOzet[u.durum] || 0) + 1;
@@ -1355,7 +1366,7 @@ export default function StokSayfasi() {
                 const karZarar = u.satis_fiyati_try != null ? u.satis_fiyati_try - u.toplam_maliyet_try : null;
                 const satilabilir = u.durum === 'DEPODA' || u.durum === 'ANTREPODA';
                 const oncekiUrun = gruplananUrunler[index - 1];
-                const grupBasi = !siralama.alan && index > 0 && oncekiUrun && oncekiUrun.siparis_id !== u.siparis_id;
+                const grupBasi = !siralama.alan && (index === 0 || (oncekiUrun && oncekiUrun.siparis_id !== u.siparis_id));
                 if (durumDegistirilenId === u.id) {
                   return (
                     <DurumDegistirFormu
@@ -1387,8 +1398,21 @@ export default function StokSayfasi() {
                     />
                   );
                 }
+                const ozet = u.siparis_id != null ? siparisOzetleri[u.siparis_id] : null;
                 return (
                   <Fragment key={u.id}>
+                    {grupBasi && ozet && (
+                      <tr>
+                        <td colSpan={12} style={{ padding: 0 }}>
+                          <GrupBasligi
+                            baslik={`Sipariş: ${siparisNoGoster(u.siparis_id)}`}
+                            altBaslik={`${ozet.toplam} üründen ${ozet.elde_kalan} tanesi elimizde`}
+                            acik
+                            onTikla={() => {}}
+                          />
+                        </td>
+                      </tr>
+                    )}
                     <tr style={{
                       borderTop: grupBasi ? '3px solid var(--lacivert)' : '1px solid var(--kenarlik)',
                       background: seciliMi(u.id)
