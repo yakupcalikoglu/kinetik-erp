@@ -1,7 +1,7 @@
 import { useEffect, useState, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, hataMesajiCikar, ozelOnayIste } from '../api/client';
-import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat, eylemChipStili, Sekmeler, OtomatikTamamlamaGirdisi, Etiket, ParaGirdisi } from '../components/Ortak';
+import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat, eylemChipStili, Sekmeler, OtomatikTamamlamaGirdisi, Etiket, ParaGirdisi, useKademelıGoster, DahaFazlaGosterButonu } from '../components/Ortak';
 
 function tarihFormat(iso) {
   if (!iso || typeof iso !== 'string' || !iso.includes('-')) return iso || '—';
@@ -858,6 +858,13 @@ function HareketlerSekmesi() {
   const gosterilecekHareketler = hesapFiltre
     ? bankaHareketleri.filter((h) => String(h.banka_hesap_id) === hesapFiltre)
     : bankaHareketleri;
+  const siraliHareketler = siralama.sirala(gosterilecekHareketler, (item, alan) => {
+    if (alan === '_hesap') return hesapAdiGoster(item.banka_hesap_id);
+    if (alan === '_cari') return item.cari_id ? (cariHaritasi[item.cari_id] || '') : '';
+    if (alan === '_kategori') return kategoriGoster(item.kaynak_tablo);
+    return item[alan];
+  });
+  const kademe = useKademelıGoster(siraliHareketler, 50);
 
   return (
     <div>
@@ -914,12 +921,7 @@ function HareketlerSekmesi() {
               </tr>
             </thead>
             <tbody>
-              {siralama.sirala(gosterilecekHareketler, (item, alan) => {
-                if (alan === '_hesap') return hesapAdiGoster(item.banka_hesap_id);
-                if (alan === '_cari') return item.cari_id ? (cariHaritasi[item.cari_id] || '') : '';
-                if (alan === '_kategori') return kategoriGoster(item.kaynak_tablo);
-                return item[alan];
-              }).map((h) => {
+              {kademe.gosterilecekler.map((h) => {
                 const tiklanabilir = !!(h.kaynak_tablo && h.kaynak_id);
                 const otomatikGeldi = !!h.kaynak_tablo;
                 if (duzenlenenId === h.id) {
@@ -993,6 +995,7 @@ function HareketlerSekmesi() {
             </tbody>
           </table>
         )}
+        <DahaFazlaGosterButonu kademe={kademe} />
       </Kart>
     </div>
   );
