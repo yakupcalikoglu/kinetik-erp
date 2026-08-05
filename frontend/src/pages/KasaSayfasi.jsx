@@ -1,7 +1,7 @@
 import { useEffect, useState, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, hataMesajiCikar, ozelOnayIste } from '../api/client';
-import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat, eylemChipStili, OtomatikTamamlamaGirdisi, Etiket, ParaGirdisi, useKademelıGoster, DahaFazlaGosterButonu } from '../components/Ortak';
+import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat, eylemChipStili, OtomatikTamamlamaGirdisi, Etiket, ParaGirdisi, useTarihGruplama, YilBasligi, AyBasligi } from '../components/Ortak';
 
 function tarihFormat(iso) {
   if (!iso || typeof iso !== 'string' || !iso.includes('-')) return iso || '—';
@@ -583,8 +583,6 @@ export default function KasaSayfasi() {
   const [kasaHareketleri, setKasaHareketleri] = useState([]);
   const [yonFiltre, setYonFiltre] = useState('');
   const [paraBirimiFiltre, setParaBirimiFiltre] = useState('');
-  const [tumGecmisGosteriliyor, setTumGecmisGosteriliyor] = useState(false);
-  const otuzGunOncesi = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const [hata, setHata] = useState(null);
   const [yukleniyor, setYukleniyor] = useState(true);
   const [formAcik, setFormAcik] = useState(false);
@@ -625,12 +623,11 @@ export default function KasaSayfasi() {
   let gosterilecekHareketler = kasaHareketleri;
   if (yonFiltre) gosterilecekHareketler = gosterilecekHareketler.filter((h) => h.yon === yonFiltre);
   if (paraBirimiFiltre) gosterilecekHareketler = gosterilecekHareketler.filter((h) => h.para_birimi === paraBirimiFiltre);
-  if (!tumGecmisGosteriliyor) gosterilecekHareketler = gosterilecekHareketler.filter((h) => h.tarih >= otuzGunOncesi);
   const siraliKasaHareketleri = siralama.sirala(gosterilecekHareketler, (item, alan) => {
     if (alan === '_cari') return item.cari_id ? (cariHaritasi[item.cari_id] || '') : '';
     return item[alan];
   });
-  const kademe = useKademelıGoster(siraliKasaHareketleri, 50);
+  const tarihGrup = useTarihGruplama(siraliKasaHareketleri, 'tarih');
 
   return (
     <div>
@@ -673,19 +670,8 @@ export default function KasaSayfasi() {
             </select>
           </Alan>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <Buton variant="ikincil" onClick={() => setTumGecmisGosteriliyor((a) => !a)}>
-            {tumGecmisGosteriliyor ? 'Son 30 Güne Dön' : 'Tüm Geçmişi Göster'}
-          </Buton>
-          <Buton onClick={() => setFormAcik((a) => !a)}>{formAcik ? 'Kapat' : '+ Yeni kasa hareketi'}</Buton>
-        </div>
+        <Buton onClick={() => setFormAcik((a) => !a)}>{formAcik ? 'Kapat' : '+ Yeni kasa hareketi'}</Buton>
       </div>
-
-      {!tumGecmisGosteriliyor && (
-        <div style={{ fontSize: 12, color: 'var(--metin-ikincil)', marginBottom: 12 }}>
-          Son 30 gün gösteriliyor — daha eski hareketler için "Tüm Geçmişi Göster"e tıklayın.
-        </div>
-      )}
 
       {formAcik && (
         <YeniKasaHareketiFormu onKaydedildi={() => { setFormAcik(false); yukle(); }} onVazgec={() => setFormAcik(false)} />
@@ -710,7 +696,31 @@ export default function KasaSayfasi() {
               </tr>
             </thead>
             <tbody>
-              {kademe.gosterilecekler.map((h) => {
+              {tarihGrup.yillar.map((yil) => (
+                <Fragment key={yil}>
+                  <tr>
+                    <td colSpan={7} style={{ padding: 0 }}>
+                      <YilBasligi
+                        yil={yil}
+                        kayitSayisi={Object.values(tarihGrup.gruplar[yil]).flat().length}
+                        acik={tarihGrup.acikYillar.has(yil)}
+                        onTikla={() => tarihGrup.yilAcKapat(yil)}
+                      />
+                    </td>
+                  </tr>
+                  {tarihGrup.acikYillar.has(yil) && Object.keys(tarihGrup.gruplar[yil]).sort().reverse().map((ayAnahtari) => (
+                    <Fragment key={ayAnahtari}>
+                      <tr>
+                        <td colSpan={7} style={{ padding: 0 }}>
+                          <AyBasligi
+                            ayAnahtari={ayAnahtari}
+                            kayitSayisi={tarihGrup.gruplar[yil][ayAnahtari].length}
+                            acik={tarihGrup.acikAylar.has(ayAnahtari)}
+                            onTikla={() => tarihGrup.ayAcKapat(ayAnahtari)}
+                          />
+                        </td>
+                      </tr>
+                      {tarihGrup.acikAylar.has(ayAnahtari) && tarihGrup.gruplar[yil][ayAnahtari].map((h) => {
                 const tiklanabilir = !!(h.kaynak_tablo && h.kaynak_id);
                 const otomatikGeldi = !!h.kaynak_tablo;
                 if (duzenlenenId === h.id) {
@@ -778,10 +788,13 @@ export default function KasaSayfasi() {
                   </Fragment>
                 );
               })}
+                    </Fragment>
+                  ))}
+                </Fragment>
+              ))}
             </tbody>
           </table>
         )}
-        <DahaFazlaGosterButonu kademe={kademe} />
       </Kart>
     </div>
   );
