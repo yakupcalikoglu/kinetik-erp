@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { MoreHorizontal } from 'lucide-react';
 
 export function Kart({ children, style }) {
   return (
@@ -317,8 +318,9 @@ export function DahaFazlaGosterButonu({ kademe }) {
 // "..." (uc nokta) acilir menusu - az kullanilan islemleri (Yazdir, Excel
 // Indir/Ice Aktar vb.) tek bir kompakt buton altinda toplamak icin.
 // ogeler: [{ etiket, onClick }]
-export function DahaFazlaMenu({ ogeler, etiket = '⋯', kompakt = false }) {
+export function DahaFazlaMenu({ ogeler, kompakt = false }) {
   const [acik, setAcik] = useState(false);
+  const [hoverIndex, setHoverIndex] = useState(null);
   const kutuRef = useRef(null);
 
   useEffect(() => {
@@ -333,31 +335,38 @@ export function DahaFazlaMenu({ ogeler, etiket = '⋯', kompakt = false }) {
     <div ref={kutuRef} style={{ position: 'relative' }}>
       <button
         onClick={() => setAcik((a) => !a)}
-        style={kompakt ? {
-          padding: '5px 10px', borderRadius: 6, border: '1px solid var(--kenarlik-koyu)',
-          background: 'white', cursor: 'pointer', fontSize: 13, lineHeight: 1, color: 'var(--metin-birincil)',
-        } : {
-          padding: '10px 14px', borderRadius: 8, border: '1px solid var(--kenarlik-koyu)',
-          background: 'white', cursor: 'pointer', fontSize: 15, lineHeight: 1,
+        style={{
+          padding: kompakt ? 6 : 9,
+          borderRadius: 8,
+          border: acik ? '1.5px solid var(--lacivert)' : '1px solid var(--kenarlik-koyu)',
+          background: acik ? 'var(--lacivert)' : 'white',
+          color: acik ? 'white' : 'var(--metin-ikincil)',
+          cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          transition: 'all 0.15s',
         }}
         title="Diğer işlemler"
       >
-        {etiket}
+        <MoreHorizontal size={kompakt ? 15 : 17} />
       </button>
       {acik && (
         <div style={{
-          position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'white',
-          border: '1px solid var(--kenarlik)', borderRadius: 8, boxShadow: '0 4px 14px rgba(0,0,0,0.14)',
-          zIndex: 50, minWidth: 200, overflow: 'hidden',
+          position: 'absolute', top: '100%', right: 0, marginTop: 6, background: 'white',
+          border: '1px solid var(--kenarlik)', borderRadius: 10, boxShadow: '0 8px 28px rgba(30,58,110,0.16)',
+          zIndex: 50, minWidth: 210, overflow: 'hidden', padding: 4,
         }}>
           {ogeler.map((oge, i) => (
             <button
               key={i}
               onClick={() => { oge.onClick(); setAcik(false); }}
+              onMouseEnter={() => setHoverIndex(i)}
+              onMouseLeave={() => setHoverIndex(null)}
               style={{
-                display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px',
-                border: 'none', borderTop: i > 0 ? '1px solid var(--kenarlik)' : 'none',
-                background: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--metin-birincil)',
+                display: 'block', width: '100%', textAlign: 'left', padding: '9px 12px',
+                border: 'none', borderRadius: 6, marginBottom: 1,
+                background: hoverIndex === i ? 'var(--zemin, #eef1f7)' : 'none',
+                color: hoverIndex === i ? 'var(--lacivert)' : 'var(--metin-birincil)',
+                cursor: 'pointer', fontSize: 13, fontWeight: hoverIndex === i ? 500 : 400,
+                transition: 'background 0.1s',
               }}
             >
               {oge.etiket}
