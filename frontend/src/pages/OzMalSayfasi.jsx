@@ -1,6 +1,6 @@
 import { useEffect, useState, Fragment } from 'react';
 import { useLocation } from 'react-router-dom';
-import { api, hataMesajiCikar, ozelOnayIste } from '../api/client';
+import { api, hataMesajiCikar, ozelOnayIste, ozelAlert } from '../api/client';
 import {
   Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat, eylemChipStili, ParaGirdisi,
   DahaFazlaMenu,
@@ -508,9 +508,9 @@ export default function OzMalSayfasi() {
     setDuzenlenen(null);
     setFormAcik(true);
   }
-  function duzenle(kayit) {
+  async function duzenle(kayit) {
     if (kayit.kaynak === 'EKIPMAN') {
-      window.alert("Bu bir ekipman kaydı (Stok modülünden geliyor) — düzenlemek için Stok sayfasını kullanın.");
+      await ozelAlert("Bu bir ekipman kaydı (Stok modülünden geliyor) — düzenlemek için Stok sayfasını kullanın.");
       return;
     }
     setDuzenlenen(kayit.ham);
@@ -528,7 +528,7 @@ export default function OzMalSayfasi() {
 
   async function sil(kayit) {
     if (kayit.kaynak === 'EKIPMAN') {
-      window.alert("Bu bir ekipman kaydı (Stok modülünden geliyor) — silmek için Stok sayfasını kullanın.");
+      await ozelAlert("Bu bir ekipman kaydı (Stok modülünden geliyor) — silmek için Stok sayfasını kullanın.");
       return;
     }
     if (!(await ozelOnayIste(`${kayit.ad} demirbaşını silmek istediğinize emin misiniz?`))) return;
