@@ -59,6 +59,23 @@ function TedarikciOzetiPaneli({ tedarikciCariId }) {
   );
 }
 
+function SonAlimFiyatiGosterge({ stokKartiId }) {
+  const [veri, setVeri] = useState(null);
+
+  useEffect(() => {
+    if (!stokKartiId) { setVeri(null); return; }
+    api.get(`/stok-kartlari/${stokKartiId}/son-alim-fiyati`).then((r) => setVeri(r.data)).catch(() => setVeri(null));
+  }, [stokKartiId]);
+
+  if (!stokKartiId || !veri || !veri.bulundu) return null;
+
+  return (
+    <div style={{ fontSize: 11, color: 'var(--metin-ikincil)', marginTop: 3 }}>
+      Son alım: <strong>{paraFormat(veri.toplam_maliyet_try)}</strong> — {veri.tarih}
+    </div>
+  );
+}
+
 function bosUrunSatiri() {
   return { stok_karti_id: '', miktar: 1, birim_fiyat: '', para_birimi: 'USD', birim_agirlik_kg: '', kdv_orani: '20', aciklama: '' };
 }
@@ -301,6 +318,7 @@ export default function SiparisOlusturSayfasi() {
                         etiketFn={stokKartiEtiketi}
                         bosMetin="Ürün adı yazarak arayın..."
                       />
+                      <SonAlimFiyatiGosterge stokKartiId={u.stok_karti_id} />
                     </div>
                   </td>
                   <td style={{ padding: 8 }}>
