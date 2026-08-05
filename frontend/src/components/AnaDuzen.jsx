@@ -134,6 +134,7 @@ function GenelArama() {
   const [sorgu, setSorgu] = useState('');
   const [sonuclar, setSonuclar] = useState(null);
   const [acik, setAcik] = useState(false);
+  const [secilenIndex, setSecilenIndex] = useState(-1);
   const navigate = useNavigate();
   const kutuRef = useRef(null);
 
@@ -148,7 +149,7 @@ function GenelArama() {
     }
     const zamanlayici = setTimeout(() => {
       api.get('/arama', { params: { q: sorgu } })
-        .then((r) => { setSonuclar(r.data); setAramaHata(null); })
+        .then((r) => { setSonuclar(r.data); setAramaHata(null); setSecilenIndex(-1); })
         .catch((e) => { setSonuclar([]); setAramaHata(hataMesajiCikar(e)); });
     }, 300);
     return () => clearTimeout(zamanlayici);
@@ -175,11 +176,22 @@ function GenelArama() {
       } else if (e.key === 'Escape' && acik) {
         setAcik(false);
         girdiRef.current?.blur();
+      } else if (acik && sonuclar && sonuclar.length > 0 && document.activeElement === girdiRef.current) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          setSecilenIndex((i) => (i + 1) % sonuclar.length);
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          setSecilenIndex((i) => (i - 1 + sonuclar.length) % sonuclar.length);
+        } else if (e.key === 'Enter' && secilenIndex >= 0) {
+          e.preventDefault();
+          sonucaGit(sonuclar[secilenIndex]);
+        }
       }
     }
     document.addEventListener('keydown', tusaBasildi);
     return () => document.removeEventListener('keydown', tusaBasildi);
-  }, [acik]);
+  }, [acik, sonuclar, secilenIndex]); // eslint-disable-line
 
   // Bu turler icin, hedef sayfa "ara" query param'ini okuyup listeyi otomatik
   // filtreler - boylece genel aramadan bir sonuca tiklayinca tum listeyle
@@ -225,16 +237,16 @@ function GenelArama() {
           ) : sonuclar.length === 0 ? (
             <div style={{ padding: 12, fontSize: 12.5, color: 'var(--metin-soluk)' }}>Sonuç bulunamadı.</div>
           ) : (
-            sonuclar.map((s) => (
+            sonuclar.map((s, i) => (
               <div
                 key={`${s.tur}-${s.id}`}
                 onClick={() => sonucaGit(s)}
                 style={{
                   padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid var(--kenarlik)',
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8,
+                  background: secilenIndex === i ? 'var(--zemin)' : 'white',
                 }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--zemin)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'white'; }}
+                onMouseEnter={() => setSecilenIndex(i)}
               >
                 <div style={{ overflow: 'hidden' }}>
                   <div style={{ fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{s.baslik}</div>
