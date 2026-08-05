@@ -527,3 +527,96 @@ export function BarGrafik({ veri, alan = 'deger', renk = 'var(--lacivert, #1e3a6
     </svg>
   );
 }
+
+// Uzun tarihli listeleri (Banka/Kasa hareketleri, Cek, Bakim vb.) Yil -> Ay
+// seviyesinde katlanabilir gruplara ayirmak icin. tarihAlani formatinin
+// "YYYY-MM-DD" (string, sozlesilebilir siralanan) oldugu varsayilir.
+export const AY_ADLARI = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+
+export function useTarihGruplama(liste, tarihAlani = 'tarih') {
+  const [acikYillar, setAcikYillar] = useState(new Set());
+  const [acikAylar, setAcikAylar] = useState(new Set());
+
+  const gruplar = {}; // { "2026": { "2026-08": [...], "2026-07": [...] } }
+  liste.forEach((item) => {
+    const tarih = item[tarihAlani];
+    if (!tarih) return;
+    const yil = String(tarih).slice(0, 4);
+    const ayAnahtari = String(tarih).slice(0, 7);
+    if (!gruplar[yil]) gruplar[yil] = {};
+    if (!gruplar[yil][ayAnahtari]) gruplar[yil][ayAnahtari] = [];
+    gruplar[yil][ayAnahtari].push(item);
+  });
+
+  const yillar = Object.keys(gruplar).sort().reverse();
+
+  // Ilk yuklemede, EN SON yilin EN SON ayini otomatik acik goster - kullanici
+  // sifirdan tiklamak zorunda kalmasin, en guncel donem hazir gelsin.
+  useEffect(() => {
+    if (yillar.length > 0 && acikYillar.size === 0 && acikAylar.size === 0) {
+      const enSonYil = yillar[0];
+      const enSonAy = Object.keys(gruplar[enSonYil]).sort().reverse()[0];
+      setAcikYillar(new Set([enSonYil]));
+      setAcikAylar(new Set([enSonAy]));
+    }
+  }, [liste.length]); // eslint-disable-line
+
+  function yilAcKapat(yil) {
+    setAcikYillar((s) => {
+      const yeni = new Set(s);
+      if (yeni.has(yil)) yeni.delete(yil); else yeni.add(yil);
+      return yeni;
+    });
+  }
+
+  function ayAcKapat(ayAnahtari) {
+    setAcikAylar((s) => {
+      const yeni = new Set(s);
+      if (yeni.has(ayAnahtari)) yeni.delete(ayAnahtari); else yeni.add(ayAnahtari);
+      return yeni;
+    });
+  }
+
+  return { gruplar, yillar, acikYillar, acikAylar, yilAcKapat, ayAcKapat };
+}
+
+// Ay basligi - tiklanabilir, acik/kapali oku + kayit sayisi + opsiyonel ozet
+// metni (orn. "12 hareket — Toplam: 45.000 ₺") gosterir.
+export function AyBasligi({ ayAnahtari, kayitSayisi, ozetMetni, acik, onTikla }) {
+  const [, ayNo] = ayAnahtari.split('-');
+  return (
+    <div
+      onClick={onTikla}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px',
+        cursor: 'pointer', background: acik ? 'var(--zemin, #f4f5f7)' : 'white',
+        borderTop: '1px solid var(--kenarlik)', userSelect: 'none',
+      }}
+    >
+      <span style={{ fontSize: 11, color: 'var(--metin-ikincil)', width: 12 }}>{acik ? '▼' : '▶'}</span>
+      <span style={{ fontWeight: 600, fontSize: 13.5, minWidth: 90 }}>{AY_ADLARI[Number(ayNo) - 1]}</span>
+      <span style={{ fontSize: 12.5, color: 'var(--metin-ikincil)' }}>
+        {kayitSayisi} kayıt{ozetMetni ? ` — ${ozetMetni}` : ''}
+      </span>
+    </div>
+  );
+}
+
+// Yil basligi - ayni mantik, biraz daha vurgulu (kalin, biraz daha buyuk).
+export function YilBasligi({ yil, kayitSayisi, ozetMetni, acik, onTikla }) {
+  return (
+    <div
+      onClick={onTikla}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px',
+        cursor: 'pointer', background: 'var(--lacivert, #1e3a6e)', color: 'white', userSelect: 'none',
+      }}
+    >
+      <span style={{ fontSize: 11, width: 12 }}>{acik ? '▼' : '▶'}</span>
+      <span style={{ fontWeight: 700, fontSize: 14.5, minWidth: 60 }}>{yil}</span>
+      <span style={{ fontSize: 12.5, opacity: 0.85 }}>
+        {kayitSayisi} kayıt{ozetMetni ? ` — ${ozetMetni}` : ''}
+      </span>
+    </div>
+  );
+}
