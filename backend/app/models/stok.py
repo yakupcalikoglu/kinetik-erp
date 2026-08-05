@@ -141,6 +141,11 @@ class StokMaliyetKalemi(Base):
     # TL kalemler icin, odeme tarihindeki GERCEK USD/TRY kuru (referans
     # bilgi - sadece bu kalemin USD karsiligini dogru hesaplamak icin).
     referans_usd_kuru = Column(Numeric(18, 6))
+    # Bu kalem bir Tedarikci Faturasi odemesinden OTOMATIK olusturulduysa,
+    # hangi odemeden geldigini KESIN olarak izlemek icin (belge_no/tarih
+    # esleştirmesi yerine dogrudan FK - "odemeyi geri al" islemini
+    # guvenilir kilar).
+    tedarikci_fatura_odeme_id = Column(BigInteger, ForeignKey("tedarikci_fatura_odemeleri.id"))
 
 
 # Maliyet tipi -> stok_seri_no uzerindeki ozet sutun adi eslemesi.
