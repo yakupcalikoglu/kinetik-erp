@@ -198,6 +198,17 @@ function IceAktarPaneli({ onKapat, onTamamlandi }) {
         Excel dosyanızda (herhangi bir sütun sırasıyla) şunlar bulunmalı: <strong>Unvan</strong> (zorunlu),
         Tip (Müşteri/Tedarikçi/Personel/Ortak — boşsa "Diğer" yapılır), Vergi No, Vergi Dairesi, Telefon, Adres, E-posta.
         Akınsoft Wolvox gibi başka bir sistemden Excel'e aktardığınız cari listesini doğrudan yükleyebilirsiniz.
+        {' '}
+        <button
+          type="button"
+          onClick={() => excelIndir(
+            [{ 'Unvan': 'Örnek A.Ş.', 'Tip': 'Müşteri', 'Vergi No': '1234567890', 'Vergi Dairesi': 'Kadıköy', 'Telefon': '05551234567', 'Adres': 'Örnek Mah. No:1 İstanbul', 'E-posta': 'ornek@firma.com' }],
+            'cari_sablon', 'Cari Şablonu',
+          )}
+          style={{ background: 'none', border: 'none', color: 'var(--lacivert)', textDecoration: 'underline', cursor: 'pointer', fontSize: 12.5, padding: 0 }}
+        >
+          Örnek şablon indir
+        </button>
       </div>
 
       <input type="file" accept=".xlsx,.xls" onChange={dosyaSecildi} style={{ marginBottom: 16 }} />
