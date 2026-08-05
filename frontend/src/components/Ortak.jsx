@@ -407,3 +407,123 @@ export function DahaFazlaMenu({ ogeler, kompakt = false }) {
     </div>
   );
 }
+
+// Bagimlilik gerektirmeyen (npm install gerekmeyen), saf SVG tabanli cizgi
+// grafik. veri: [{ etiket: 'Oca', alan1: 100, alan2: 50 }, ...]
+// cizgiler: [{ alan: 'alan1', renk: '#1e3a6e', ad: 'Gelir' }, ...]
+export function CizgiGrafik({ veri, cizgiler, yukseklik = 200 }) {
+  const genislik = 640;
+  const kb = { sol: 55, sag: 16, ust: 16, alt: 26 };
+  const gg = genislik - kb.sol - kb.sag;
+  const gy = yukseklik - kb.ust - kb.alt;
+
+  if (!veri || veri.length === 0) {
+    return <div style={{ color: 'var(--metin-soluk)', fontSize: 13, padding: '20px 0' }}>Gösterilecek veri yok.</div>;
+  }
+
+  const tumDegerler = veri.flatMap((v) => cizgiler.map((c) => Number(v[c.alan]) || 0));
+  const maxDeger = Math.max(...tumDegerler, 0);
+  const minDeger = Math.min(...tumDegerler, 0);
+  const araligi = (maxDeger - minDeger) || 1;
+
+  function xKonum(i) {
+    return kb.sol + (veri.length > 1 ? (i / (veri.length - 1)) * gg : gg / 2);
+  }
+  function yKonum(deger) {
+    return kb.ust + gy - ((deger - minDeger) / araligi) * gy;
+  }
+
+  const etiketAraligi = Math.max(1, Math.ceil(veri.length / 8));
+
+  return (
+    <div>
+      <svg viewBox={`0 0 ${genislik} ${yukseklik}`} style={{ width: '100%', height: yukseklik, display: 'block' }}>
+        {[0, 0.25, 0.5, 0.75, 1].map((oran) => (
+          <line
+            key={oran} x1={kb.sol} x2={genislik - kb.sag}
+            y1={kb.ust + oran * gy} y2={kb.ust + oran * gy}
+            stroke="var(--kenarlik)" strokeWidth="1"
+          />
+        ))}
+        {minDeger < 0 && maxDeger > 0 && (
+          <line x1={kb.sol} y1={yKonum(0)} x2={genislik - kb.sag} y2={yKonum(0)} stroke="var(--kenarlik-koyu)" strokeWidth="1" strokeDasharray="3,3" />
+        )}
+        {cizgiler.map((c) => {
+          const noktalar = veri.map((v, i) => `${xKonum(i)},${yKonum(Number(v[c.alan]) || 0)}`).join(' ');
+          return (
+            <g key={c.alan}>
+              <polyline points={noktalar} fill="none" stroke={c.renk} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+              {veri.map((v, i) => (
+                <circle key={i} cx={xKonum(i)} cy={yKonum(Number(v[c.alan]) || 0)} r="3" fill={c.renk} />
+              ))}
+            </g>
+          );
+        })}
+        {veri.map((v, i) => (
+          i % etiketAraligi === 0 && (
+            <text key={i} x={xKonum(i)} y={yukseklik - 6} fontSize="10" fill="var(--metin-ikincil)" textAnchor="middle">
+              {v.etiket}
+            </text>
+          )
+        ))}
+      </svg>
+      <div style={{ display: 'flex', gap: 16, marginTop: 8, flexWrap: 'wrap' }}>
+        {cizgiler.map((c) => (
+          <div key={c.alan} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--metin-ikincil)' }}>
+            <span style={{ width: 10, height: 10, borderRadius: '50%', background: c.renk, display: 'inline-block' }} />
+            {c.ad}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Bagimlilik gerektirmeyen, saf SVG tabanli bar grafik.
+// veri: [{ etiket: '30 Gün', deger: 100 }, ...]
+export function BarGrafik({ veri, alan = 'deger', renk = 'var(--lacivert, #1e3a6e)', yukseklik = 200 }) {
+  const genislik = 640;
+  const kb = { sol: 55, sag: 16, ust: 16, alt: 26 };
+  const gg = genislik - kb.sol - kb.sag;
+  const gy = yukseklik - kb.ust - kb.alt;
+
+  if (!veri || veri.length === 0) {
+    return <div style={{ color: 'var(--metin-soluk)', fontSize: 13, padding: '20px 0' }}>Gösterilecek veri yok.</div>;
+  }
+
+  const degerler = veri.map((v) => Number(v[alan]) || 0);
+  const maxDeger = Math.max(...degerler, 0);
+  const minDeger = Math.min(...degerler, 0);
+  const araligi = (maxDeger - minDeger) || 1;
+  const sifirY = kb.ust + gy - ((0 - minDeger) / araligi) * gy;
+
+  const adimGenislik = gg / veri.length;
+  const barGenislik = adimGenislik * 0.55;
+
+  return (
+    <svg viewBox={`0 0 ${genislik} ${yukseklik}`} style={{ width: '100%', height: yukseklik, display: 'block' }}>
+      {[0, 0.25, 0.5, 0.75, 1].map((oran) => (
+        <line
+          key={oran} x1={kb.sol} x2={genislik - kb.sag}
+          y1={kb.ust + oran * gy} y2={kb.ust + oran * gy}
+          stroke="var(--kenarlik)" strokeWidth="1"
+        />
+      ))}
+      {veri.map((v, i) => {
+        const deger = Number(v[alan]) || 0;
+        const barYukseklik = Math.abs((deger - 0) / araligi) * gy;
+        const x = kb.sol + i * adimGenislik + (adimGenislik - barGenislik) / 2;
+        const y = deger >= 0 ? sifirY - barYukseklik : sifirY;
+        const dolgu = deger >= 0 ? renk : 'var(--kirmizi, #c0392b)';
+        return (
+          <g key={i}>
+            <rect x={x} y={y} width={barGenislik} height={Math.max(barYukseklik, 1)} fill={dolgu} rx="3" />
+            <text x={x + barGenislik / 2} y={yukseklik - 6} fontSize="10" fill="var(--metin-ikincil)" textAnchor="middle">
+              {v.etiket}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
