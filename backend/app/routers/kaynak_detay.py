@@ -38,174 +38,215 @@ def kaynak_detayi_getir(
         c = db.get(CariHesap, cari_id)
         return c.unvan if c else f"#{cari_id}"
 
-    if kaynak_tablo == "AKREDITIF_KALEMI":
-        from app.models.akreditif import AkreditifKalemi, Akreditif
-        kalem = db.get(AkreditifKalemi, kaynak_id)
-        if kalem is not None:
-            akreditif = db.get(Akreditif, kalem.akreditif_id)
-            baslik = f"Akreditif Kalemi — {kalem.tip.value}"
-            detaylar = [
-                ("Akreditif No", (akreditif.akreditif_no or f"#{akreditif.id}") if akreditif else "—"),
-                ("Kalem Açıklaması", kalem.aciklama or "—"),
-                ("Tutar", f"{kalem.tutar} {akreditif.para_birimi.value if akreditif else ''}"),
-                ("Vade Tarihi", str(kalem.vade_tarihi)),
-                ("Konum", "Finansal Takip → Akreditif"),
-            ]
+    try:
+        if kaynak_tablo == "AKREDITIF_KALEMI":
+            from app.models.akreditif import AkreditifKalemi, Akreditif
+            kalem = db.get(AkreditifKalemi, kaynak_id)
+            if kalem is not None:
+                akreditif = db.get(Akreditif, kalem.akreditif_id)
+                baslik = f"Akreditif Kalemi — {kalem.tip.value}"
+                detaylar = [
+                    ("Akreditif No", (akreditif.akreditif_no or f"#{akreditif.id}") if akreditif else "—"),
+                    ("Kalem Açıklaması", kalem.aciklama or "—"),
+                    ("Tutar", f"{kalem.tutar} {akreditif.para_birimi.value if akreditif else ''}"),
+                    ("Vade Tarihi", str(kalem.vade_tarihi)),
+                    ("Konum", "Finansal Takip → Akreditif"),
+                ]
 
-    elif kaynak_tablo == "CEKLER":
-        from app.models.finansal import Cek
-        cek = db.get(Cek, kaynak_id)
-        if cek is not None:
-            baslik = f"Çek — {'Alınan' if cek.tip.value == 'ALINAN' else 'Verilen'}"
-            detaylar = [
-                ("Çek No", cek.cek_no or "—"),
-                ("Banka", cek.banka_adi or "—"),
-                ("Cari", cari_unvan(cek.cari_id)),
-                ("Tutar", f"{cek.tutar} {cek.para_birimi.value}"),
-                ("Durum", cek.durum.value),
-                ("Konum", "Finansal Takip → Çek"),
-            ]
+        elif kaynak_tablo == "CEKLER":
+            from app.models.finansal import Cek
+            cek = db.get(Cek, kaynak_id)
+            if cek is not None:
+                baslik = f"Çek — {'Alınan' if cek.tip.value == 'ALINAN' else 'Verilen'}"
+                detaylar = [
+                    ("Çek No", cek.cek_no or "—"),
+                    ("Banka", cek.banka_adi or "—"),
+                    ("Cari", cari_unvan(cek.cari_id)),
+                    ("Tutar", f"{cek.tutar} {cek.para_birimi.value}"),
+                    ("Durum", cek.durum.value),
+                    ("Konum", "Finansal Takip → Çek"),
+                ]
 
-    elif kaynak_tablo == "LEASING_ODEME":
-        from app.models.finansal import LeasingOdeme, LeasingSozlesme
-        odeme = db.get(LeasingOdeme, kaynak_id)
-        if odeme is not None:
-            sozlesme = db.get(LeasingSozlesme, odeme.leasing_id)
-            baslik = f"Leasing Ödemesi — Taksit {odeme.taksit_no}"
-            detaylar = [
-                ("Sözleşme No", (sozlesme.sozlesme_no or f"#{sozlesme.id}") if sozlesme else "—"),
-                ("Leasing Firması", cari_unvan(sozlesme.leasing_firmasi_cari_id) if sozlesme else "—"),
-                ("Tutar", f"{odeme.tutar} {sozlesme.para_birimi.value if sozlesme else ''}"),
-                ("Vade Tarihi", str(odeme.vade_tarihi)),
-                ("Konum", "Finansal Takip → Leasing"),
-            ]
+        elif kaynak_tablo == "LEASING_ODEME":
+            from app.models.finansal import LeasingOdeme, LeasingSozlesme
+            odeme = db.get(LeasingOdeme, kaynak_id)
+            if odeme is not None:
+                sozlesme = db.get(LeasingSozlesme, odeme.leasing_id)
+                baslik = f"Leasing Ödemesi — Taksit {odeme.taksit_no}"
+                detaylar = [
+                    ("Sözleşme No", (sozlesme.sozlesme_no or f"#{sozlesme.id}") if sozlesme else "—"),
+                    ("Leasing Firması", cari_unvan(sozlesme.leasing_firmasi_cari_id) if sozlesme else "—"),
+                    ("Tutar", f"{odeme.tutar} {sozlesme.para_birimi.value if sozlesme else ''}"),
+                    ("Vade Tarihi", str(odeme.vade_tarihi)),
+                    ("Konum", "Finansal Takip → Leasing"),
+                ]
 
-    elif kaynak_tablo == "TAKSIT_DETAY":
-        from app.models.finansal import TaksitDetay, TaksitliSatisPlani
-        taksit = db.get(TaksitDetay, kaynak_id)
-        if taksit is not None:
-            plan = db.get(TaksitliSatisPlani, taksit.plan_id)
-            baslik = f"Taksitli Satış — Taksit {taksit.taksit_no}"
-            detaylar = [
-                ("Müşteri", cari_unvan(plan.musteri_cari_id) if plan else "—"),
-                ("Tutar", f"{taksit.tutar} {plan.para_birimi.value if plan else ''}"),
-                ("Vade Tarihi", str(taksit.vade_tarihi)),
-                ("Konum", "Finansal Takip → Taksitli Satış"),
-            ]
+        elif kaynak_tablo == "TAKSIT_DETAY":
+            from app.models.finansal import TaksitDetay, TaksitliSatisPlani
+            taksit = db.get(TaksitDetay, kaynak_id)
+            if taksit is not None:
+                plan = db.get(TaksitliSatisPlani, taksit.plan_id)
+                baslik = f"Taksitli Satış — Taksit {taksit.taksit_no}"
+                detaylar = [
+                    ("Müşteri", cari_unvan(plan.musteri_cari_id) if plan else "—"),
+                    ("Tutar", f"{taksit.tutar} {plan.para_birimi.value if plan else ''}"),
+                    ("Vade Tarihi", str(taksit.vade_tarihi)),
+                    ("Konum", "Finansal Takip → Taksitli Satış"),
+                ]
 
-    elif kaynak_tablo == "KIRALAMA_ODEME":
-        from app.models.finansal import KiralamaOdeme, KiralamaSozlesme
-        odeme = db.get(KiralamaOdeme, kaynak_id)
-        if odeme is not None:
-            sozlesme = db.get(KiralamaSozlesme, odeme.sozlesme_id)
-            baslik = "Kiralama Ödemesi"
-            detaylar = [
-                ("Dönem", f"{odeme.donem_basi} → {odeme.donem_sonu}"),
-                ("Kiracı", cari_unvan(sozlesme.kiraci_cari_id) if sozlesme else "—"),
-                ("Tutar", f"{odeme.tutar} {sozlesme.para_birimi.value if sozlesme else ''}"),
-                ("Konum", "Finansal Takip → Kiralama"),
-            ]
+        elif kaynak_tablo == "KIRALAMA_ODEME":
+            from app.models.finansal import KiralamaOdeme, KiralamaSozlesme
+            odeme = db.get(KiralamaOdeme, kaynak_id)
+            if odeme is not None:
+                sozlesme = db.get(KiralamaSozlesme, odeme.sozlesme_id)
+                baslik = "Kiralama Ödemesi"
+                detaylar = [
+                    ("Dönem", f"{odeme.donem_basi} → {odeme.donem_sonu}"),
+                    ("Kiracı", cari_unvan(sozlesme.kiraci_cari_id) if sozlesme else "—"),
+                    ("Tutar", f"{odeme.tutar} {sozlesme.para_birimi.value if sozlesme else ''}"),
+                    ("Konum", "Finansal Takip → Kiralama"),
+                ]
 
-    elif kaynak_tablo == "PERSONEL_ODEME":
-        from app.models.diger import PersonelOdeme, Personel
-        odeme = db.get(PersonelOdeme, kaynak_id)
-        if odeme is not None:
-            personel = db.get(Personel, odeme.personel_id)
-            baslik = f"Personel Ödemesi — {odeme.tip.value}"
-            detaylar = [
-                ("Personel", personel.ad_soyad if personel else "—"),
-                ("Tutar", str(odeme.tutar)),
-                ("Dönem", str(odeme.donem)),
-                ("Konum", "Finansal Takip → Personel"),
-            ]
+        elif kaynak_tablo == "PERSONEL_ODEME":
+            from app.models.diger import PersonelOdeme, Personel
+            odeme = db.get(PersonelOdeme, kaynak_id)
+            if odeme is not None:
+                personel = db.get(Personel, odeme.personel_id)
+                baslik = f"Personel Ödemesi — {odeme.tip.value}"
+                detaylar = [
+                    ("Personel", personel.ad_soyad if personel else "—"),
+                    ("Tutar", str(odeme.tutar)),
+                    ("Dönem", str(odeme.donem)),
+                    ("Konum", "Finansal Takip → Personel"),
+                ]
 
-    elif kaynak_tablo == "SABIT_GIDER":
-        from app.models.diger import SabitGider, SabitGiderKategori
-        gider = db.get(SabitGider, kaynak_id)
-        if gider is not None:
-            kategori = db.get(SabitGiderKategori, gider.kategori_id)
-            baslik = "Sabit Gider"
-            detaylar = [
-                ("Kategori", kategori.ad if kategori else "—"),
-                ("Tutar", str(gider.tutar)),
-                ("Dönem", str(gider.donem)),
-                ("Açıklama", gider.aciklama or "—"),
-                ("Konum", "Finansal Takip → Sabit Giderler"),
-            ]
+        elif kaynak_tablo == "SABIT_GIDER":
+            from app.models.diger import SabitGider, SabitGiderKategori
+            gider = db.get(SabitGider, kaynak_id)
+            if gider is not None:
+                kategori = db.get(SabitGiderKategori, gider.kategori_id)
+                baslik = "Sabit Gider"
+                detaylar = [
+                    ("Kategori", kategori.ad if kategori else "—"),
+                    ("Tutar", str(gider.tutar)),
+                    ("Dönem", str(gider.donem)),
+                    ("Açıklama", gider.aciklama or "—"),
+                    ("Konum", "Finansal Takip → Sabit Giderler"),
+                ]
 
-    elif kaynak_tablo == "BORC_ODEME":
-        from app.models.diger import BorcOdeme, Borc
-        odeme = db.get(BorcOdeme, kaynak_id)
-        if odeme is not None:
-            borc = db.get(Borc, odeme.borc_id)
-            baslik = f"Borç Ödemesi — {borc.tip.value if borc else ''}"
-            detaylar = [
-                ("Cari", cari_unvan(borc.cari_id) if borc else "—"),
-                ("Tutar", f"{odeme.tutar} {borc.para_birimi.value if borc else ''}"),
-                ("Tarih", str(odeme.tarih)),
-                ("Açıklama", odeme.aciklama or "—"),
-                ("Konum", "Finansal Takip → Ortak/Dış Borç"),
-            ]
+        elif kaynak_tablo == "BORC_ODEME":
+            from app.models.diger import BorcOdeme, Borc
+            odeme = db.get(BorcOdeme, kaynak_id)
+            if odeme is not None:
+                borc = db.get(Borc, odeme.borc_id)
+                baslik = f"Borç Ödemesi — {borc.tip.value if borc else ''}"
+                detaylar = [
+                    ("Cari", cari_unvan(borc.cari_id) if borc else "—"),
+                    ("Tutar", f"{odeme.tutar} {borc.para_birimi.value if borc else ''}"),
+                    ("Tarih", str(odeme.tarih)),
+                    ("Açıklama", odeme.aciklama or "—"),
+                    ("Konum", "Finansal Takip → Ortak/Dış Borç"),
+                ]
 
-    elif kaynak_tablo == "BAKIM_KAYDI":
-        from app.models.finansal import BakimKaydi
-        from app.models.stok import StokSeriNo, StokKarti
-        bakim = db.get(BakimKaydi, kaynak_id)
-        if bakim is not None:
-            urun = db.get(StokSeriNo, bakim.stok_seri_no_id)
-            kart = db.get(StokKarti, urun.stok_karti_id) if urun else None
-            urun_adi = f"{kart.marka} {kart.model} ({urun.seri_no})" if (urun and kart) else (urun.seri_no if urun else "—")
-            baslik = f"Bakım Kaydı — {bakim.tip.value}"
-            detaylar = [
-                ("Ürün", urun_adi),
-                ("İlgili Cari", cari_unvan(bakim.ilgili_cari_id)),
-                ("Tutar", f"{bakim.tutar} {bakim.para_birimi.value}"),
-                ("Tarih", str(bakim.tarih)),
-                ("Açıklama", bakim.aciklama or "—"),
-                ("Konum", "Finansal Takip → Bakım"),
-            ]
+        elif kaynak_tablo == "BAKIM_KAYDI":
+            from app.models.finansal import BakimKaydi
+            from app.models.stok import StokSeriNo, StokKarti
+            bakim = db.get(BakimKaydi, kaynak_id)
+            if bakim is not None:
+                urun = db.get(StokSeriNo, bakim.stok_seri_no_id)
+                kart = db.get(StokKarti, urun.stok_karti_id) if urun else None
+                urun_adi = f"{kart.marka} {kart.model} ({urun.seri_no})" if (urun and kart) else (urun.seri_no if urun else "—")
+                baslik = f"Bakım Kaydı — {bakim.tip.value}"
+                detaylar = [
+                    ("Ürün", urun_adi),
+                    ("İlgili Cari", cari_unvan(bakim.ilgili_cari_id)),
+                    ("Tutar", f"{bakim.tutar} {bakim.para_birimi.value}"),
+                    ("Tarih", str(bakim.tarih)),
+                    ("Açıklama", bakim.aciklama or "—"),
+                    ("Konum", "Finansal Takip → Bakım"),
+                ]
 
-    elif kaynak_tablo == "STOK_SATIS":
-        from app.models.stok import StokSeriNo
-        urun = db.get(StokSeriNo, kaynak_id)
-        if urun is not None:
-            baslik = "Stok Satışı"
-            detaylar = [
-                ("Seri No", urun.seri_no),
-                ("Müşteri", cari_unvan(urun.musteri_cari_id)),
-                ("Satış Tarihi", str(urun.satis_tarihi) if urun.satis_tarihi else "—"),
-                ("Satış Fiyatı", str(urun.satis_fiyati_try) if urun.satis_fiyati_try is not None else "—"),
-                ("Konum", "Stok"),
-            ]
+        elif kaynak_tablo == "STOK_SATIS":
+            from app.models.stok import StokSeriNo
+            urun = db.get(StokSeriNo, kaynak_id)
+            if urun is not None:
+                baslik = "Stok Satışı"
+                detaylar = [
+                    ("Seri No", urun.seri_no),
+                    ("Müşteri", cari_unvan(urun.musteri_cari_id)),
+                    ("Satış Tarihi", str(urun.satis_tarihi) if urun.satis_tarihi else "—"),
+                    ("Satış Fiyatı", str(urun.satis_fiyati_try) if urun.satis_fiyati_try is not None else "—"),
+                    ("Konum", "Stok"),
+                ]
 
-    elif kaynak_tablo == "AKREDITIF_KALEM_TAKSIT":
-        from app.models.akreditif_taksit import AkreditifKalemTaksiti
-        from app.models.akreditif import AkreditifKalemi, Akreditif
-        taksit = db.get(AkreditifKalemTaksiti, kaynak_id)
-        if taksit is not None:
-            kalem = db.get(AkreditifKalemi, taksit.kalem_id)
-            akreditif = db.get(Akreditif, kalem.akreditif_id) if kalem else None
-            baslik = f"Akreditif Kalem Taksiti — {taksit.taksit_no}. taksit"
-            detaylar = [
-                ("Akreditif No", (akreditif.akreditif_no or f"#{akreditif.id}") if akreditif else "—"),
-                ("Kalem Tipi", kalem.tip.value if kalem else "—"),
-                ("Tutar", f"{taksit.tutar} {akreditif.para_birimi.value if akreditif else ''}"),
-                ("Vade Tarihi", str(taksit.vade_tarihi)),
-                ("Konum", "Finansal Takip → Akreditif → Kalemler → Taksitler"),
-            ]
+        elif kaynak_tablo == "AKREDITIF_KALEM_TAKSIT":
+            from app.models.akreditif_taksit import AkreditifKalemTaksiti
+            from app.models.akreditif import AkreditifKalemi, Akreditif
+            taksit = db.get(AkreditifKalemTaksiti, kaynak_id)
+            if taksit is not None:
+                kalem = db.get(AkreditifKalemi, taksit.kalem_id)
+                akreditif = db.get(Akreditif, kalem.akreditif_id) if kalem else None
+                baslik = f"Akreditif Kalem Taksiti — {taksit.taksit_no}. taksit"
+                detaylar = [
+                    ("Akreditif No", (akreditif.akreditif_no or f"#{akreditif.id}") if akreditif else "—"),
+                    ("Kalem Tipi", kalem.tip.value if kalem else "—"),
+                    ("Tutar", f"{taksit.tutar} {akreditif.para_birimi.value if akreditif else ''}"),
+                    ("Vade Tarihi", str(taksit.vade_tarihi)),
+                    ("Konum", "Finansal Takip → Akreditif → Kalemler → Taksitler"),
+                ]
 
-    elif kaynak_tablo == "VIRMAN_CARI_CARI":
-        from app.models.cari import CariHareket
-        hareket = db.get(CariHareket, kaynak_id)
-        if hareket is not None:
-            para_birimi = hareket.para_birimi.value if hasattr(hareket.para_birimi, "value") else hareket.para_birimi
-            baslik = "Cari Arası Virman (Borç Devri)"
-            detaylar = [
-                ("Cari", cari_unvan(hareket.cari_id)),
-                ("Tutar", f"{hareket.tutar} {para_birimi}"),
-                ("Açıklama", hareket.aciklama or "—"),
-                ("Konum", "Virman → Cari → Cari"),
-            ]
+        elif kaynak_tablo == "YEDEK_PARCA_HAREKET":
+            try:
+                from app.models.yedek_parca import YedekParcaHareketi, YedekParca
+                hareket = db.get(YedekParcaHareketi, kaynak_id)
+                if hareket is not None:
+                    parca = db.get(YedekParca, hareket.yedek_parca_id)
+                    baslik = f"Yedek Parça Hareketi — {hareket.yon}"
+                    detaylar = [
+                        ("Parça", parca.ad if parca else "—"),
+                        ("İlgili Cari", cari_unvan(hareket.ilgili_cari_id)),
+                        ("Miktar", f"{hareket.miktar} {parca.birim if parca else ''}"),
+                        ("Tarih", str(hareket.tarih)),
+                        ("Açıklama", hareket.aciklama or "—"),
+                        ("Konum", "Yedek Parça / Sarf"),
+                    ]
+            except Exception:
+                baslik = "Yedek Parça Hareketi"
+                detaylar = [("Not", "Detay bilgisi yüklenemedi.")]
+
+        elif kaynak_tablo == "DEMIRBAS_SATIS":
+            try:
+                from app.models.demirbas import Demirbas
+                demirbas = db.get(Demirbas, kaynak_id)
+                if demirbas is not None:
+                    baslik = "Demirbaş Satışı"
+                    detaylar = [
+                        ("Demirbaş", demirbas.ad),
+                        ("Müşteri", cari_unvan(getattr(demirbas, "musteri_cari_id", None))),
+                        ("Satış Tarihi", str(getattr(demirbas, "satis_tarihi", None)) or "—"),
+                        ("Satış Fiyatı", str(getattr(demirbas, "satis_fiyati_try", None)) or "—"),
+                        ("Konum", "Öz Mal / Demirbaş"),
+                    ]
+            except Exception:
+                baslik = "Demirbaş Satışı"
+                detaylar = [("Not", "Detay bilgisi yüklenemedi.")]
+
+        elif kaynak_tablo == "VIRMAN_CARI_CARI":
+            from app.models.cari import CariHareket
+            hareket = db.get(CariHareket, kaynak_id)
+            if hareket is not None:
+                para_birimi = hareket.para_birimi.value if hasattr(hareket.para_birimi, "value") else hareket.para_birimi
+                baslik = "Cari Arası Virman (Borç Devri)"
+                detaylar = [
+                    ("Cari", cari_unvan(hareket.cari_id)),
+                    ("Tutar", f"{hareket.tutar} {para_birimi}"),
+                    ("Açıklama", hareket.aciklama or "—"),
+                    ("Konum", "Virman → Cari → Cari"),
+                ]
+
+    except Exception:
+        baslik = "Detay bilgisi yüklenirken bir hata oluştu"
+        detaylar = [("Not", f"Kaynak türü: {kaynak_tablo}, ID: {kaynak_id}")]
 
     return {"baslik": baslik, "detaylar": detaylar}
 
