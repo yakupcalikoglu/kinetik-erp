@@ -4,8 +4,7 @@ Calistirmak icin: uvicorn app.main:app --reload
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import auth, sirketler, cari, stok, siparis, banka, finansal, diger, raporlama, yetki, akreditif, virman, harcama_turu, kaynak_detay, yedek_parca, arama, demirbas
-app = FastAPI(
+from app.routers import auth, sirketler, cari, stok, siparis, banka, finansal, diger, raporlama, yetki, akreditif, virman, harcama_turu, kaynak_detay, yedek_parca, arama, demirbas, tedarikci_fatura = FastAPI(
     title="Kinetik ERP API",
     version="0.1.0",
     description="İthalat ön muhasebe ve stok yönetim sistemi. Cari, stok, sipariş, "
