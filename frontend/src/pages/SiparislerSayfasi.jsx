@@ -2,7 +2,7 @@ import { useEffect, useState, Fragment } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, hataMesajiCikar, ozelOnayIste, ozelPrompt } from '../api/client';
-import { Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat, eylemChipStili, ParaGirdisi, useKademelıGoster, DahaFazlaGosterButonu, DahaFazlaMenu } from '../components/Ortak';
+import { Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat, eylemChipStili, ParaGirdisi, useKademelıGoster, DahaFazlaGosterButonu, DahaFazlaMenu, TabloIskeleti } from '../components/Ortak';
 import { excelIndir } from '../utils/disaAktarma';
 import BelgeSablonu from '../components/BelgeSablonu';
 import AramaliSecici from '../components/AramaliSecici';
@@ -801,7 +801,7 @@ export default function SiparislerSayfasi() {
 
       <Kart style={{ padding: 0 }}>
         {yukleniyor ? (
-          <div style={{ padding: 20, color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
+          <TabloIskeleti sutunSayisi={9} />
         ) : gosterilecekSiparisler.length === 0 ? (
           <BosDurum baslik="Henüz sipariş yok" aciklama="Yukarıdan yeni bir sipariş oluşturun." />
         ) : (
