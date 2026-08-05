@@ -805,6 +805,10 @@ function HareketlerSekmesi() {
   const [hesaplar, setHesaplar] = useState([]);
   const [bankaHareketleri, setBankaHareketleri] = useState([]);
   const [hesapFiltre, setHesapFiltre] = useState('');
+  // Varsayilan olarak sadece son 30 gunu goster - liste her zaman anlamsizca
+  // uzamasin. Kullanici isterse "Tum Gecmisi Goster" ile bu siniri kaldirabilir.
+  const [tumGecmisGosteriliyor, setTumGecmisGosteriliyor] = useState(false);
+  const otuzGunOncesi = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const [hata, setHata] = useState(null);
   const [yukleniyor, setYukleniyor] = useState(true);
   const [bankaFormuAcik, setBankaFormuAcik] = useState(false);
@@ -855,9 +859,9 @@ function HareketlerSekmesi() {
     }
   }
 
-  const gosterilecekHareketler = hesapFiltre
-    ? bankaHareketleri.filter((h) => String(h.banka_hesap_id) === hesapFiltre)
-    : bankaHareketleri;
+  const gosterilecekHareketler = bankaHareketleri
+    .filter((h) => !hesapFiltre || String(h.banka_hesap_id) === hesapFiltre)
+    .filter((h) => tumGecmisGosteriliyor || h.tarih >= otuzGunOncesi);
   const siraliHareketler = siralama.sirala(gosterilecekHareketler, (item, alan) => {
     if (alan === '_hesap') return hesapAdiGoster(item.banka_hesap_id);
     if (alan === '_cari') return item.cari_id ? (cariHaritasi[item.cari_id] || '') : '';
@@ -892,8 +896,19 @@ function HareketlerSekmesi() {
             ))}
           </select>
         </Alan>
-        <Buton onClick={() => setBankaFormuAcik((a) => !a)}>{bankaFormuAcik ? 'Kapat' : '+ Yeni banka hareketi'}</Buton>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Buton variant="ikincil" onClick={() => setTumGecmisGosteriliyor((a) => !a)}>
+            {tumGecmisGosteriliyor ? 'Son 30 Güne Dön' : 'Tüm Geçmişi Göster'}
+          </Buton>
+          <Buton onClick={() => setBankaFormuAcik((a) => !a)}>{bankaFormuAcik ? 'Kapat' : '+ Yeni banka hareketi'}</Buton>
+        </div>
       </div>
+
+      {!tumGecmisGosteriliyor && (
+        <div style={{ fontSize: 12, color: 'var(--metin-ikincil)', marginBottom: 12 }}>
+          Son 30 gün gösteriliyor — daha eski hareketler için "Tüm Geçmişi Göster"e tıklayın.
+        </div>
+      )}
 
       <HataMesaji>{hata}</HataMesaji>
 
