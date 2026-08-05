@@ -1,18 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from sqlalchemy import select
-import os
-import uuid
-
 from app.db.session import get_db
 from app.models.auth import Sirket
 from app.core.deps import aktif_kullanici_getir, izin_gerektir, aktif_sirket_id_getir
 from app.schemas.auth import SirketOlusturIstegi, SirketOzet, SirketDetayYanit, SirketGuncelleIstegi
 
 router = APIRouter(prefix="/sirketler", tags=["Şirketler"])
-
-LOGO_DIZIN = os.getenv("LOGO_DIZIN", "/tmp/kinetik-erp-logolar")
-os.makedirs(LOGO_DIZIN, exist_ok=True)
 
 
 @router.get("", response_model=list[SirketOzet])
@@ -43,11 +38,9 @@ def sirket_olustur(
     bu tabloya join ederek calisir.
     """
     from app.models.auth import KullaniciSirketErisim
-
     yeni = Sirket(**istek.model_dump())
     db.add(yeni)
     db.flush()
-
     db.add(KullaniciSirketErisim(kullanici_id=kullanici.id, sirket_id=yeni.id))
     db.commit()
     db.refresh(yeni)
@@ -79,18 +72,20 @@ def sirket_guncelle(sirket_id: int, istek: SirketGuncelleIstegi, db: Session = D
 @router.post("/{sirket_id}/logo", response_model=SirketDetayYanit,
              dependencies=[Depends(izin_gerektir("SIRKET_YONET"))])
 async def logo_yukle(sirket_id: int, dosya: UploadFile = File(...), db: Session = Depends(get_db)):
+    """
+    Logo iceriğini DOGRUDAN VERITABANINDA saklar (logo_verisi, BYTEA).
+    ONCEDEN dosya sunucunun /tmp diskine yaziliyordu - Render gibi
+    platformlarda /tmp KALICI DEGIL, her deploy'da sifirlaniyor, bu da
+    logonun her deploy sonrasi "kaybolmasina" yol aciyordu. Veritabaninda
+    saklamak bu sorunu tamamen ortadan kaldirir.
+    """
     sirket = db.get(Sirket, sirket_id)
     if sirket is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Şirket bulunamadı.")
-
-    uzanti = os.path.splitext(dosya.filename or "")[1] or ".png"
-    dosya_adi = f"{sirket_id}_{uuid.uuid4().hex}{uzanti}"
-    hedef_yol = os.path.join(LOGO_DIZIN, dosya_adi)
     icerik = await dosya.read()
-    with open(hedef_yol, "wb") as f:
-        f.write(icerik)
-
-    sirket.logo_dosya_yolu = hedef_yol
+    sirket.logo_verisi = icerik
+    sirket.logo_content_type = dosya.content_type or "image/png"
+    sirket.logo_dosya_yolu = None  # eski yontemden kalma alani temizle
     db.commit()
     db.refresh(sirket)
     return sirket
@@ -98,8 +93,7 @@ async def logo_yukle(sirket_id: int, dosya: UploadFile = File(...), db: Session 
 
 @router.get("/{sirket_id}/logo")
 def logo_getir(sirket_id: int, db: Session = Depends(get_db)):
-    from fastapi.responses import FileResponse
     sirket = db.get(Sirket, sirket_id)
-    if sirket is None or not sirket.logo_dosya_yolu or not os.path.exists(sirket.logo_dosya_yolu):
+    if sirket is None or not sirket.logo_verisi:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Logo bulunamadı.")
-    return FileResponse(sirket.logo_dosya_yolu)
+    return Response(content=sirket.logo_verisi, media_type=sirket.logo_content_type or "image/png")
