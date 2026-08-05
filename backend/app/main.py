@@ -4,7 +4,9 @@ Calistirmak icin: uvicorn app.main:app --reload
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import auth, sirketler, cari, stok, siparis, banka, finansal, diger, raporlama, yetki, akreditif, virman, harcama_turu, kaynak_detay, yedek_parca, arama, demirbas, tedarikci_fatura = FastAPI(
+from app.routers import auth, sirketler, cari, stok, siparis, banka, finansal, diger, raporlama, yetki, akreditif, virman, harcama_turu, kaynak_detay, yedek_parca, arama, demirbas, tedarikci_fatura
+
+app = FastAPI(
     title="Kinetik ERP API",
     version="0.1.0",
     description="İthalat ön muhasebe ve stok yönetim sistemi. Cari, stok, sipariş, "
@@ -43,6 +45,9 @@ app.include_router(kaynak_detay.bekleyen_router)
 app.include_router(yedek_parca.router)
 app.include_router(arama.router)
 app.include_router(demirbas.router)
+app.include_router(tedarikci_fatura.router)
+
+
 @app.get("/")
 def saglik_kontrolu():
     return {"durum": "ayakta", "servis": "ithalat-erp-api"}
