@@ -402,3 +402,10 @@ class StokSeriNoIceAktarIstegi(BaseModel):
 class StokSeriNoIceAktarSonucu(BaseModel):
     basarili_sayisi: int
     hatali_satirlar: list[dict]
+
+
+class SonAlimFiyatiYaniti(BaseModel):
+    bulundu: bool
+    toplam_maliyet_try: Decimal | None = None
+    tarih: date | None = None
+    seri_no: str | None = None
