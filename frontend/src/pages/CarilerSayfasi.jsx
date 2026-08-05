@@ -4,7 +4,7 @@ import { api, hataMesajiCikar, ozelOnayIste } from '../api/client';
 import { excelIndir } from '../utils/disaAktarma';
 import {
   Kart, SayfaBasligi, Buton, Etiket, Alan, girdiStili, BosDurum, HataMesaji, paraFormat, eylemChipStili, ParaGirdisi,
-  useKademelıGoster, DahaFazlaGosterButonu, DahaFazlaMenu,
+  useKademelıGoster, DahaFazlaGosterButonu, DahaFazlaMenu, TabloIskeleti,
 } from '../components/Ortak';
 import { useNavigate, useLocation } from 'react-router-dom';
 import AramaliSecici from '../components/AramaliSecici';
@@ -1196,7 +1196,7 @@ export default function CarilerSayfasi() {
         </div>
 
         {yukleniyor ? (
-          <div style={{ padding: 20, color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
+          <TabloIskeleti sutunSayisi={7} />
         ) : cariler.length === 0 ? (
           <BosDurum baslik="Henüz cari kaydı yok" aciklama="Yukarıdan yeni bir cari ekleyin." />
         ) : (
