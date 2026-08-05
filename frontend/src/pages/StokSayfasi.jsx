@@ -836,6 +836,17 @@ function StokSeriNoIceAktarPaneli({ onKapat, onTamamlandi }) {
         Excel dosyanızda: <strong>Seri No, Marka, Model</strong> (hepsi zorunlu — Marka/Model, Ürün Tanımları'nda
         <strong> önceden kayıtlı</strong> bir ürünle eşleşmelidir), Şasi No, Üretim Yılı, Satınalma Maliyeti,
         Sahiplik Tipi bulunabilir. İçe aktarılan kayıtlar "Depoda" durumunda başlar, Kasa/Banka'ya hiçbir hareket yansımaz.
+        {' '}
+        <button
+          type="button"
+          onClick={() => excelIndir(
+            [{ 'Seri No': 'SN-000123', 'Marka': 'Örnek Marka', 'Model': 'ABC-100', 'Şasi No': 'X1234567', 'Üretim Yılı': 2024, 'Satınalma Maliyeti': 500000, 'Sahiplik Tipi': 'Ticari' }],
+            'stok_seri_no_sablon', 'Stok Şablonu',
+          )}
+          style={{ background: 'none', border: 'none', color: 'var(--lacivert)', textDecoration: 'underline', cursor: 'pointer', fontSize: 12.5, padding: 0 }}
+        >
+          Örnek şablon indir
+        </button>
       </div>
       <input type="file" accept=".xlsx,.xls" onChange={dosyaSecildi} style={{ marginBottom: 16 }} />
       {satirlar.length > 0 && !sonuc && (
