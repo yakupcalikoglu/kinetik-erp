@@ -1,6 +1,6 @@
 import { useEffect, useState, Fragment } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { api, hataMesajiCikar, ozelOnayIste } from '../api/client';
+import { api, hataMesajiCikar, ozelOnayIste, ozelAlert } from '../api/client';
 import {
   Kart, SayfaBasligi, Buton, Etiket, Alan, girdiStili, BosDurum, HataMesaji, paraFormat, Sekmeler, eylemChipStili,
   OtomatikTamamlamaGirdisi, ParaGirdisi,
@@ -928,7 +928,7 @@ function MaliyetDagitimFormu({ akreditif, onKapat, onTamamlandi }) {
       const { data } = await api.post(`/akreditifler/${akreditif.id}/maliyet-dagit`, {
         yontem, kur: Number(kur), stok_seri_no_idleri: seciliUrunIdleri,
       });
-      window.alert(`${data.dagitilan_urun_sayisi} ürüne toplam ${paraFormat(data.toplam_dagitilan_try)} dağıtıldı.`);
+      await ozelAlert(`${data.dagitilan_urun_sayisi} ürüne toplam ${paraFormat(data.toplam_dagitilan_try)} dağıtıldı.`);
       gecmisiYukle();
       onTamamlandi();
     } catch (err) {
@@ -3383,10 +3383,10 @@ function TaksitSekmesi() {
     setTaksitler(data);
     vadesiGecenleriYukle();
     if (sonuc.guncellenen_taksitler.length > 1) {
-      window.alert(`Ödeme, taksit ${sonuc.guncellenen_taksitler[0].taksit_no}'dan ${sonuc.guncellenen_taksitler[sonuc.guncellenen_taksitler.length - 1].taksit_no}'a kadar ${sonuc.guncellenen_taksitler.length} takside otomatik olarak uygulandı.`);
+      await ozelAlert(`Ödeme, taksit ${sonuc.guncellenen_taksitler[0].taksit_no}'dan ${sonuc.guncellenen_taksitler[sonuc.guncellenen_taksitler.length - 1].taksit_no}'a kadar ${sonuc.guncellenen_taksitler.length} takside otomatik olarak uygulandı.`);
     }
     if (sonuc.fazla_odeme_var_mi) {
-      window.alert(`Dikkat: Tüm taksitler kapandı ve ${paraFormat(sonuc.fazla_odeme_tutari)} fazla ödeme oldu. Bu fazlalık hiçbir taksite işlenmedi, lütfen kontrol edin.`);
+      await ozelAlert(`Dikkat: Tüm taksitler kapandı ve ${paraFormat(sonuc.fazla_odeme_tutari)} fazla ödeme oldu. Bu fazlalık hiçbir taksite işlenmedi, lütfen kontrol edin.`);
     }
   }
 
@@ -3398,7 +3398,7 @@ function TaksitSekmesi() {
       setTaksitler(data);
       vadesiGecenleriYukle();
       if (sonuc.etkilenen_taksit_sayisi > 1) {
-        window.alert(`${sonuc.etkilenen_taksit_sayisi} taksit birlikte geri alındı (aynı ödemeyle ilişkiliydiler).`);
+        await ozelAlert(`${sonuc.etkilenen_taksit_sayisi} taksit birlikte geri alındı (aynı ödemeyle ilişkiliydiler).`);
       }
     } catch (err) { setHata(hataMesajiCikar(err)); }
   }
