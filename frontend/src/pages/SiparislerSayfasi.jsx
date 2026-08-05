@@ -1,8 +1,8 @@
 import { useEffect, useState, Fragment } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, hataMesajiCikar } from '../api/client';
-import { Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat, eylemChipStili, ParaGirdisi, useKademelıGoster, DahaFazlaGosterButonu } from '../components/Ortak';
+import { Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat, eylemChipStili, ParaGirdisi, useKademelıGoster, DahaFazlaGosterButonu, DahaFazlaMenu } from '../components/Ortak';
 import BelgeSablonu from '../components/BelgeSablonu';
 import AramaliSecici from '../components/AramaliSecici';
 
@@ -535,6 +535,7 @@ function SiparisOdemeleriPaneli({ siparis, onKapat }) {
 
 export default function SiparislerSayfasi() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { oturum } = useAuth();
   const [siparisler, setSiparisler] = useState([]);
   const [stokKartlari, setStokKartlari] = useState([]);
@@ -564,6 +565,7 @@ export default function SiparislerSayfasi() {
   );
 
   const [bakiyeHaritasi, setBakiyeHaritasi] = useState({}); // siparisId -> {toplam_siparis_tutari, toplam_odenen, kalan_bakiye}
+  const [akreditifHaritasi, setAkreditifHaritasi] = useState({}); // siparisId -> akreditif
 
   function listeyiYukle() {
     setYukleniyor(true);
@@ -579,6 +581,14 @@ export default function SiparislerSayfasi() {
           sonuclar.forEach(([id, veri]) => { if (veri) harita[id] = veri; });
           setBakiyeHaritasi(harita);
         });
+        // Akreditifle alinmis siparisler icin - sipariş içeriği panelinde
+        // akreditifin vade/odeme bilgisini gostermek uzere TEK istekle
+        // tum akreditifleri cekip siparis_id'ye gore grupluyoruz.
+        api.get('/akreditifler').then((r) => {
+          const akrHarita = {};
+          (r.data || []).forEach((a) => { akrHarita[a.siparis_id] = a; });
+          setAkreditifHaritasi(akrHarita);
+        }).catch(() => {});
       })
       .catch((err) => setHata(hataMesajiCikar(err)))
       .finally(() => setYukleniyor(false));
@@ -801,89 +811,39 @@ export default function SiparislerSayfasi() {
                         })()}
                       </td>
                       <td style={{ padding: '12px 16px' }}>
-                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                          {s.durum === 'TASLAK' && (
-                            <>
-                              <button onClick={() => durumDegistir(s.id, 'ONAYLANDI')} style={eylemChipStili('lacivert')}>
-                                Onayla
-                              </button>
-                              <Link to={`/siparisler/${s.id}/duzenle`} style={eylemChipStili('lacivert')}>
-                                Düzenle
-                              </Link>
-                              <button onClick={() => siparisiSil(s.id, s.siparis_no)} style={eylemChipStili('kirmizi')}>
-                                Sil
-                              </button>
-                            </>
-                          )}
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                           {(s.durum === 'ONAYLANDI' || s.durum === 'YOLDA' || s.durum === 'GUMRUKTE') && (
-                            <>
-                              <Link to={`/siparisler/${s.id}/teslim-al`} style={eylemChipStili('yesil')}>
-                                Teslim al
-                              </Link>
-                              <button
-                                onClick={() => setDurumDegistirAcikId((mevcut) => (mevcut === s.id ? null : s.id))}
-                                style={eylemChipStili('amber')}
-                              >
-                                {durumDegistirAcikId === s.id ? 'Kapat' : 'Durum Değiştir'}
-                              </button>
-                            </>
+                            <Link to={`/siparisler/${s.id}/teslim-al`} style={eylemChipStili('yesil')}>
+                              Teslim al
+                            </Link>
                           )}
-                          {!sonDurumda && s.durum !== 'TASLAK' && (
-                            <button onClick={() => siparisiIptalEt(s.id, s.siparis_no)} style={eylemChipStili('kirmizi')}>
-                              İptal Et
-                            </button>
-                          )}
-                          {s.durum === 'IPTAL' && (
-                            <>
-                              <button onClick={() => durumDegistir(s.id, 'ONAYLANDI')} style={eylemChipStili('yesil')}>
-                                İptali Geri Al
-                              </button>
-                              <button onClick={() => siparisiSil(s.id, s.siparis_no)} style={eylemChipStili('kirmizi')}>
-                                Sil
-                              </button>
-                            </>
-                          )}
-                          <button
-                            onClick={() => setDetay360AcikId((mevcut) => (mevcut === s.id ? null : s.id))}
-                            style={eylemChipStili('yesil')}
-                          >
-                            {detay360AcikId === s.id ? 'Detayı Kapat' : 'Sipariş Detayı'}
-                          </button>
-                          <button
-                            onClick={() => setOdemelerAcikSiparisId((mevcut) => (mevcut === s.id ? null : s.id))}
-                            style={eylemChipStili('amber')}
-                          >
-                            {odemelerAcikSiparisId === s.id ? 'Ödemeleri Kapat' : 'Ödemeler'}
-                          </button>
-                          {s.kaynak === 'ITHALAT' && (
-                            <button
-                              onClick={() => setGumrukAcikSiparisId((mevcut) => (mevcut === s.id ? null : s.id))}
-                              style={eylemChipStili('amber')}
-                            >
-                              {gumrukAcikSiparisId === s.id ? 'Gümrüğü Kapat' : 'Gümrük Beyannamesi'}
-                            </button>
-                          )}
-                          <button
-                            onClick={() => setBelgeAcik((mevcut) => (mevcut?.siparisId === s.id && mevcut?.nusha === 'ic' ? null : { siparisId: s.id, nusha: 'ic' }))}
-                            style={eylemChipStili('notr')}
-                          >
-                            Belge (şirket içi)
-                          </button>
-                          <button
-                            onClick={() => setBelgeAcik((mevcut) => (mevcut?.siparisId === s.id && mevcut?.nusha === 'tedarikci' ? null : { siparisId: s.id, nusha: 'tedarikci' }))}
-                            style={eylemChipStili('notr')}
-                          >
-                            Belge (tedarikçi)
-                          </button>
-                          <button onClick={() => pdfIndir(s.id, s.siparis_no, 'ic')} style={eylemChipStili('notr')}>
-                            PDF (şirket içi)
-                          </button>
-                          <button onClick={() => pdfIndir(s.id, s.siparis_no, 'tedarikci')} style={eylemChipStili('notr')}>
-                            PDF (tedarikçi)
-                          </button>
-                          <button onClick={() => kopyala(s.id)} style={eylemChipStili('notr')}>
-                            Kopyala
-                          </button>
+                          <DahaFazlaMenu kompakt ogeler={[
+                            ...(s.durum === 'TASLAK' ? [
+                              { etiket: 'Onayla', onClick: () => durumDegistir(s.id, 'ONAYLANDI') },
+                              { etiket: 'Düzenle', onClick: () => navigate(`/siparisler/${s.id}/duzenle`) },
+                              { etiket: 'Sil', onClick: () => siparisiSil(s.id, s.siparis_no) },
+                            ] : []),
+                            ...((s.durum === 'ONAYLANDI' || s.durum === 'YOLDA' || s.durum === 'GUMRUKTE') ? [
+                              { etiket: 'Durum Değiştir', onClick: () => setDurumDegistirAcikId((mevcut) => (mevcut === s.id ? null : s.id)) },
+                            ] : []),
+                            ...(!sonDurumda && s.durum !== 'TASLAK' ? [
+                              { etiket: 'İptal Et', onClick: () => siparisiIptalEt(s.id, s.siparis_no) },
+                            ] : []),
+                            ...(s.durum === 'IPTAL' ? [
+                              { etiket: 'İptali Geri Al', onClick: () => durumDegistir(s.id, 'ONAYLANDI') },
+                              { etiket: 'Sil', onClick: () => siparisiSil(s.id, s.siparis_no) },
+                            ] : []),
+                            { etiket: 'Sipariş Detayı', onClick: () => setDetay360AcikId((mevcut) => (mevcut === s.id ? null : s.id)) },
+                            { etiket: 'Ödemeler', onClick: () => setOdemelerAcikSiparisId((mevcut) => (mevcut === s.id ? null : s.id)) },
+                            ...(s.kaynak === 'ITHALAT' ? [
+                              { etiket: 'Gümrük Beyannamesi', onClick: () => setGumrukAcikSiparisId((mevcut) => (mevcut === s.id ? null : s.id)) },
+                            ] : []),
+                            { etiket: 'Belge (şirket içi)', onClick: () => setBelgeAcik((mevcut) => (mevcut?.siparisId === s.id && mevcut?.nusha === 'ic' ? null : { siparisId: s.id, nusha: 'ic' })) },
+                            { etiket: 'Belge (tedarikçi)', onClick: () => setBelgeAcik((mevcut) => (mevcut?.siparisId === s.id && mevcut?.nusha === 'tedarikci' ? null : { siparisId: s.id, nusha: 'tedarikci' })) },
+                            { etiket: 'PDF (şirket içi)', onClick: () => pdfIndir(s.id, s.siparis_no, 'ic') },
+                            { etiket: 'PDF (tedarikçi)', onClick: () => pdfIndir(s.id, s.siparis_no, 'tedarikci') },
+                            { etiket: 'Kopyala', onClick: () => kopyala(s.id) },
+                          ]} />
                         </div>
                       </td>
                     </tr>
@@ -915,7 +875,7 @@ export default function SiparislerSayfasi() {
                           {(s.urunler || []).length === 0 ? (
                             <div style={{ fontSize: 13, color: 'var(--metin-soluk)' }}>Bu siparişte ürün bulunamadı.</div>
                           ) : (
-                            <table style={{ width: '100%' }}>
+                            <table style={{ width: '100%', marginBottom: 12 }}>
                               <thead>
                                 <tr>
                                   {['Ürün', 'Miktar', 'Birim Fiyat', 'Satır Toplamı', 'Açıklama'].map((b) => (
@@ -934,7 +894,30 @@ export default function SiparislerSayfasi() {
                                   </tr>
                                 ))}
                               </tbody>
+                              <tfoot>
+                                <tr style={{ borderTop: '2px solid var(--kenarlik-koyu)' }}>
+                                  <td colSpan={3} style={{ padding: '8px 8px', fontWeight: 600, textAlign: 'right' }}>Toplam:</td>
+                                  <td style={{ padding: '8px 8px', fontWeight: 700 }}>{paraFormat(toplam, s.para_birimi)}</td>
+                                  <td />
+                                </tr>
+                              </tfoot>
                             </table>
+                          )}
+                          {akreditifHaritasi[s.id] && (
+                            <div style={{ padding: '10px 12px', background: 'white', border: '1px solid var(--kenarlik)', borderRadius: 8 }}>
+                              <div style={{ fontWeight: 600, fontSize: 12.5, marginBottom: 6 }}>
+                                💳 Akreditif ile alınmış — {akreditifHaritasi[s.id].akreditif_no || `#${akreditifHaritasi[s.id].id}`}
+                              </div>
+                              <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', fontSize: 12.5, color: 'var(--metin-ikincil)' }}>
+                                <div>Akreditif Tutarı: <strong style={{ color: 'var(--metin-birincil)' }}>{paraFormat(akreditifHaritasi[s.id].tutar, akreditifHaritasi[s.id].para_birimi)}</strong></div>
+                                <div>Ödenen: <strong style={{ color: 'var(--yesil)' }}>{paraFormat(akreditifHaritasi[s.id].toplam_odenen, akreditifHaritasi[s.id].para_birimi)}</strong></div>
+                                <div>Kalan: <strong style={{ color: Number(akreditifHaritasi[s.id].kalan_bakiye) > 0 ? 'var(--kirmizi)' : 'var(--yesil)' }}>{paraFormat(akreditifHaritasi[s.id].kalan_bakiye, akreditifHaritasi[s.id].para_birimi)}</strong></div>
+                                {akreditifHaritasi[s.id].vade_tarihi && (
+                                  <div>Vade Tarihi: <strong style={{ color: 'var(--metin-birincil)' }}>{tarihFormat(akreditifHaritasi[s.id].vade_tarihi)}</strong></div>
+                                )}
+                                <div>Durum: <Etiket ton={akreditifHaritasi[s.id].durum === 'KAPANDI' ? 'yesil' : akreditifHaritasi[s.id].durum === 'IPTAL' ? 'kirmizi' : 'amber'}>{akreditifHaritasi[s.id].durum}</Etiket></div>
+                              </div>
+                            </div>
                           )}
                         </td>
                       </tr>
