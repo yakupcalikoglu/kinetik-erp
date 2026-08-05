@@ -1,7 +1,7 @@
 import { useEffect, useState, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, hataMesajiCikar, ozelOnayIste } from '../api/client';
-import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat, eylemChipStili, Sekmeler, OtomatikTamamlamaGirdisi, Etiket, ParaGirdisi, useTarihGruplama, YilBasligi, AyBasligi } from '../components/Ortak';
+import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat, eylemChipStili, Sekmeler, OtomatikTamamlamaGirdisi, Etiket, ParaGirdisi, useTarihGruplama, YilBasligi, AyBasligi, TabloIskeleti } from '../components/Ortak';
 
 function tarihFormat(iso) {
   if (!iso || typeof iso !== 'string' || !iso.includes('-')) return iso || '—';
@@ -902,7 +902,7 @@ function HareketlerSekmesi() {
 
       <Kart style={{ padding: 0 }}>
         {yukleniyor ? (
-          <div style={{ padding: 20, color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
+          <TabloIskeleti sutunSayisi={7} />
         ) : gosterilecekHareketler.length === 0 ? (
           <div style={{ padding: 20, color: 'var(--metin-soluk)' }}>Bu filtrede banka hareketi yok.</div>
         ) : (
