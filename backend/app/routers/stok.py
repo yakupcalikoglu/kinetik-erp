@@ -19,7 +19,8 @@ from app.schemas.stok import (StokKartiOlusturIstegi, StokKartiYanit,
                                StokKartiTopluIceAktarIstegi, StokKartiTopluIceAktarSonucu,
                                StokSeriNoIceAktarIstegi, StokSeriNoIceAktarSonucu,
                                OzMalIlkKayitIstegi, HurdayaCikarIstegi,
-                               UrunOzetYaniti, UrunOzetDurumSatiri, UrunOzetSatisSatiri)
+                               UrunOzetYaniti, UrunOzetDurumSatiri, UrunOzetSatisSatiri,
+                               SonAlimFiyatiYaniti)
 from app.services.para_hareketi import para_hareketi_olustur
 from app.models.denetim import DuzenlemeKaydi
 from app.core.security import sifre_dogrula
@@ -185,6 +186,32 @@ def stok_seri_no_toplu_ice_aktar(
             db.rollback()
             hatalar.append({"satir_no": i, "seri_no": satir.seri_no, "hata": str(e)})
     return StokSeriNoIceAktarSonucu(basarili_sayisi=basarili, hatali_satirlar=hatalar)
+
+
+@router.get("/stok-kartlari/{stok_karti_id}/son-alim-fiyati", response_model=SonAlimFiyatiYaniti,
+            dependencies=[Depends(izin_gerektir("STOK_GORUNTULE"))])
+def son_alim_fiyati_getir(
+    stok_karti_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
+):
+    """
+    Bu urun modeline (marka/model) ait en son eklenen fiziksel envanter
+    kaydinin toplam maliyetini doner - yeni siparis olustururken "bu
+    urunu son ne fiyata almistik" referansi olarak kullanilir.
+    """
+    en_son = db.execute(
+        select(StokSeriNo)
+        .where(StokSeriNo.sirket_id == sirket_id, StokSeriNo.stok_karti_id == stok_karti_id)
+        .order_by(StokSeriNo.olusturma_tarihi.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    if en_son is None:
+        return SonAlimFiyatiYaniti(bulundu=False)
+    return SonAlimFiyatiYaniti(
+        bulundu=True,
+        toplam_maliyet_try=en_son.toplam_maliyet_try,
+        tarih=en_son.olusturma_tarihi.date() if en_son.olusturma_tarihi else None,
+        seri_no=en_son.seri_no,
+    )
 
 
 @router.get("/stok-kartlari", response_model=list[StokKartiYanit],
