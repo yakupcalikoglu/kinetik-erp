@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, hataMesajiCikar, ozelOnayIste, ozelPrompt } from '../api/client';
 import { Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat, eylemChipStili, ParaGirdisi, useKademelıGoster, DahaFazlaGosterButonu, DahaFazlaMenu } from '../components/Ortak';
+import { excelIndir } from '../utils/disaAktarma';
 import BelgeSablonu from '../components/BelgeSablonu';
 import AramaliSecici from '../components/AramaliSecici';
 
@@ -566,6 +567,7 @@ export default function SiparislerSayfasi() {
 
   const [bakiyeHaritasi, setBakiyeHaritasi] = useState({}); // siparisId -> {toplam_siparis_tutari, toplam_odenen, kalan_bakiye}
   const [akreditifHaritasi, setAkreditifHaritasi] = useState({}); // siparisId -> akreditif
+  const [secilenIdler, setSecilenIdler] = useState(new Set());
 
   function listeyiYukle() {
     setYukleniyor(true);
@@ -623,6 +625,51 @@ export default function SiparislerSayfasi() {
     if (!(await ozelOnayIste(`${siparisNo} numaralı siparişi iptal etmek istediğinize emin misiniz? Bu işlem geri alınamaz.`))) return;
     await durumDegistir(siparisId, 'IPTAL');
     setBilgiMesaji(`${siparisNo} numaralı sipariş iptal edildi.`);
+  }
+
+  function satirSecimiDegistir(id) {
+    setSecilenIdler((s) => {
+      const yeni = new Set(s);
+      if (yeni.has(id)) yeni.delete(id); else yeni.add(id);
+      return yeni;
+    });
+  }
+
+  async function topluSil() {
+    if (!(await ozelOnayIste(`${secilenIdler.size} siparişi silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`))) return;
+    setHata(null);
+    let basarili = 0;
+    const basarisizlar = [];
+    for (const id of secilenIdler) {
+      try {
+        await api.delete(`/siparisler/${id}`);
+        basarili += 1;
+      } catch (err) {
+        basarisizlar.push(id);
+      }
+    }
+    setSecilenIdler(new Set());
+    listeyiYukle();
+    if (basarisizlar.length > 0) {
+      setHata(`${basarili} sipariş silindi, ${basarisizlar.length} sipariş silinemedi (muhtemelen Taslak/İptal dışındaki siparişler silinemez).`);
+    } else {
+      setBilgiMesaji(`${basarili} sipariş silindi.`);
+    }
+  }
+
+  function secilenleriExceleAktar() {
+    const secilenSiparisler = siparisler.filter((s) => secilenIdler.has(s.id));
+    excelIndir(
+      secilenSiparisler.map((s) => {
+        const toplam = (s.urunler || []).reduce((acc, u) => acc + u.miktar * Number(u.birim_fiyat), 0);
+        return {
+          'Sipariş No': s.siparis_no, 'Tedarikçi': cariAdi(s.tedarikci_cari_id),
+          'Tarih': s.siparis_tarihi, 'Durum': DURUM_METIN[s.durum] || s.durum,
+          'Tutar': toplam, 'Para Birimi': s.para_birimi,
+        };
+      }),
+      'secilen_siparisler', 'Siparişler',
+    );
   }
 
   async function siparisiSil(siparisId, siparisNo) {
@@ -741,6 +788,17 @@ export default function SiparislerSayfasi() {
         </div>
       </Kart>
 
+      {secilenIdler.size > 0 && (
+        <Kart style={{ marginBottom: 12, background: 'var(--zemin)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px' }}>
+          <span style={{ fontSize: 13, fontWeight: 500 }}>{secilenIdler.size} sipariş seçili</span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Buton variant="ikincil" onClick={secilenleriExceleAktar}>Excel'e Aktar</Buton>
+            <Buton variant="tehlike" onClick={topluSil}>Seçilenleri Sil</Buton>
+            <Buton variant="ikincil" onClick={() => setSecilenIdler(new Set())}>Seçimi Temizle</Buton>
+          </div>
+        </Kart>
+      )}
+
       <Kart style={{ padding: 0 }}>
         {yukleniyor ? (
           <div style={{ padding: 20, color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
@@ -749,7 +807,8 @@ export default function SiparislerSayfasi() {
         ) : (
           <table style={{ tableLayout: 'fixed', width: '100%' }}>
             <colgroup>
-              <col style={{ width: '12%' }} />
+              <col style={{ width: '3%' }} />
+              <col style={{ width: '11%' }} />
               <col style={{ width: '10%' }} />
               <col style={{ width: '9%' }} />
               <col style={{ width: '10%' }} />
@@ -757,10 +816,20 @@ export default function SiparislerSayfasi() {
               <col style={{ width: '9%' }} />
               <col style={{ width: '9%' }} />
               <col style={{ width: '11%' }} />
-              <col style={{ width: '21%' }} />
+              <col style={{ width: '19%' }} />
             </colgroup>
             <thead>
               <tr style={{ background: 'var(--zemin)' }}>
+                <th style={{ padding: '10px 16px' }}>
+                  <input
+                    type="checkbox"
+                    checked={kademe.gosterilecekler.length > 0 && kademe.gosterilecekler.every((s) => secilenIdler.has(s.id))}
+                    onChange={(e) => {
+                      if (e.target.checked) setSecilenIdler(new Set(kademe.gosterilecekler.map((s) => s.id)));
+                      else setSecilenIdler(new Set());
+                    }}
+                  />
+                </th>
                 <SiraliBaslik alanAdi="siparis_no" siralama={siralama}>Sipariş No</SiraliBaslik>
                 <SiraliBaslik alanAdi="kaynak" siralama={siralama}>Kaynak</SiraliBaslik>
                 <SiraliBaslik alanAdi="siparis_tarihi" siralama={siralama}>Tarih</SiraliBaslik>
@@ -778,7 +847,10 @@ export default function SiparislerSayfasi() {
                 const sonDurumda = SON_DURUMLAR.includes(s.durum);
                 return (
                   <Fragment key={s.id}>
-                    <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                    <tr style={{ borderTop: '1px solid var(--kenarlik)', background: secilenIdler.has(s.id) ? 'var(--zemin)' : 'transparent' }}>
+                      <td style={{ padding: '12px 16px' }}>
+                        <input type="checkbox" checked={secilenIdler.has(s.id)} onChange={() => satirSecimiDegistir(s.id)} />
+                      </td>
                       <td style={{ padding: '12px 16px', fontWeight: 500 }}>
                         <button
                           onClick={() => setIcerikAcikId((mevcut) => (mevcut === s.id ? null : s.id))}
@@ -849,28 +921,28 @@ export default function SiparislerSayfasi() {
                     </tr>
                     {detay360AcikId === s.id && (
                       <tr>
-                        <td colSpan={9} style={{ padding: 0 }}>
+                        <td colSpan={10} style={{ padding: 0 }}>
                           <Siparis360Paneli siparis={s} onKapat={() => setDetay360AcikId(null)} />
                         </td>
                       </tr>
                     )}
                     {odemelerAcikSiparisId === s.id && (
                       <tr>
-                        <td colSpan={9} style={{ padding: 0 }}>
+                        <td colSpan={10} style={{ padding: 0 }}>
                           <SiparisOdemeleriPaneli siparis={s} onKapat={() => setOdemelerAcikSiparisId(null)} />
                         </td>
                       </tr>
                     )}
                     {gumrukAcikSiparisId === s.id && (
                       <tr>
-                        <td colSpan={9} style={{ padding: 0 }}>
+                        <td colSpan={10} style={{ padding: 0 }}>
                           <GumrukBeyannameleriPaneli siparis={s} cariler={cariler} onKapat={() => setGumrukAcikSiparisId(null)} />
                         </td>
                       </tr>
                     )}
                     {icerikAcikId === s.id && (
                       <tr>
-                        <td colSpan={9} style={{ padding: '12px 16px', background: 'var(--zemin)' }}>
+                        <td colSpan={10} style={{ padding: '12px 16px', background: 'var(--zemin)' }}>
                           <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Sipariş içeriği</div>
                           {(s.urunler || []).length === 0 ? (
                             <div style={{ fontSize: 13, color: 'var(--metin-soluk)' }}>Bu siparişte ürün bulunamadı.</div>
@@ -924,7 +996,7 @@ export default function SiparislerSayfasi() {
                     )}
                     {durumDegistirAcikId === s.id && (
                       <tr>
-                        <td colSpan={9} style={{ padding: '12px 16px', background: 'var(--zemin)' }}>
+                        <td colSpan={10} style={{ padding: '12px 16px', background: 'var(--zemin)' }}>
                           <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
                             <div style={{ flex: 1, maxWidth: 220 }}>
                               <Alan etiket="Yeni durum">
@@ -951,7 +1023,7 @@ export default function SiparislerSayfasi() {
                     )}
                     {belgeAcik?.siparisId === s.id && (
                       <tr>
-                        <td colSpan={9} style={{ padding: '12px 16px', background: 'var(--zemin)' }}>
+                        <td colSpan={10} style={{ padding: '12px 16px', background: 'var(--zemin)' }}>
                           <BelgeSablonu
                             onKapat={() => setBelgeAcik(null)}
                             belgeBasligi={`Sipariş Formu${belgeAcik.nusha === 'tedarikci' ? ' (Tedarikçi Nüshası)' : ' (Şirket İçi)'}`}
