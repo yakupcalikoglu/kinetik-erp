@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api, hataMesajiCikar } from '../api/client';
 import {
   Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, BosDurum, paraFormat, Etiket,
+  CizgiGrafik, BarGrafik,
 } from '../components/Ortak';
 
 const HAREKET_TURLERI = [
@@ -284,6 +285,14 @@ function NakitAkisTahminiKarti() {
             <div style={{ fontSize: 11.5, color: 'var(--metin-ikincil)' }}>Mevcut Kasa + Banka Bakiyesi (TL)</div>
             <div style={{ fontSize: 20, fontWeight: 700 }}>{paraFormat(veri.mevcut_bakiye_try)}</div>
           </div>
+          <div style={{ marginBottom: 20 }}>
+            <BarGrafik
+              veri={[
+                { etiket: 'Şimdi', deger: Number(veri.mevcut_bakiye_try) },
+                ...veri.satirlar.map((s) => ({ etiket: `${s.gun} gün`, deger: Number(s.tahmini_bakiye_try) })),
+              ]}
+            />
+          </div>
           <table>
             <thead>
               <tr style={{ background: 'var(--zemin)' }}>
@@ -493,6 +502,22 @@ function AylikNetKarKarti() {
       ) : veri.length === 0 ? (
         <BosDurum baslik="Henüz veri yok" />
       ) : (
+        <>
+          <div style={{ marginBottom: 20 }}>
+            <CizgiGrafik
+              veri={[...veri].reverse().map((s) => ({
+                etiket: ayAdiGoster(s.ay).split(' ')[0].slice(0, 3),
+                gelir: Number(s.stok_satis_kari) + Number(s.demirbas_satis_kari) + Number(s.yedek_parca_kari) + Number(s.bakim_geliri) + Number(s.kira_geliri),
+                gider: Number(s.bakim_gideri) + Number(s.personel_gideri) + Number(s.diger_gider),
+                netKar: Number(s.net_kar),
+              }))}
+              cizgiler={[
+                { alan: 'gelir', renk: 'var(--yesil, #1c7c4c)', ad: 'Gelir' },
+                { alan: 'gider', renk: 'var(--kirmizi, #c0392b)', ad: 'Gider' },
+                { alan: 'netKar', renk: 'var(--lacivert, #1e3a6e)', ad: 'Net Kâr' },
+              ]}
+            />
+          </div>
         <table>
           <thead>
             <tr style={{ background: 'var(--zemin)' }}>
@@ -519,6 +544,7 @@ function AylikNetKarKarti() {
             ))}
           </tbody>
         </table>
+        </>
       )}
     </Kart>
   );
