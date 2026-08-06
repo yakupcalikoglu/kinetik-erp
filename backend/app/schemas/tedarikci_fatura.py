@@ -48,7 +48,9 @@ class TedarikciFaturaOdemeYanit(BaseModel):
     kur: Decimal
     dagitim_tipi: str
     siparis_id: int | None
+    siparis_no: str | None = None      # backend'de doldurulur
     stok_seri_no_id: int | None
+    seri_no: str | None = None         # backend'de doldurulur
     maliyet_tipi: str
 
     class Config:
