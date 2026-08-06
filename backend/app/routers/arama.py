@@ -9,6 +9,7 @@ from app.models.cari import CariHesap
 from app.models.stok import Siparis, StokSeriNo, StokKarti
 from app.models.demirbas import Demirbas
 from app.models.yedek_parca import YedekParca
+from app.models.tedarikci_fatura import TedarikciFaturasi
 
 router = APIRouter(prefix="/arama", tags=["Genel Arama"])
 
@@ -100,6 +101,18 @@ def genel_arama(
         sonuclar.append(AramaSonucu(
             tur="YEDEK_PARCA", id=p.id, baslik=p.ad,
             alt_baslik=f"{p.mevcut_miktar} {p.birim}", yol="/yedek-parcalar",
+        ))
+
+    tedarikci_faturalari = list(db.execute(
+        select(TedarikciFaturasi).where(
+            TedarikciFaturasi.sirket_id == sirket_id, TedarikciFaturasi.fatura_no.ilike(q_like),
+        ).limit(8)
+    ).scalars())
+    for f in tedarikci_faturalari:
+        cari = db.get(CariHesap, f.tedarikci_cari_id)
+        sonuclar.append(AramaSonucu(
+            tur="TEDARIKCI_FATURA", id=f.id, baslik=f.fatura_no or f"#{f.id}",
+            alt_baslik=cari.unvan if cari else None, yol="/tedarikci-faturalari",
         ))
 
     return sonuclar
