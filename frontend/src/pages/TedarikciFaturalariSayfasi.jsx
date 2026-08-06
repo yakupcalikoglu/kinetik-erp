@@ -244,6 +244,16 @@ export default function TedarikciFaturalariSayfasi() {
     }
   }
 
+  async function odemeGeriAl(odeme) {
+    if (!(await ozelOnayIste('Bu ödemeyi geri almak istediğinize emin misiniz? Oluşan Kasa/Banka hareketi VE ilgili ürüne yansıyan maliyet kalemi silinecek.'))) return;
+    try {
+      await api.put(`/tedarikci-faturalari/odemeler/${odeme.id}/geri-al`);
+      yukle();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    }
+  }
+
   function satirSecimiDegistir(id) {
     setSecilenIdler((s) => {
       const yeni = new Set(s);
@@ -407,7 +417,7 @@ export default function TedarikciFaturalariSayfasi() {
                           <table>
                             <thead>
                               <tr>
-                                {['Tarih', 'Tutar', 'Yöntem', 'Dağıtım', 'Maliyet Tipi'].map((b) => (
+                                {['Tarih', 'Tutar', 'Yöntem', 'Dağıtım', 'Nereye', 'Maliyet Tipi', 'İşlem'].map((b) => (
                                   <th key={b} style={{ textAlign: 'left', padding: '6px 8px', fontSize: 11.5, color: 'var(--metin-ikincil)' }}>{b}</th>
                                 ))}
                               </tr>
@@ -419,7 +429,13 @@ export default function TedarikciFaturalariSayfasi() {
                                   <td style={{ padding: '6px 8px', fontSize: 12.5 }}>{paraFormat(o.tutar, f.para_birimi)}</td>
                                   <td style={{ padding: '6px 8px', fontSize: 12.5 }}>{o.odeme_yontemi === 'BANKA' ? 'Banka' : 'Kasa'}</td>
                                   <td style={{ padding: '6px 8px', fontSize: 12.5 }}>{o.dagitim_tipi === 'SIPARIS' ? 'Sipariş (orantılı)' : 'Tek ürün'}</td>
+                                  <td style={{ padding: '6px 8px', fontSize: 12.5, fontWeight: 500 }}>
+                                    {o.dagitim_tipi === 'SIPARIS' ? (o.siparis_no || `#${o.siparis_id}`) : (o.seri_no || `#${o.stok_seri_no_id}`)}
+                                  </td>
                                   <td style={{ padding: '6px 8px', fontSize: 12.5 }}>{MALIYET_TIP_METIN[o.maliyet_tipi] || o.maliyet_tipi}</td>
+                                  <td style={{ padding: '6px 8px', fontSize: 12.5 }}>
+                                    <button onClick={() => odemeGeriAl(o)} style={eylemChipStili('kirmizi')}>Geri Al</button>
+                                  </td>
                                 </tr>
                               ))}
                             </tbody>
