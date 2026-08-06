@@ -539,8 +539,10 @@ function SiparisOdemeleriPaneli({ siparis, onKapat }) {
 const BEKLENEN_MALIYET_KATEGORILERI = [
   { anahtar: 'satinalma_maliyeti_try', tip: 'SATINALMA', ad: 'Satınalma (mal bedeli)' },
   { anahtar: 'nakliye_maliyeti_try', tip: 'NAKLIYE', ad: 'Nakliye / Navlun / Sigorta / İç Nakliye' },
-  { anahtar: 'gumruk_maliyeti_try', tip: 'GUMRUK', ad: 'Gümrük Vergisi ve Masrafları' },
+  { anahtar: 'gumruk_maliyeti_try', tip: 'GUMRUK', ad: 'Gümrük Vergisi' },
+  { anahtar: 'ilave_gumruk_vergisi_try', tip: 'ILAVE_GUMRUK_VERGISI', ad: 'İlave Gümrük Vergisi' },
   { anahtar: 'antrepo_maliyeti_try', tip: 'ANTREPO', ad: 'Antrepo (Beyanname, İndirme, Ardiye)' },
+  { anahtar: 'millilestirme_maliyeti_try', tip: 'MILLILESTIRME', ad: 'Millileştirme' },
 ];
 
 // Bir siparisteki TUM urunlerin maliyet ozet sutunlarini TOPLAYIP, hangi
