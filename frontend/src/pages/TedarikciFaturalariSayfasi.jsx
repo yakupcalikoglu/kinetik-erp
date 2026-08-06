@@ -1,6 +1,7 @@
 import { useEffect, useState, Fragment } from 'react';
 import { api, hataMesajiCikar, ozelOnayIste } from '../api/client';
-import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, BosDurum, paraFormat, eylemChipStili, ParaGirdisi, TabloIskeleti, MALIYET_TIP_METIN } from '../components/Ortak';
+import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, BosDurum, paraFormat, eylemChipStili, ParaGirdisi, TabloIskeleti, MALIYET_TIP_METIN, DahaFazlaMenu, useTarihGruplama, YilBasligi, AyBasligi } from '../components/Ortak';
+import { excelIndir } from '../utils/disaAktarma';
 import AramaliSecici from '../components/AramaliSecici';
 
 function YeniFaturaFormu({ onKaydedildi, onVazgec }) {
@@ -222,6 +223,7 @@ export default function TedarikciFaturalariSayfasi() {
   const [formAcik, setFormAcik] = useState(false);
   const [odemeAcikId, setOdemeAcikId] = useState(null);
   const [detayAcikId, setDetayAcikId] = useState(null);
+  const [secilenIdler, setSecilenIdler] = useState(new Set());
 
   function yukle() {
     setYukleniyor(true);
@@ -242,6 +244,47 @@ export default function TedarikciFaturalariSayfasi() {
     }
   }
 
+  function satirSecimiDegistir(id) {
+    setSecilenIdler((s) => {
+      const yeni = new Set(s);
+      if (yeni.has(id)) yeni.delete(id); else yeni.add(id);
+      return yeni;
+    });
+  }
+
+  async function topluSil() {
+    if (!(await ozelOnayIste(`${secilenIdler.size} faturayı silmek istediğinize emin misiniz?`))) return;
+    setHata(null);
+    let basarili = 0;
+    const basarisizlar = [];
+    for (const id of secilenIdler) {
+      try {
+        await api.delete(`/tedarikci-faturalari/${id}`);
+        basarili += 1;
+      } catch (err) {
+        basarisizlar.push(id);
+      }
+    }
+    setSecilenIdler(new Set());
+    yukle();
+    if (basarisizlar.length > 0) {
+      setHata(`${basarili} fatura silindi, ${basarisizlar.length} fatura silinemedi (muhtemelen ödemesi olan faturalar önce ödemeleri geri almanızı gerektirir).`);
+    }
+  }
+
+  function secilenleriExceleAktar() {
+    const secilenFaturalar = faturalar.filter((f) => secilenIdler.has(f.id));
+    excelIndir(
+      secilenFaturalar.map((f) => ({
+        'Firma': f.tedarikci_unvan || '', 'Fatura No': f.fatura_no || '', 'Masraf Türü': MALIYET_TIP_METIN[f.varsayilan_maliyet_tipi] || f.varsayilan_maliyet_tipi,
+        'Tarih': f.tarih, 'Tutar': Number(f.tutar), 'Ödenen': Number(f.toplam_odenen), 'Kalan': Number(f.kalan_bakiye), 'Para Birimi': f.para_birimi,
+      })),
+      'secilen_tedarikci_faturalari', 'Faturalar',
+    );
+  }
+
+  const tarihGrup = useTarihGruplama(faturalar, 'tarih');
+
   return (
     <div>
       <SayfaBasligi
@@ -254,6 +297,17 @@ export default function TedarikciFaturalariSayfasi() {
       <HataMesaji>{hata}</HataMesaji>
       {formAcik && <YeniFaturaFormu onKaydedildi={() => { setFormAcik(false); yukle(); }} onVazgec={() => setFormAcik(false)} />}
 
+      {secilenIdler.size > 0 && (
+        <Kart style={{ marginBottom: 12, background: 'var(--zemin)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px' }}>
+          <span style={{ fontSize: 13, fontWeight: 500 }}>{secilenIdler.size} fatura seçili</span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Buton variant="ikincil" onClick={secilenleriExceleAktar}>Excel'e Aktar</Buton>
+            <Buton variant="tehlike" onClick={topluSil}>Seçilenleri Sil</Buton>
+            <Buton variant="ikincil" onClick={() => setSecilenIdler(new Set())}>Seçimi Temizle</Buton>
+          </div>
+        </Kart>
+      )}
+
       <Kart style={{ padding: 0 }}>
         {yukleniyor ? (
           <TabloIskeleti sutunSayisi={6} />
@@ -263,15 +317,52 @@ export default function TedarikciFaturalariSayfasi() {
           <table>
             <thead>
               <tr style={{ background: 'var(--zemin)' }}>
+                <th style={{ padding: '10px 16px', width: 32 }}>
+                  <input
+                    type="checkbox"
+                    checked={faturalar.length > 0 && faturalar.every((f) => secilenIdler.has(f.id))}
+                    onChange={(e) => {
+                      if (e.target.checked) setSecilenIdler(new Set(faturalar.map((f) => f.id)));
+                      else setSecilenIdler(new Set());
+                    }}
+                  />
+                </th>
                 {['Firma', 'Fatura No', 'Masraf Türü', 'Tarih', 'Tutar', 'Ödenen', 'Kalan', 'İşlem'].map((b) => (
                   <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {faturalar.map((f) => (
+              {tarihGrup.yillar.map((yil) => (
+                <Fragment key={yil}>
+                  <tr>
+                    <td colSpan={9} style={{ padding: 0 }}>
+                      <YilBasligi
+                        yil={yil}
+                        kayitSayisi={Object.values(tarihGrup.gruplar[yil]).flat().length}
+                        acik={tarihGrup.acikYillar.has(yil)}
+                        onTikla={() => tarihGrup.yilAcKapat(yil)}
+                      />
+                    </td>
+                  </tr>
+                  {tarihGrup.acikYillar.has(yil) && Object.keys(tarihGrup.gruplar[yil]).sort().reverse().map((ayAnahtari) => (
+                    <Fragment key={ayAnahtari}>
+                      <tr>
+                        <td colSpan={9} style={{ padding: 0 }}>
+                          <AyBasligi
+                            ayAnahtari={ayAnahtari}
+                            kayitSayisi={tarihGrup.gruplar[yil][ayAnahtari].length}
+                            acik={tarihGrup.acikAylar.has(ayAnahtari)}
+                            onTikla={() => tarihGrup.ayAcKapat(ayAnahtari)}
+                          />
+                        </td>
+                      </tr>
+                      {tarihGrup.acikAylar.has(ayAnahtari) && tarihGrup.gruplar[yil][ayAnahtari].map((f) => (
                 <Fragment key={f.id}>
-                  <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                  <tr style={{ borderTop: '1px solid var(--kenarlik)', background: secilenIdler.has(f.id) ? 'var(--zemin)' : 'transparent' }}>
+                    <td style={{ padding: '12px 16px' }}>
+                      <input type="checkbox" checked={secilenIdler.has(f.id)} onChange={() => satirSecimiDegistir(f.id)} />
+                    </td>
                     <td style={{ padding: '12px 16px', fontWeight: 500 }}>{f.tedarikci_unvan || `#${f.tedarikci_cari_id}`}</td>
                     <td style={{ padding: '12px 16px' }}>{f.fatura_no || '—'}</td>
                     <td style={{ padding: '12px 16px' }}>{MALIYET_TIP_METIN[f.varsayilan_maliyet_tipi] || f.varsayilan_maliyet_tipi}</td>
@@ -282,22 +373,22 @@ export default function TedarikciFaturalariSayfasi() {
                       {paraFormat(f.kalan_bakiye, f.para_birimi)}
                     </td>
                     <td style={{ padding: '12px 16px' }}>
-                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                         {Number(f.kalan_bakiye) > 0 && (
                           <button onClick={() => setOdemeAcikId((m) => (m === f.id ? null : f.id))} style={eylemChipStili('yesil')}>
                             {odemeAcikId === f.id ? 'Kapat' : 'Öde'}
                           </button>
                         )}
-                        <button onClick={() => setDetayAcikId((m) => (m === f.id ? null : f.id))} style={eylemChipStili('lacivert')}>
-                          {detayAcikId === f.id ? 'Kapat' : 'Ödeme Geçmişi'}
-                        </button>
-                        <button onClick={() => sil(f)} style={eylemChipStili('kirmizi')}>Sil</button>
+                        <DahaFazlaMenu kompakt ogeler={[
+                          { etiket: detayAcikId === f.id ? 'Ödeme Geçmişini Kapat' : 'Ödeme Geçmişi', onClick: () => setDetayAcikId((m) => (m === f.id ? null : f.id)) },
+                          { etiket: 'Sil', onClick: () => sil(f) },
+                        ]} />
                       </div>
                     </td>
                   </tr>
                   {odemeAcikId === f.id && (
                     <tr>
-                      <td colSpan={8} style={{ padding: '0 16px 12px' }}>
+                      <td colSpan={9} style={{ padding: '0 16px 12px' }}>
                         <OdemeFormu
                           fatura={f}
                           kalanBakiye={f.kalan_bakiye}
@@ -309,7 +400,7 @@ export default function TedarikciFaturalariSayfasi() {
                   )}
                   {detayAcikId === f.id && (
                     <tr>
-                      <td colSpan={8} style={{ padding: '0 16px 12px', background: 'var(--zemin)' }}>
+                      <td colSpan={9} style={{ padding: '0 16px 12px', background: 'var(--zemin)' }}>
                         {(!f.odemeler || f.odemeler.length === 0) ? (
                           <div style={{ fontSize: 12.5, color: 'var(--metin-soluk)', padding: '10px 0' }}>Henüz ödeme yapılmamış.</div>
                         ) : (
@@ -337,6 +428,10 @@ export default function TedarikciFaturalariSayfasi() {
                       </td>
                     </tr>
                   )}
+                </Fragment>
+              ))}
+                    </Fragment>
+                  ))}
                 </Fragment>
               ))}
             </tbody>
