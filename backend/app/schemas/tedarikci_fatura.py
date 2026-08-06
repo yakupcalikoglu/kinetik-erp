@@ -13,6 +13,7 @@ class TedarikciFaturaOlusturIstegi(BaseModel):
     tutar: Decimal
     para_birimi: str = "TRY"
     aciklama: str | None = None
+    varsayilan_maliyet_tipi: str = "DIGER"
 
 
 class TedarikciFaturaGuncelleIstegi(BaseModel):
@@ -63,6 +64,7 @@ class TedarikciFaturaYanit(BaseModel):
     tutar: Decimal
     para_birimi: str
     aciklama: str | None
+    varsayilan_maliyet_tipi: str
     toplam_odenen: Decimal = Decimal("0")  # backend'de hesaplanir
     kalan_bakiye: Decimal = Decimal("0")   # backend'de hesaplanir
     odemeler: list[TedarikciFaturaOdemeYanit] = []
