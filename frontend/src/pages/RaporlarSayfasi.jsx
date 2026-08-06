@@ -1048,11 +1048,89 @@ function CariRaporu() {
   );
 }
 
+
+const EKSIK_MALIYET_KATEGORILERI = [
+  { anahtar: 'satinalma_maliyeti_try', ad: 'Satınalma' },
+  { anahtar: 'nakliye_maliyeti_try', ad: 'Nakliye/Navlun' },
+  { anahtar: 'gumruk_maliyeti_try', ad: 'Gümrük' },
+  { anahtar: 'antrepo_maliyeti_try', ad: 'Antrepo' },
+];
+
+// Tum acik siparisleri tarar, her biri icin BEKLENEN maliyet kategorilerinden
+// hangisi HIC girilmemis (toplam sifir) - siparisleri tek tek acmadan,
+// "hangi sevkiyatta unutulmus masraf var" sorusuna tek ekranda cevap verir.
+function EksikMaliyetRaporu() {
+  const [satirlar, setSatirlar] = useState(null);
+  const [hata, setHata] = useState(null);
+
+  useEffect(() => {
+    Promise.all([api.get('/siparisler'), api.get('/stok-seri-no')])
+      .then(([sipRes, urunRes]) => {
+        const siparisler = sipRes.data.filter((s) => ['ONAYLANDI', 'YOLDA', 'GUMRUKTE'].includes(s.durum));
+        const urunHaritasi = {};
+        urunRes.data.forEach((u) => {
+          if (u.siparis_id == null) return;
+          (urunHaritasi[u.siparis_id] ||= []).push(u);
+        });
+        const sonuc = siparisler
+          .map((s) => {
+            const urunler = urunHaritasi[s.id] || [];
+            if (urunler.length === 0) return null; // henuz teslim alinmamis, kontrol edilecek bir sey yok
+            const eksikler = EKSIK_MALIYET_KATEGORILERI.filter(
+              ({ anahtar }) => urunler.reduce((acc, u) => acc + Number(u[anahtar] || 0), 0) === 0
+            );
+            if (eksikler.length === 0) return null;
+            return { siparis: s, eksikler };
+          })
+          .filter(Boolean);
+        setSatirlar(sonuc);
+      })
+      .catch((e) => setHata(hataMesajiCikar(e)));
+  }, []);
+
+  return (
+    <Kart style={{ marginBottom: 20 }}>
+      <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>Eksik Maliyet Raporu</div>
+      <div style={{ fontSize: 12.5, color: 'var(--metin-ikincil)', marginBottom: 14 }}>
+        Teslim alınmış ama bazı maliyet kategorileri hiç girilmemiş açık siparişler.
+      </div>
+      <HataMesaji>{hata}</HataMesaji>
+      {satirlar === null ? (
+        <div style={{ color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
+      ) : satirlar.length === 0 ? (
+        <BosDurum baslik="Eksik maliyet kalemi bulunamadı" aciklama="Tüm açık siparişlerde beklenen maliyet kategorileri girilmiş görünüyor." />
+      ) : (
+        <table>
+          <thead>
+            <tr style={{ background: 'var(--zemin)' }}>
+              {['Sipariş No', 'Durum', 'Eksik Kategoriler'].map((b) => (
+                <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {satirlar.map(({ siparis, eksikler }) => (
+              <tr key={siparis.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                <td style={{ padding: '10px 16px', fontWeight: 500 }}>{siparis.siparis_no}</td>
+                <td style={{ padding: '10px 16px' }}><Etiket ton="amber">{siparis.durum}</Etiket></td>
+                <td style={{ padding: '10px 16px', color: 'var(--kirmizi)' }}>
+                  {eksikler.map((e) => e.ad).join(', ')}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </Kart>
+  );
+}
+
 export default function RaporlarSayfasi() {
   return (
     <div>
       <SayfaBasligi baslik="Raporlar" aciklama="Genel bakış, yaklaşan vadeler, envanter, hareket türü, ürün ve cari bazlı raporlar" />
       <GenelBakisKarti />
+      <EksikMaliyetRaporu />
       <YillikKarsilastirmaKarti />
       <AylikNetKarKarti />
       <NakitAkisTahminiKarti />
