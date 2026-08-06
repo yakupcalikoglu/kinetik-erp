@@ -1605,6 +1605,7 @@ function KalemTaksitPaneli({ kalem, akreditif, onKapat }) {
 function AkreditifSekmesi() {
   const [liste, setListe] = useState([]);
   const siralama = useSiralama();
+  const cariHaritasi = useCariHaritasi();
   const [siparisler, setSiparisler] = useState([]);
   const [bankaHesaplari, setBankaHesaplari] = useState([]);
   const [formAcik, setFormAcik] = useState(false);
@@ -1743,7 +1744,9 @@ function AkreditifSekmesi() {
 
   function siparisEtiketi(id) {
     const s = siparisler.find((x) => x.id === id);
-    return s ? s.siparis_no : `#${id}`;
+    if (!s) return `#${id}`;
+    const tedarikciAdi = cariHaritasi[s.tedarikci_cari_id];
+    return tedarikciAdi ? `${s.siparis_no} — ${tedarikciAdi}` : s.siparis_no;
   }
 
   function bankaEtiketi(id) {
