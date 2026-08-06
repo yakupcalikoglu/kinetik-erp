@@ -2,7 +2,7 @@ import { useEffect, useState, Fragment } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, hataMesajiCikar, ozelOnayIste, ozelPrompt } from '../api/client';
-import { Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat, eylemChipStili, ParaGirdisi, useKademelıGoster, DahaFazlaGosterButonu, DahaFazlaMenu, TabloIskeleti } from '../components/Ortak';
+import { Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat, eylemChipStili, ParaGirdisi, useKademelıGoster, DahaFazlaGosterButonu, DahaFazlaMenu, TabloIskeleti, MALIYET_TIP_METIN, ManuelMaliyetKalemiEkleFormu } from '../components/Ortak';
 import { excelIndir } from '../utils/disaAktarma';
 import BelgeSablonu from '../components/BelgeSablonu';
 import AramaliSecici from '../components/AramaliSecici';
@@ -71,117 +71,6 @@ const DURUM_METIN = {
 // Bu durumlar KESIN/SON durumlardir - artik hicbir islem yapilamaz.
 const SON_DURUMLAR = ['TAMAMLANDI', 'IPTAL'];
 
-const MALIYET_TIP_METIN = {
-  SATINALMA: 'Satınalma', NAKLIYE: 'Nakliye', GUMRUK: 'Gümrük', ANTREPO: 'Antrepo',
-  MILLILESTIRME: 'Millileştirme', LEASING: 'Leasing', DIGER: 'Diğer',
-};
-
-// NOT: Bu form, Stok sayfasindan buraya (Siparisler) TASINDI - dogru yer
-// burasi, ceonku maliyet kalemleri SIPARIS bazli dusunulmeli. Asagida
-// bilincli olarak "manuel/istisnai giris" olarak konumlandirildi - Faturalar
-// modulu kurulunca ANA akis "fatura kaydet -> odeme sirasinda urune dagit"
-// olacak, bu form sadece resmi bir fatura olmadan yapilan hizli/istisnai
-// maliyet girisleri icin bir yedek/manuel secenek olarak kalacak.
-function ManuelMaliyetKalemiEkleFormu({ urun, onKaydedildi, onVazgec }) {
-  const [cariler, setCariler] = useState([]);
-  const [form, setForm] = useState({
-    tip: 'NAKLIYE', tutar: '', para_birimi: 'TRY', kur: '1', referans_usd_kuru: '',
-    tedarikci_cari_id: '', belge_no: '', tarih: new Date().toISOString().slice(0, 10), aciklama: '',
-  });
-  const [hata, setHata] = useState(null);
-  const [kaydediliyor, setKaydediliyor] = useState(false);
-
-  useEffect(() => {
-    api.get('/cariler').then((r) => setCariler(r.data)).catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    if (form.para_birimi === 'TRY') {
-      setForm((f) => ({ ...f, kur: '1' }));
-      api.get('/kur/USD').then((r) => setForm((f) => ({ ...f, referans_usd_kuru: r.data.kur }))).catch(() => {});
-      return;
-    }
-    api.get(`/kur/${form.para_birimi}`).then((r) => setForm((f) => ({ ...f, kur: r.data.kur }))).catch(() => {});
-  }, [form.para_birimi]); // eslint-disable-line
-
-  async function kaydet(e) {
-    e.preventDefault();
-    setHata(null);
-    setKaydediliyor(true);
-    try {
-      await api.post(`/stok-seri-no/${urun.id}/maliyet-kalemi`, {
-        tip: form.tip,
-        tutar: Number(form.tutar),
-        para_birimi: form.para_birimi,
-        kur: Number(form.kur),
-        tedarikci_cari_id: form.tedarikci_cari_id ? Number(form.tedarikci_cari_id) : null,
-        belge_no: form.belge_no || null,
-        tarih: form.tarih,
-        aciklama: form.aciklama || null,
-        referans_usd_kuru: form.para_birimi === 'TRY' && form.referans_usd_kuru ? Number(form.referans_usd_kuru) : null,
-      });
-      onKaydedildi();
-    } catch (err) {
-      setHata(hataMesajiCikar(err));
-    } finally {
-      setKaydediliyor(false);
-    }
-  }
-
-  return (
-    <form onSubmit={kaydet} style={{ padding: 14, background: 'var(--zemin)', borderRadius: 8, marginTop: 8 }}>
-      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>
-        {urun.seri_no} — Manuel maliyet kalemi ekle
-      </div>
-      <HataMesaji>{hata}</HataMesaji>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12 }}>
-        <Alan etiket="Maliyet tipi">
-          <select value={form.tip} onChange={(e) => setForm((f) => ({ ...f, tip: e.target.value }))} style={girdiStili}>
-            {Object.entries(MALIYET_TIP_METIN).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
-        </Alan>
-        <Alan etiket="Para birimi">
-          <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={girdiStili}>
-            <option value="TRY">TRY</option>
-            <option value="USD">USD</option>
-            <option value="EUR">EUR</option>
-          </select>
-        </Alan>
-        <Alan etiket="Tutar">
-          <ParaGirdisi required value={form.tutar} onChange={(v) => setForm((f) => ({ ...f, tutar: v }))} />
-        </Alan>
-        {form.para_birimi !== 'TRY' ? (
-          <Alan etiket="Kur (otomatik, elle değiştirilebilir)">
-            <input required type="number" step="0.0001" value={form.kur} onChange={(e) => setForm((f) => ({ ...f, kur: e.target.value }))} style={girdiStili} />
-          </Alan>
-        ) : (
-          <Alan etiket="O günkü USD kuru (opsiyonel)">
-            <input type="number" step="0.0001" value={form.referans_usd_kuru} onChange={(e) => setForm((f) => ({ ...f, referans_usd_kuru: e.target.value }))} style={girdiStili} />
-          </Alan>
-        )}
-        <Alan etiket="Tedarikçi/firma (opsiyonel)">
-          <select value={form.tedarikci_cari_id} onChange={(e) => setForm((f) => ({ ...f, tedarikci_cari_id: e.target.value }))} style={girdiStili}>
-            <option value="">Seçin...</option>
-            {cariler.map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
-          </select>
-        </Alan>
-        <Alan etiket="Belge/fatura no">
-          <input value={form.belge_no} onChange={(e) => setForm((f) => ({ ...f, belge_no: e.target.value }))} style={girdiStili} />
-        </Alan>
-        <Alan etiket="Tarih">
-          <input required type="date" value={form.tarih} onChange={(e) => setForm((f) => ({ ...f, tarih: e.target.value }))} style={girdiStili} />
-        </Alan>
-        <Alan etiket="Açıklama">
-          <input value={form.aciklama} onChange={(e) => setForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
-        </Alan>
-      </div>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Kaydediliyor...' : 'Kaydet'}</Buton>
-        <Buton type="button" variant="ikincil" onClick={onVazgec}>Vazgeç</Buton>
-      </div>
-    </form>
-  );
-}
 
 // Siparise (tedarikciye) yapilan avans/ara/kapama odemelerini yonetir.
 // Stok maliyeti hesabindan BAGIMSIZDIR - sadece nakit akisini/kalan bakiyeyi takip eder.
@@ -648,16 +537,19 @@ function SiparisOdemeleriPaneli({ siparis, onKapat }) {
 
 
 const BEKLENEN_MALIYET_KATEGORILERI = [
-  { anahtar: 'satinalma_maliyeti_try', ad: 'Satınalma (mal bedeli)' },
-  { anahtar: 'nakliye_maliyeti_try', ad: 'Nakliye / Navlun / Sigorta / İç Nakliye' },
-  { anahtar: 'gumruk_maliyeti_try', ad: 'Gümrük Vergisi ve Masrafları' },
-  { anahtar: 'antrepo_maliyeti_try', ad: 'Antrepo (Beyanname, İndirme, Ardiye)' },
+  { anahtar: 'satinalma_maliyeti_try', tip: 'SATINALMA', ad: 'Satınalma (mal bedeli)' },
+  { anahtar: 'nakliye_maliyeti_try', tip: 'NAKLIYE', ad: 'Nakliye / Navlun / Sigorta / İç Nakliye' },
+  { anahtar: 'gumruk_maliyeti_try', tip: 'GUMRUK', ad: 'Gümrük Vergisi ve Masrafları' },
+  { anahtar: 'antrepo_maliyeti_try', tip: 'ANTREPO', ad: 'Antrepo (Beyanname, İndirme, Ardiye)' },
 ];
 
 // Bir siparisteki TUM urunlerin maliyet ozet sutunlarini TOPLAYIP, hangi
 // kategorinin HENUZ HIC girilmedigini (toplam sifir) gosteren kontrol
 // listesi - "hangi masraf unutulmus" sorusuna hizli bir bakista cevap verir.
-function MaliyetKontrolListesi({ urunler }) {
+// Herhangi bir kategoriye tiklaninca, onMaliyetEkle(tip) cagrilir - sayfa
+// bunu kullanarak asagidaki "Maliyet Ekle" formunu o tip onceden secili
+// olarak acar.
+function MaliyetKontrolListesi({ urunler, onMaliyetEkle }) {
   const toplamlar = {};
   BEKLENEN_MALIYET_KATEGORILERI.forEach(({ anahtar }) => {
     toplamlar[anahtar] = urunler.reduce((acc, u) => acc + Number(u[anahtar] || 0), 0);
@@ -670,10 +562,15 @@ function MaliyetKontrolListesi({ urunler }) {
         Maliyet Kalemi Kontrolü {eksikSayisi > 0 ? `— ${eksikSayisi} kalem eksik olabilir` : '— tüm kategoriler girilmiş'}
       </div>
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 12 }}>
-        {BEKLENEN_MALIYET_KATEGORILERI.map(({ anahtar, ad }) => (
-          <div key={anahtar} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+        {BEKLENEN_MALIYET_KATEGORILERI.map(({ anahtar, tip, ad }) => (
+          <div
+            key={anahtar}
+            onClick={() => onMaliyetEkle(tip)}
+            title="Bu kalemi eklemek için tıklayın"
+            style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}
+          >
             <span>{toplamlar[anahtar] > 0 ? '✅' : '⚠️'}</span>
-            <span style={{ color: 'var(--metin-ikincil)' }}>{ad}</span>
+            <span style={{ color: 'var(--metin-ikincil)', textDecoration: toplamlar[anahtar] === 0 ? 'underline' : 'none' }}>{ad}</span>
             {toplamlar[anahtar] > 0 && <strong>({paraFormat(toplamlar[anahtar])})</strong>}
           </div>
         ))}
@@ -717,6 +614,7 @@ export default function SiparislerSayfasi() {
   const [akreditifHaritasi, setAkreditifHaritasi] = useState({}); // siparisId -> akreditif
   const [siparisUrunleriHaritasi, setSiparisUrunleriHaritasi] = useState({}); // siparisId -> StokSeriNo[]
   const [maliyetAcikUrunId, setMaliyetAcikUrunId] = useState(null);
+  const [maliyetVarsayilanTip, setMaliyetVarsayilanTip] = useState('NAKLIYE');
 
   // Icerik acildiginda, o siparise ait TESLIM ALINMIS (StokSeriNo) urunleri
   // henuz cekilmediyse getir - "Maliyet Ekle" butonlari icin gerekli.
@@ -1153,7 +1051,13 @@ export default function SiparislerSayfasi() {
 
                           {siparisUrunleriHaritasi[s.id] && siparisUrunleriHaritasi[s.id].length > 0 && (
                             <div style={{ marginTop: 12 }}>
-                              <MaliyetKontrolListesi urunler={siparisUrunleriHaritasi[s.id]} />
+                              <MaliyetKontrolListesi
+                                urunler={siparisUrunleriHaritasi[s.id]}
+                                onMaliyetEkle={(tip) => {
+                                  setMaliyetVarsayilanTip(tip);
+                                  setMaliyetAcikUrunId(siparisUrunleriHaritasi[s.id][0]?.id ?? null);
+                                }}
+                              />
                               <div style={{ fontWeight: 600, fontSize: 12.5, marginBottom: 6, marginTop: 14 }}>
                                 Teslim Alınmış Ürünler — Maliyet Kalemi Ekle (manuel/istisnai giriş)
                               </div>
@@ -1161,7 +1065,7 @@ export default function SiparislerSayfasi() {
                                 <div key={u.id} style={{ marginBottom: 6 }}>
                                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', background: 'white', border: '1px solid var(--kenarlik)', borderRadius: 6 }}>
                                     <span style={{ fontSize: 12.5 }}>
-                                      {u.seri_no} — Toplam maliyet: <strong>{paraFormat(u.toplam_maliyet_try)}</strong>
+                                      {urunAdi(u.stok_karti_id)} — {u.seri_no} — Toplam maliyet: <strong>{paraFormat(u.toplam_maliyet_try)}</strong>
                                     </span>
                                     <button
                                       onClick={() => setMaliyetAcikUrunId((mevcut) => (mevcut === u.id ? null : u.id))}
@@ -1172,7 +1076,9 @@ export default function SiparislerSayfasi() {
                                   </div>
                                   {maliyetAcikUrunId === u.id && (
                                     <ManuelMaliyetKalemiEkleFormu
+                                      key={maliyetVarsayilanTip}
                                       urun={u}
+                                      varsayilanTip={maliyetVarsayilanTip}
                                       onKaydedildi={() => {
                                         setMaliyetAcikUrunId(null);
                                         api.get('/stok-seri-no', { params: { siparis_id: s.id } })
