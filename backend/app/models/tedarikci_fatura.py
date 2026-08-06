@@ -29,6 +29,10 @@ class TedarikciFaturasi(Base):
     tutar = Column(Numeric(18, 2), nullable=False)
     para_birimi = Column(SAEnum(ParaBirimi, name="para_birimi_t"), nullable=False, default=ParaBirimi.TRY)
     aciklama = Column(Text)
+    # Faturanin HANGI masraf turu oldugu (navlun, antrepo, gumruk vb.) -
+    # fatura KAYDEDILIRKEN secilir; odeme aninda varsayilan olarak bu deger
+    # onerilir ama kullanici isterse odeme sirasinda degistirebilir.
+    varsayilan_maliyet_tipi = Column(SAEnum(MaliyetTip, name="maliyet_tip_t"), nullable=False, default=MaliyetTip.DIGER)
     olusturma_tarihi = Column(DateTime, server_default=func.now())
 
 
