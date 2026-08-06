@@ -1,18 +1,13 @@
 import { useEffect, useState, Fragment } from 'react';
 import { api, hataMesajiCikar, ozelOnayIste } from '../api/client';
-import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, BosDurum, paraFormat, eylemChipStili, ParaGirdisi, TabloIskeleti } from '../components/Ortak';
+import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, BosDurum, paraFormat, eylemChipStili, ParaGirdisi, TabloIskeleti, MALIYET_TIP_METIN } from '../components/Ortak';
 import AramaliSecici from '../components/AramaliSecici';
-
-const MALIYET_TIP_METIN = {
-  SATINALMA: 'Satınalma', NAKLIYE: 'Nakliye/Navlun', GUMRUK: 'Gümrük',
-  ANTREPO: 'Antrepo', MILLILESTIRME: 'Millileştirme', LEASING: 'Leasing', DIGER: 'Diğer',
-};
 
 function YeniFaturaFormu({ onKaydedildi, onVazgec }) {
   const [cariler, setCariler] = useState([]);
   const [form, setForm] = useState({
     tedarikci_cari_id: '', fatura_no: '', tarih: new Date().toISOString().slice(0, 10),
-    tutar: '', para_birimi: 'TRY', aciklama: '',
+    tutar: '', para_birimi: 'TRY', aciklama: '', varsayilan_maliyet_tipi: 'DIGER',
   });
   const [hata, setHata] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
@@ -31,6 +26,7 @@ function YeniFaturaFormu({ onKaydedildi, onVazgec }) {
         tutar: Number(form.tutar),
         para_birimi: form.para_birimi,
         aciklama: form.aciklama || null,
+        varsayilan_maliyet_tipi: form.varsayilan_maliyet_tipi,
       });
       onKaydedildi();
     } catch (err) {
@@ -67,6 +63,11 @@ function YeniFaturaFormu({ onKaydedildi, onVazgec }) {
               <option value="EUR">EUR</option>
             </select>
           </Alan>
+          <Alan etiket="Bu fatura hangi masraf türü? (navlun, antrepo, gümrük vb.)">
+            <select value={form.varsayilan_maliyet_tipi} onChange={(e) => setForm((f) => ({ ...f, varsayilan_maliyet_tipi: e.target.value }))} style={girdiStili}>
+              {Object.entries(MALIYET_TIP_METIN).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+          </Alan>
           <Alan etiket="Açıklama">
             <input value={form.aciklama} onChange={(e) => setForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
           </Alan>
@@ -88,7 +89,7 @@ function OdemeFormu({ fatura, kalanBakiye, onKaydedildi, onVazgec }) {
     tutar: String(kalanBakiye), odeme_tarihi: new Date().toISOString().slice(0, 10),
     odeme_yontemi: 'BANKA', banka_hesap_id: '', kur: '1',
     dagitim_tipi: 'SIPARIS', siparis_id: '', stok_seri_no_id: '',
-    maliyet_tipi: 'DIGER', aciklama: '',
+    maliyet_tipi: fatura.varsayilan_maliyet_tipi || 'DIGER', aciklama: '',
   });
   const [hata, setHata] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
@@ -262,7 +263,7 @@ export default function TedarikciFaturalariSayfasi() {
           <table>
             <thead>
               <tr style={{ background: 'var(--zemin)' }}>
-                {['Firma', 'Fatura No', 'Tarih', 'Tutar', 'Ödenen', 'Kalan', 'İşlem'].map((b) => (
+                {['Firma', 'Fatura No', 'Masraf Türü', 'Tarih', 'Tutar', 'Ödenen', 'Kalan', 'İşlem'].map((b) => (
                   <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
                 ))}
               </tr>
@@ -273,6 +274,7 @@ export default function TedarikciFaturalariSayfasi() {
                   <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
                     <td style={{ padding: '12px 16px', fontWeight: 500 }}>{f.tedarikci_unvan || `#${f.tedarikci_cari_id}`}</td>
                     <td style={{ padding: '12px 16px' }}>{f.fatura_no || '—'}</td>
+                    <td style={{ padding: '12px 16px' }}>{MALIYET_TIP_METIN[f.varsayilan_maliyet_tipi] || f.varsayilan_maliyet_tipi}</td>
                     <td style={{ padding: '12px 16px' }}>{f.tarih}</td>
                     <td style={{ padding: '12px 16px' }}>{paraFormat(f.tutar, f.para_birimi)}</td>
                     <td style={{ padding: '12px 16px', color: 'var(--yesil)' }}>{paraFormat(f.toplam_odenen, f.para_birimi)}</td>
@@ -295,7 +297,7 @@ export default function TedarikciFaturalariSayfasi() {
                   </tr>
                   {odemeAcikId === f.id && (
                     <tr>
-                      <td colSpan={7} style={{ padding: '0 16px 12px' }}>
+                      <td colSpan={8} style={{ padding: '0 16px 12px' }}>
                         <OdemeFormu
                           fatura={f}
                           kalanBakiye={f.kalan_bakiye}
@@ -307,7 +309,7 @@ export default function TedarikciFaturalariSayfasi() {
                   )}
                   {detayAcikId === f.id && (
                     <tr>
-                      <td colSpan={7} style={{ padding: '0 16px 12px', background: 'var(--zemin)' }}>
+                      <td colSpan={8} style={{ padding: '0 16px 12px', background: 'var(--zemin)' }}>
                         {(!f.odemeler || f.odemeler.length === 0) ? (
                           <div style={{ fontSize: 12.5, color: 'var(--metin-soluk)', padding: '10px 0' }}>Henüz ödeme yapılmamış.</div>
                         ) : (
