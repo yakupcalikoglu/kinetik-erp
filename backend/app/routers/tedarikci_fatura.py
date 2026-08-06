@@ -127,7 +127,13 @@ def fatura_guncelle(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Fatura bulunamadı.")
     if not sifre_dogrula(kullanici, istek.sifre):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Şifreniz yanlış.")
-    for alan, deger in istek.model_dump(exclude={"sifre"}, exclude_unset=True).items():
+    veriler = istek.model_dump(exclude={"sifre"}, exclude_unset=True)
+    if "varsayilan_maliyet_tipi" in veriler:
+        try:
+            veriler["varsayilan_maliyet_tipi"] = MaliyetTip(veriler["varsayilan_maliyet_tipi"])
+        except ValueError:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Geçersiz maliyet tipi: {veriler['varsayilan_maliyet_tipi']}")
+    for alan, deger in veriler.items():
         setattr(fatura, alan, deger)
     db.commit()
     db.refresh(fatura)
