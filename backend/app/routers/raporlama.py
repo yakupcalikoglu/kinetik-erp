@@ -1146,6 +1146,29 @@ async def net_durum(
         if kalan_try > 0:
             siparis_borc_try += kalan_try
 
+    # 14) Tedarikci/Hizmet Faturalari (navlun, gumruk, antrepo vb. - Tedarikci
+    # Faturalari modulunden) - HENUZ odenmemis kalan bakiyeleri. Bu, Sipariş'in
+    # KENDI mal bedeli borcundan (13. adim) TAMAMEN AYRI bir kalem - navlun/
+    # gumruk gibi masraflar SIPARIS'in mal bedeli DEGIL, ayrica olusan
+    # hizmet faturalaridir.
+    from app.models.tedarikci_fatura import TedarikciFaturasi, TedarikciFaturaOdemesi
+
+    tedarikci_faturalari = list(db.execute(
+        select(TedarikciFaturasi).where(TedarikciFaturasi.sirket_id == sirket_id)
+    ).scalars())
+    tedarikci_fatura_borc_try = Decimal("0")
+    for f in tedarikci_faturalari:
+        odenen = db.execute(
+            select(func.coalesce(func.sum(TedarikciFaturaOdemesi.tutar), 0))
+            .where(TedarikciFaturaOdemesi.fatura_id == f.id)
+        ).scalar_one()
+        kalan = f.tutar - odenen
+        if kalan <= 0:
+            continue
+        pb = f.para_birimi if isinstance(f.para_birimi, str) else f.para_birimi.value
+        kur = await kur_getir(pb)
+        tedarikci_fatura_borc_try += kalan * kur
+
     varliklar = [
         NetDurumKalemi(kategori="Ana Kasa (Nakit)", tutar_try=kasa_bakiye_try),
         NetDurumKalemi(kategori="Banka", tutar_try=banka_bakiye_try),
@@ -1166,6 +1189,7 @@ async def net_durum(
         NetDurumKalemi(kategori="Verilen Çekler (Portföyde)", tutar_try=cek_borc_try),
         NetDurumKalemi(kategori="Ortaktan/Dışarıdan Alınan Borç", tutar_try=ortak_borc_try),
         NetDurumKalemi(kategori="Tedarikçilere Olan Borç (Sipariş)", tutar_try=siparis_borc_try),
+        NetDurumKalemi(kategori="Tedarikçi/Hizmet Faturaları (Ödenmemiş)", tutar_try=tedarikci_fatura_borc_try),
         NetDurumKalemi(kategori="Personele Ödenmemiş Tahakkuklar", tutar_try=personel_borc_try),
         NetDurumKalemi(kategori="Ödenmemiş Diğer Giderler", tutar_try=diger_gider_borc_try),
     ]
