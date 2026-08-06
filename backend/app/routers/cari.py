@@ -613,6 +613,20 @@ def cari_tum_hareketler(
             tutar_try=0, durum=s.durum, kaynak_tablo="SIPARIS", kaynak_id=s.id,
         ))
 
+    # 7) Tedarikci/Hizmet Faturalari (bu cari faturayi KESEN firma ise)
+    from app.models.tedarikci_fatura import TedarikciFaturasi
+    tedarikci_faturalari = list(db.execute(
+        select(TedarikciFaturasi).where(TedarikciFaturasi.sirket_id == sirket_id, TedarikciFaturasi.tedarikci_cari_id == cari_id)
+    ).scalars())
+    for tf in tedarikci_faturalari:
+        pb = tf.para_birimi.value if hasattr(tf.para_birimi, "value") else tf.para_birimi
+        satirlar.append(CariHareketSatiri(
+            tarih=tf.tarih, tur="TEDARIKCI_FATURA",
+            aciklama=f"Fatura {tf.fatura_no or ('#' + str(tf.id))}" + (f" — {tf.aciklama}" if tf.aciklama else ""),
+            tutar_try=tf.tutar if pb == "TRY" else 0,
+            kaynak_tablo="TEDARIKCI_FATURA", kaynak_id=tf.id,
+        ))
+
     satirlar.sort(key=lambda s: s.tarih or date.min, reverse=True)
     return satirlar
 
