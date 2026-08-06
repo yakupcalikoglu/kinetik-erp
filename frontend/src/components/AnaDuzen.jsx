@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react';
 import {
   LayoutDashboard, Wallet, Users, Boxes, ShoppingCart, Landmark, ArrowLeftRight,
   Receipt, FileSpreadsheet, BarChart3, HandCoins, Tag, Wrench, Settings, Search,
-  Building2, Bell,
+  Building2, Bell, ClipboardList,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { api, hataMesajiCikar, basariBildirimDinle, yuklemeDurumuDinle, onayIstegiDinle, _onayYaniti, alertIstegiDinle, _alertYaniti, promptIstegiDinle, _promptYaniti } from '../api/client';
@@ -290,6 +290,7 @@ const MODUL_GRUPLARI = [
       { yol: '/cariler', ad: 'Cari', Simge: Users, gerekliIzin: 'CARI_GORUNTULE' },
       { yol: '/siparisler', ad: 'Siparişler', Simge: ShoppingCart },
       { yol: '/proforma-fatura', ad: 'Proforma / Fatura', Simge: FileSpreadsheet, gerekliIzin: 'FATURA_GORUNTULE' },
+      { yol: '/tedarikci-faturalari', ad: 'Tedarikçi Faturaları', Simge: ClipboardList, gerekliIzin: 'FATURA_GORUNTULE' },
       { yol: '/satis-yap', ad: 'Satış Yap', Simge: HandCoins, gerekliIzin: 'STOK_DUZENLE' },
     ],
   },
@@ -585,6 +586,8 @@ function GenelYuklemeCubugu() {
 
 const KISAYOLLAR = [
   { tus: '/', aciklama: 'Genel aramaya odaklan' },
+  { tus: '↓ / ↑', aciklama: 'Arama sonuçları arasında gez' },
+  { tus: 'Enter', aciklama: 'Seçili arama sonucuna git' },
   { tus: 'Esc', aciklama: 'Açık aramayı / pencereyi kapat' },
   { tus: '?', aciklama: 'Bu yardım penceresini aç/kapat' },
 ];
