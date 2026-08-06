@@ -86,6 +86,8 @@ function OdemeFormu({ fatura, kalanBakiye, onKaydedildi, onVazgec }) {
   const [siparisler, setSiparisler] = useState([]);
   const [bankaHesaplari, setBankaHesaplari] = useState([]);
   const [siparisUrunleri, setSiparisUrunleri] = useState([]);
+  const [stokKartlari, setStokKartlari] = useState([]);
+  const [cariler, setCariler] = useState([]);
   const [form, setForm] = useState({
     tutar: String(kalanBakiye), odeme_tarihi: new Date().toISOString().slice(0, 10),
     odeme_yontemi: 'BANKA', banka_hesap_id: '', kur: '1',
@@ -95,9 +97,22 @@ function OdemeFormu({ fatura, kalanBakiye, onKaydedildi, onVazgec }) {
   const [hata, setHata] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
 
+  function urunEtiketiOlustur(u) {
+    const kart = stokKartlari.find((k) => k.id === u.stok_karti_id);
+    const urunAdi = kart ? `${kart.marka} ${kart.model}` : '';
+    let etiket = `${u.seri_no}${urunAdi ? ' — ' + urunAdi : ''}`;
+    if (u.musteri_cari_id) {
+      const musteri = cariler.find((c) => c.id === u.musteri_cari_id);
+      etiket += ` — SATILDI (${musteri ? musteri.unvan : 'müşteri #' + u.musteri_cari_id})`;
+    }
+    return etiket;
+  }
+
   useEffect(() => {
     api.get('/siparisler').then((r) => setSiparisler(r.data)).catch(() => {});
     api.get('/banka-hesaplari').then((r) => setBankaHesaplari(r.data)).catch(() => {});
+    api.get('/stok-kartlari').then((r) => setStokKartlari(r.data)).catch(() => {});
+    api.get('/cariler').then((r) => setCariler(r.data)).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -199,8 +214,13 @@ function OdemeFormu({ fatura, kalanBakiye, onKaydedildi, onVazgec }) {
             <Alan etiket="Ürün (seri no)">
               <select required value={form.stok_seri_no_id} onChange={(e) => setForm((f) => ({ ...f, stok_seri_no_id: e.target.value }))} style={girdiStili}>
                 <option value="">Seçin...</option>
-                {siparisUrunleri.map((u) => <option key={u.id} value={u.id}>{u.seri_no}</option>)}
+                {siparisUrunleri.map((u) => <option key={u.id} value={u.id}>{urunEtiketiOlustur(u)}</option>)}
               </select>
+              {form.stok_seri_no_id && siparisUrunleri.find((u) => u.id === Number(form.stok_seri_no_id))?.musteri_cari_id && (
+                <div style={{ fontSize: 12, color: 'var(--kirmizi)', marginTop: 4 }}>
+                  ⚠ Bu ürün zaten satılmış — maliyeti bu ürüne eklemek istediğinizden emin olun.
+                </div>
+              )}
             </Alan>
           )}
           <Alan etiket="Açıklama (opsiyonel — örn. 'TSE ücreti', 'İlave gümrük vergisi')">
