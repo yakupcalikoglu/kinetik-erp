@@ -1079,6 +1079,7 @@ export default function SiparislerSayfasi() {
                                       key={maliyetVarsayilanTip}
                                       urun={u}
                                       varsayilanTip={maliyetVarsayilanTip}
+                                      digerUrunler={siparisUrunleriHaritasi[s.id]}
                                       onKaydedildi={() => {
                                         setMaliyetAcikUrunId(null);
                                         api.get('/stok-seri-no', { params: { siparis_id: s.id } })
