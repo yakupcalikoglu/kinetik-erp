@@ -26,7 +26,7 @@ from app.core.deps import aktif_sirket_id_getir, izin_gerektir, aktif_kullanici_
 from app.models.auth import Kullanici
 from app.models.cari import CariHesap
 from app.models.tedarikci_fatura import TedarikciFaturasi, TedarikciFaturaOdemesi
-from app.models.stok import StokSeriNo, StokMaliyetKalemi, MALIYET_TIP_SUTUN_ESLEME, MaliyetTip
+from app.models.stok import StokSeriNo, StokMaliyetKalemi, Siparis, MALIYET_TIP_SUTUN_ESLEME, MaliyetTip
 from app.schemas.tedarikci_fatura import (
     TedarikciFaturaOlusturIstegi, TedarikciFaturaGuncelleIstegi,
     TedarikciFaturaOdemeIstegi, TedarikciFaturaYanit, TedarikciFaturaOdemeYanit,
@@ -47,10 +47,22 @@ def _toplam_odenen_hesapla(db: Session, fatura_id: int) -> Decimal:
 def _detayli_getir(db: Session, fatura: TedarikciFaturasi) -> TedarikciFaturasi:
     cari = db.get(CariHesap, fatura.tedarikci_cari_id)
     fatura.tedarikci_unvan = cari.unvan if cari else None
-    fatura.odemeler = list(db.execute(
+    odemeler = list(db.execute(
         select(TedarikciFaturaOdemesi).where(TedarikciFaturaOdemesi.fatura_id == fatura.id)
+        .order_by(TedarikciFaturaOdemesi.id.desc())
     ).scalars())
-    fatura.toplam_odenen = sum((o.tutar for o in fatura.odemeler), Decimal("0"))
+    # Her odeme icin, hangi siparise/urune dagitildigini INSAN OKUNABILIR
+    # (siparis_no / seri_no) olarak da doldur - "nereye dagittigimi
+    # goremiyorum" sorununu cozer.
+    for o in odemeler:
+        if o.siparis_id:
+            s = db.get(Siparis, o.siparis_id)
+            o.siparis_no = s.siparis_no if s else f"#{o.siparis_id}"
+        if o.stok_seri_no_id:
+            u = db.get(StokSeriNo, o.stok_seri_no_id)
+            o.seri_no = u.seri_no if u else f"#{o.stok_seri_no_id}"
+    fatura.odemeler = odemeler
+    fatura.toplam_odenen = sum((o.tutar for o in odemeler), Decimal("0"))
     fatura.kalan_bakiye = fatura.tutar - fatura.toplam_odenen
     return fatura
 
