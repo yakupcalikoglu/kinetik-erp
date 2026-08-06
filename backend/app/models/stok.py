@@ -26,11 +26,21 @@ class StokDurum(str, enum.Enum):
 
 
 class MaliyetTip(str, enum.Enum):
+    # Ithalat asamasi maliyetleri (siparis bazli, urun antrepoya gelene kadar):
     SATINALMA = "SATINALMA"
     NAKLIYE = "NAKLIYE"
     GUMRUK = "GUMRUK"
     ANTREPO = "ANTREPO"
     MILLILESTIRME = "MILLILESTIRME"
+    # Satis asamasi maliyetleri (SADECE o satisa ozel - Leasing/Faturali
+    # satis turune gore hangilerinin beklendigi degisir):
+    ARDIYE = "ARDIYE"
+    ILAVE_GUMRUK_VERGISI = "ILAVE_GUMRUK_VERGISI"
+    DAMGA_VERGISI = "DAMGA_VERGISI"
+    TSE_UCRETI = "TSE_UCRETI"
+    GUMRUKCU_MASRAFI = "GUMRUKCU_MASRAFI"
+    BANKA_MASRAFI = "BANKA_MASRAFI"
+    KDV = "KDV"
     LEASING = "LEASING"
     DIGER = "DIGER"
 
@@ -108,10 +118,25 @@ class StokSeriNo(Base):
     diger_maliyet_try = Column(Numeric(18, 2), default=0)
     # toplam_maliyet_try veritabaninda GENERATED ALWAYS AS ... STORED;
     # SQLAlchemy bu sutunu salt-okunur olarak haritalar (deferred read).
+    # Bu GENERATED sutuna DOKUNMUYORUZ (formulu bilinmiyor, riskli) - asagidaki
+    # YENI satis-asamasi maliyet sutunlari, toplam_maliyet_try'YE DAHIL DEGIL,
+    # backend'de AYRICA "toplam_satis_maliyeti_try" olarak toplanip donuluyor.
+    ardiye_maliyeti_try = Column(Numeric(18, 2), default=0)
+    ilave_gumruk_vergisi_try = Column(Numeric(18, 2), default=0)
+    damga_vergisi_try = Column(Numeric(18, 2), default=0)
+    tse_ucreti_try = Column(Numeric(18, 2), default=0)
+    gumrukcu_masrafi_try = Column(Numeric(18, 2), default=0)
+    banka_masrafi_try = Column(Numeric(18, 2), default=0)
+    kdv_try = Column(Numeric(18, 2), default=0)
 
     satis_fiyati_try = Column(Numeric(18, 2))
     satis_tarihi = Column(Date)
     musteri_cari_id = Column(BigInteger, ForeignKey("cari_hesaplar.id"))
+    # Satis turu - "LEASINGLI" veya "FATURALI" (KDV'li/pesin/taksitli/cek
+    # hepsi FATURALI sayilir). Satis-sonrasi maliyet kontrol listesinde
+    # (SatisMaliyetKontrolListesi) hangi kalemlerin beklendigini belirlemek
+    # icin kullanilir.
+    satis_odeme_tipi = Column(String(20))
     # Cek ile yapilan satislarda, hangi cekin bu satisa karsilik geldigini
     # izler - satis geri alinirken (henuz ciro/tahsil edilmemisse) hem
     # urunu hem cekin kendisini birlikte geri almak icin kullanilir.
@@ -156,9 +181,29 @@ MALIYET_TIP_SUTUN_ESLEME = {
     MaliyetTip.GUMRUK: "gumruk_maliyeti_try",
     MaliyetTip.ANTREPO: "antrepo_maliyeti_try",
     MaliyetTip.MILLILESTIRME: "millilestirme_maliyeti_try",
+    MaliyetTip.ARDIYE: "ardiye_maliyeti_try",
+    MaliyetTip.ILAVE_GUMRUK_VERGISI: "ilave_gumruk_vergisi_try",
+    MaliyetTip.DAMGA_VERGISI: "damga_vergisi_try",
+    MaliyetTip.TSE_UCRETI: "tse_ucreti_try",
+    MaliyetTip.GUMRUKCU_MASRAFI: "gumrukcu_masrafi_try",
+    MaliyetTip.BANKA_MASRAFI: "banka_masrafi_try",
+    MaliyetTip.KDV: "kdv_try",
     MaliyetTip.LEASING: "leasing_maliyeti_try",
     MaliyetTip.DIGER: "diger_maliyet_try",
 }
+
+# Satis turune gore, o satisa ozel BEKLENEN maliyet kategorileri (kontrol
+# listesi icin). "Diger" her ikisinde de esneklik icin dahil.
+LEASING_SATIS_MALIYET_TIPLERI = [
+    MaliyetTip.ARDIYE, MaliyetTip.GUMRUK, MaliyetTip.ILAVE_GUMRUK_VERGISI,
+    MaliyetTip.DAMGA_VERGISI, MaliyetTip.TSE_UCRETI, MaliyetTip.LEASING,
+    MaliyetTip.BANKA_MASRAFI, MaliyetTip.DIGER,
+]
+FATURALI_SATIS_MALIYET_TIPLERI = [
+    MaliyetTip.GUMRUK, MaliyetTip.ILAVE_GUMRUK_VERGISI, MaliyetTip.DAMGA_VERGISI,
+    MaliyetTip.TSE_UCRETI, MaliyetTip.GUMRUKCU_MASRAFI, MaliyetTip.BANKA_MASRAFI,
+    MaliyetTip.KDV, MaliyetTip.DIGER,
+]
 
 
 class Siparis(Base):
