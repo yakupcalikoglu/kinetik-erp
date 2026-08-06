@@ -30,6 +30,7 @@ from app.schemas.raporlama import (
 router = APIRouter(prefix="/raporlar", tags=["Raporlama"])
 
 from pydantic import BaseModel
+from datetime import datetime
 
 
 class KarMarjiSatiri(BaseModel):
@@ -1406,3 +1407,111 @@ def yillik_karsilastirma(
         bu_yil_toplam_gider=bu_yil_gider, gecen_yil_toplam_gider=gecen_yil_gider,
         gider_degisim_yuzde=yuzde_degisim(bu_yil_gider, gecen_yil_gider),
     )
+
+
+class SonIslemSatiri(BaseModel):
+    zaman: datetime
+    tur: str
+    aciklama: str
+    tutar: Decimal | None = None
+    para_birimi: str | None = None
+
+
+@router.get("/son-islemler", response_model=list[SonIslemSatiri],
+            dependencies=[Depends(izin_gerektir("RAPOR_GORUNTULE"))])
+def son_islemler(
+    limit: int = Query(50, le=200),
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Sistemdeki farkli modullerdeki (Siparis, Tedarikci Faturasi, Stok, Cari
+    vb.) EN SON olusturulan kayitlari, GERCEK kayit zamanina (olusturma_tarihi
+    - saat dahil) gore siralayip birlestirir. "Bugun neler yaptim" sorusuna
+    hizli bir bakista cevap verir. Herhangi bir tablo/alan eksikse (henuz
+    migration calismamis olabilir) o bolum sessizce atlanir, digerleri
+    calismaya devam eder.
+    """
+    satirlar: list[SonIslemSatiri] = []
+
+    try:
+        siparisler = list(db.execute(
+            select(Siparis).where(Siparis.sirket_id == sirket_id)
+            .order_by(Siparis.olusturma_tarihi.desc()).limit(limit)
+        ).scalars())
+        for s in siparisler:
+            if s.olusturma_tarihi:
+                satirlar.append(SonIslemSatiri(
+                    zaman=s.olusturma_tarihi, tur="SIPARIS",
+                    aciklama=f"Yeni sipariş oluşturuldu — {s.siparis_no}",
+                ))
+    except Exception:
+        pass
+
+    try:
+        from app.models.tedarikci_fatura import TedarikciFaturasi, TedarikciFaturaOdemesi
+
+        faturalar = list(db.execute(
+            select(TedarikciFaturasi).where(TedarikciFaturasi.sirket_id == sirket_id)
+            .order_by(TedarikciFaturasi.olusturma_tarihi.desc()).limit(limit)
+        ).scalars())
+        for f in faturalar:
+            if f.olusturma_tarihi:
+                cari = db.get(CariHesap, f.tedarikci_cari_id)
+                pb = f.para_birimi.value if hasattr(f.para_birimi, "value") else f.para_birimi
+                satirlar.append(SonIslemSatiri(
+                    zaman=f.olusturma_tarihi, tur="TEDARIKCI_FATURA",
+                    aciklama=f"Fatura kaydedildi — {f.fatura_no or ('#' + str(f.id))}" + (f" ({cari.unvan})" if cari else ""),
+                    tutar=f.tutar, para_birimi=pb,
+                ))
+
+        odemeler = list(db.execute(
+            select(TedarikciFaturaOdemesi)
+            .join(TedarikciFaturasi, TedarikciFaturasi.id == TedarikciFaturaOdemesi.fatura_id)
+            .where(TedarikciFaturasi.sirket_id == sirket_id)
+            .order_by(TedarikciFaturaOdemesi.olusturma_tarihi.desc()).limit(limit)
+        ).scalars())
+        for o in odemeler:
+            if o.olusturma_tarihi:
+                fatura = db.get(TedarikciFaturasi, o.fatura_id)
+                pb = None
+                if fatura:
+                    pb = fatura.para_birimi.value if hasattr(fatura.para_birimi, "value") else fatura.para_birimi
+                satirlar.append(SonIslemSatiri(
+                    zaman=o.olusturma_tarihi, tur="TEDARIKCI_FATURA_ODEME",
+                    aciklama=f"Fatura ödemesi yapıldı — {fatura.fatura_no if fatura and fatura.fatura_no else ('#' + str(o.fatura_id))}",
+                    tutar=o.tutar, para_birimi=pb,
+                ))
+    except Exception:
+        pass
+
+    try:
+        urunler = list(db.execute(
+            select(StokSeriNo).where(StokSeriNo.sirket_id == sirket_id)
+            .order_by(StokSeriNo.olusturma_tarihi.desc()).limit(limit)
+        ).scalars())
+        for u in urunler:
+            if u.olusturma_tarihi:
+                satirlar.append(SonIslemSatiri(
+                    zaman=u.olusturma_tarihi, tur="STOK",
+                    aciklama=f"Ürün kaydedildi — {u.seri_no}",
+                ))
+    except Exception:
+        pass
+
+    try:
+        cariler = list(db.execute(
+            select(CariHesap).where(CariHesap.sirket_id == sirket_id)
+            .order_by(CariHesap.olusturma_tarihi.desc()).limit(limit)
+        ).scalars())
+        for c in cariler:
+            if c.olusturma_tarihi:
+                satirlar.append(SonIslemSatiri(
+                    zaman=c.olusturma_tarihi, tur="CARI",
+                    aciklama=f"Yeni cari eklendi — {c.unvan}",
+                ))
+    except Exception:
+        pass
+
+    satirlar.sort(key=lambda s: s.zaman, reverse=True)
+    return satirlar[:limit]
