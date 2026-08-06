@@ -4,6 +4,82 @@ import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, BosDurum, para
 import { excelIndir } from '../utils/disaAktarma';
 import AramaliSecici from '../components/AramaliSecici';
 
+function DuzenleFaturaFormu({ fatura, onKaydedildi, onVazgec }) {
+  const [form, setForm] = useState({
+    fatura_no: fatura.fatura_no || '', tarih: fatura.tarih, tutar: String(fatura.tutar),
+    para_birimi: fatura.para_birimi, aciklama: fatura.aciklama || '',
+    varsayilan_maliyet_tipi: fatura.varsayilan_maliyet_tipi || 'DIGER', sifre: '',
+  });
+  const [hata, setHata] = useState(null);
+  const [kaydediliyor, setKaydediliyor] = useState(false);
+
+  async function kaydet(e) {
+    e.preventDefault();
+    setHata(null);
+    setKaydediliyor(true);
+    try {
+      await api.put(`/tedarikci-faturalari/${fatura.id}`, {
+        fatura_no: form.fatura_no || null,
+        tarih: form.tarih,
+        tutar: Number(form.tutar),
+        para_birimi: form.para_birimi,
+        aciklama: form.aciklama || null,
+        varsayilan_maliyet_tipi: form.varsayilan_maliyet_tipi,
+        sifre: form.sifre,
+      });
+      onKaydedildi();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setKaydediliyor(false);
+    }
+  }
+
+  return (
+    <Kart style={{ marginBottom: 16, borderLeft: '4px solid var(--amber)' }}>
+      <form onSubmit={kaydet}>
+        <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 10 }}>
+          Fatura Düzenle — {fatura.tedarikci_unvan}
+        </div>
+        <HataMesaji>{hata}</HataMesaji>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+          <Alan etiket="Fatura No">
+            <input value={form.fatura_no} onChange={(e) => setForm((f) => ({ ...f, fatura_no: e.target.value }))} style={girdiStili} />
+          </Alan>
+          <Alan etiket="Tarih">
+            <input required type="date" value={form.tarih} onChange={(e) => setForm((f) => ({ ...f, tarih: e.target.value }))} style={girdiStili} />
+          </Alan>
+          <Alan etiket="Tutar">
+            <ParaGirdisi required value={form.tutar} onChange={(v) => setForm((f) => ({ ...f, tutar: v }))} />
+          </Alan>
+          <Alan etiket="Para Birimi">
+            <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={girdiStili}>
+              <option value="TRY">TRY</option>
+              <option value="USD">USD</option>
+              <option value="EUR">EUR</option>
+            </select>
+          </Alan>
+          <Alan etiket="Masraf Türü">
+            <select value={form.varsayilan_maliyet_tipi} onChange={(e) => setForm((f) => ({ ...f, varsayilan_maliyet_tipi: e.target.value }))} style={girdiStili}>
+              {Object.entries(MALIYET_TIP_METIN).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+          </Alan>
+          <Alan etiket="Açıklama">
+            <input value={form.aciklama} onChange={(e) => setForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
+          </Alan>
+          <Alan etiket="Şifreniz (onay için zorunlu)">
+            <input required type="password" value={form.sifre} onChange={(e) => setForm((f) => ({ ...f, sifre: e.target.value }))} style={girdiStili} />
+          </Alan>
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+          <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Kaydediliyor...' : 'Değişiklikleri Kaydet'}</Buton>
+          <Buton type="button" variant="ikincil" onClick={onVazgec}>Vazgeç</Buton>
+        </div>
+      </form>
+    </Kart>
+  );
+}
+
 function YeniFaturaFormu({ onKaydedildi, onVazgec }) {
   const [cariler, setCariler] = useState([]);
   const [form, setForm] = useState({
@@ -243,6 +319,7 @@ export default function TedarikciFaturalariSayfasi() {
   const [formAcik, setFormAcik] = useState(false);
   const [odemeAcikId, setOdemeAcikId] = useState(null);
   const [detayAcikId, setDetayAcikId] = useState(null);
+  const [duzenleAcikId, setDuzenleAcikId] = useState(null);
   const [secilenIdler, setSecilenIdler] = useState(new Set());
 
   function yukle() {
@@ -410,12 +487,24 @@ export default function TedarikciFaturalariSayfasi() {
                           </button>
                         )}
                         <DahaFazlaMenu kompakt ogeler={[
+                          { etiket: duzenleAcikId === f.id ? 'Düzenlemeyi Kapat' : 'Düzenle', onClick: () => setDuzenleAcikId((m) => (m === f.id ? null : f.id)) },
                           { etiket: detayAcikId === f.id ? 'Ödeme Geçmişini Kapat' : 'Ödeme Geçmişi', onClick: () => setDetayAcikId((m) => (m === f.id ? null : f.id)) },
                           { etiket: 'Sil', onClick: () => sil(f) },
                         ]} />
                       </div>
                     </td>
                   </tr>
+                  {duzenleAcikId === f.id && (
+                    <tr>
+                      <td colSpan={9} style={{ padding: '0 16px 12px' }}>
+                        <DuzenleFaturaFormu
+                          fatura={f}
+                          onKaydedildi={() => { setDuzenleAcikId(null); yukle(); }}
+                          onVazgec={() => setDuzenleAcikId(null)}
+                        />
+                      </td>
+                    </tr>
+                  )}
                   {odemeAcikId === f.id && (
                     <tr>
                       <td colSpan={9} style={{ padding: '0 16px 12px' }}>
