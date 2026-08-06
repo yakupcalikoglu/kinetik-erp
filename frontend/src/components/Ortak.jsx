@@ -692,8 +692,9 @@ export const FATURALI_SATIS_MALIYET_TIPLERI = ['GUMRUK', 'ILAVE_GUMRUK_VERGISI',
 // Bir StokSeriNo urunune manuel maliyet kalemi eklemek icin genel amacli
 // form - hem Siparisler (ithalat maliyetleri) hem Satis Yap (satis-sonrasi
 // maliyetler) sayfalarinda kullanilir.
-export function ManuelMaliyetKalemiEkleFormu({ urun, onKaydedildi, onVazgec, varsayilanTip = 'NAKLIYE' }) {
+export function ManuelMaliyetKalemiEkleFormu({ urun, onKaydedildi, onVazgec, varsayilanTip = 'NAKLIYE', digerUrunler = null }) {
   const [cariler, setCariler] = useState([]);
+  const [tumSiparriseDagit, setTumSiparriseDagit] = useState(false);
   const [form, setForm] = useState({
     tip: varsayilanTip, tutar: '', para_birimi: 'TRY', kur: '1', referans_usd_kuru: '',
     tedarikci_cari_id: '', belge_no: '', tarih: new Date().toISOString().slice(0, 10), aciklama: '',
@@ -719,17 +720,40 @@ export function ManuelMaliyetKalemiEkleFormu({ urun, onKaydedildi, onVazgec, var
     setHata(null);
     setKaydediliyor(true);
     try {
-      await api.post(`/stok-seri-no/${urun.id}/maliyet-kalemi`, {
-        tip: form.tip,
-        tutar: Number(form.tutar),
-        para_birimi: form.para_birimi,
-        kur: Number(form.kur),
+      const girilenTutar = Number(form.tutar);
+      const kurDeger = Number(form.kur);
+      const tutarTry = form.para_birimi === 'TRY' ? girilenTutar : girilenTutar * kurDeger;
+      const ortak = {
+        tip: form.tip, para_birimi: form.para_birimi, kur: kurDeger,
         tedarikci_cari_id: form.tedarikci_cari_id ? Number(form.tedarikci_cari_id) : null,
-        belge_no: form.belge_no || null,
-        tarih: form.tarih,
-        aciklama: form.aciklama || null,
+        belge_no: form.belge_no || null, tarih: form.tarih, aciklama: form.aciklama || null,
         referans_usd_kuru: form.para_birimi === 'TRY' && form.referans_usd_kuru ? Number(form.referans_usd_kuru) : null,
-      });
+      };
+
+      if (tumSiparriseDagit && digerUrunler && digerUrunler.length > 1) {
+        // Bu siparisteki TUM urunlere, satinalma maliyetine ORANTILI dagit
+        // (hicbirinde satinalma maliyeti girilmemisse ESIT dagit).
+        const toplamSatinalma = digerUrunler.reduce((acc, u) => acc + Number(u.satinalma_maliyeti_try || 0), 0);
+        const basarisizlar = [];
+        for (const u of digerUrunler) {
+          const payTry = toplamSatinalma === 0
+            ? tutarTry / digerUrunler.length
+            : tutarTry * (Number(u.satinalma_maliyeti_try || 0) / toplamSatinalma);
+          const payOrijinal = form.para_birimi === 'TRY' ? payTry : payTry / kurDeger;
+          try {
+            await api.post(`/stok-seri-no/${u.id}/maliyet-kalemi`, { ...ortak, tutar: payOrijinal });
+          } catch (err) {
+            basarisizlar.push(u.seri_no);
+          }
+        }
+        if (basarisizlar.length > 0) {
+          setHata(`Şu ürünlere eklenemedi: ${basarisizlar.join(', ')}`);
+          setKaydediliyor(false);
+          return;
+        }
+      } else {
+        await api.post(`/stok-seri-no/${urun.id}/maliyet-kalemi`, { ...ortak, tutar: girilenTutar });
+      }
       onKaydedildi();
     } catch (err) {
       setHata(hataMesajiCikar(err));
@@ -744,6 +768,12 @@ export function ManuelMaliyetKalemiEkleFormu({ urun, onKaydedildi, onVazgec, var
         {urun.seri_no} — Manuel maliyet kalemi ekle
       </div>
       <HataMesaji>{hata}</HataMesaji>
+      {digerUrunler && digerUrunler.length > 1 && (
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, fontSize: 12.5, cursor: 'pointer' }}>
+          <input type="checkbox" checked={tumSiparriseDagit} onChange={(e) => setTumSiparriseDagit(e.target.checked)} />
+          Bu tutarı, bu siparişteki {digerUrunler.length} ürünün tamamına satınalma maliyetine oranlı dağıt (sadece {urun.seri_no}'ya eklemek yerine)
+        </label>
+      )}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12 }}>
         <Alan etiket="Maliyet tipi">
           <select value={form.tip} onChange={(e) => setForm((f) => ({ ...f, tip: e.target.value }))} style={girdiStili}>
