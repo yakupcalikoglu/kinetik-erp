@@ -16,6 +16,7 @@ import DashboardSayfasi from './pages/DashboardSayfasi';
 import RaporlarSayfasi from './pages/RaporlarSayfasi';
 import FinansalTakipSayfasi from './pages/FinansalTakipSayfasi';
 import ProformaFaturaSayfasi from './pages/ProformaFaturaSayfasi';
+import TedarikciFaturalariSayfasi from './pages/TedarikciFaturalariSayfasi';
 import YoneticiPaneliSayfasi from './pages/YoneticiPaneliSayfasi';
 import VirmanSayfasi from './pages/VirmanSayfasi';
 import UrunTanimlariSayfasi from './pages/UrunTanimlariSayfasi';
@@ -62,6 +63,7 @@ function App() {
             <Route path="virman" element={<VirmanSayfasi />} />
             <Route path="finansal" element={<FinansalTakipSayfasi />} />
             <Route path="proforma-fatura" element={<YetkiliSayfa gerekliIzin="FATURA_GORUNTULE"><ProformaFaturaSayfasi /></YetkiliSayfa>} />
+            <Route path="tedarikci-faturalari" element={<YetkiliSayfa gerekliIzin="FATURA_GORUNTULE"><TedarikciFaturalariSayfasi /></YetkiliSayfa>} />
             <Route path="raporlar" element={<RaporlarSayfasi />} />
             <Route path="urun-tanimlari" element={<YetkiliSayfa gerekliIzin="STOK_GORUNTULE"><UrunTanimlariSayfasi /></YetkiliSayfa>} />
             <Route path="yonetici-paneli" element={<YetkiliSayfa gerekliIzin="KULLANICI_YONET"><YoneticiPaneliSayfasi /></YetkiliSayfa>} />
