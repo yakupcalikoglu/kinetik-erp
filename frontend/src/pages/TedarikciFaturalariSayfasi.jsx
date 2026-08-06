@@ -1,0 +1,346 @@
+import { useEffect, useState, Fragment } from 'react';
+import { api, hataMesajiCikar, ozelOnayIste } from '../api/client';
+import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, BosDurum, paraFormat, eylemChipStili, ParaGirdisi, TabloIskeleti } from '../components/Ortak';
+import AramaliSecici from '../components/AramaliSecici';
+
+const MALIYET_TIP_METIN = {
+  SATINALMA: 'Satınalma', NAKLIYE: 'Nakliye/Navlun', GUMRUK: 'Gümrük',
+  ANTREPO: 'Antrepo', MILLILESTIRME: 'Millileştirme', LEASING: 'Leasing', DIGER: 'Diğer',
+};
+
+function YeniFaturaFormu({ onKaydedildi, onVazgec }) {
+  const [cariler, setCariler] = useState([]);
+  const [form, setForm] = useState({
+    tedarikci_cari_id: '', fatura_no: '', tarih: new Date().toISOString().slice(0, 10),
+    tutar: '', para_birimi: 'TRY', aciklama: '',
+  });
+  const [hata, setHata] = useState(null);
+  const [kaydediliyor, setKaydediliyor] = useState(false);
+
+  useEffect(() => { api.get('/cariler').then((r) => setCariler(r.data)).catch(() => {}); }, []);
+
+  async function kaydet(e) {
+    e.preventDefault();
+    setHata(null);
+    setKaydediliyor(true);
+    try {
+      await api.post('/tedarikci-faturalari', {
+        tedarikci_cari_id: Number(form.tedarikci_cari_id),
+        fatura_no: form.fatura_no || null,
+        tarih: form.tarih,
+        tutar: Number(form.tutar),
+        para_birimi: form.para_birimi,
+        aciklama: form.aciklama || null,
+      });
+      onKaydedildi();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setKaydediliyor(false);
+    }
+  }
+
+  return (
+    <Kart style={{ marginBottom: 16 }}>
+      <form onSubmit={kaydet}>
+        <HataMesaji>{hata}</HataMesaji>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+          <Alan etiket="Firma (tedarikçi / hizmet sağlayıcı)">
+            <select required value={form.tedarikci_cari_id} onChange={(e) => setForm((f) => ({ ...f, tedarikci_cari_id: e.target.value }))} style={girdiStili}>
+              <option value="">Seçin...</option>
+              {cariler.map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
+            </select>
+          </Alan>
+          <Alan etiket="Fatura No">
+            <input value={form.fatura_no} onChange={(e) => setForm((f) => ({ ...f, fatura_no: e.target.value }))} style={girdiStili} />
+          </Alan>
+          <Alan etiket="Tarih">
+            <input required type="date" value={form.tarih} onChange={(e) => setForm((f) => ({ ...f, tarih: e.target.value }))} style={girdiStili} />
+          </Alan>
+          <Alan etiket="Tutar">
+            <ParaGirdisi required value={form.tutar} onChange={(v) => setForm((f) => ({ ...f, tutar: v }))} />
+          </Alan>
+          <Alan etiket="Para Birimi">
+            <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={girdiStili}>
+              <option value="TRY">TRY</option>
+              <option value="USD">USD</option>
+              <option value="EUR">EUR</option>
+            </select>
+          </Alan>
+          <Alan etiket="Açıklama">
+            <input value={form.aciklama} onChange={(e) => setForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
+          </Alan>
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+          <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Kaydediliyor...' : 'Faturayı Kaydet'}</Buton>
+          <Buton type="button" variant="ikincil" onClick={onVazgec}>Vazgeç</Buton>
+        </div>
+      </form>
+    </Kart>
+  );
+}
+
+function OdemeFormu({ fatura, kalanBakiye, onKaydedildi, onVazgec }) {
+  const [siparisler, setSiparisler] = useState([]);
+  const [bankaHesaplari, setBankaHesaplari] = useState([]);
+  const [siparisUrunleri, setSiparisUrunleri] = useState([]);
+  const [form, setForm] = useState({
+    tutar: String(kalanBakiye), odeme_tarihi: new Date().toISOString().slice(0, 10),
+    odeme_yontemi: 'BANKA', banka_hesap_id: '', kur: '1',
+    dagitim_tipi: 'SIPARIS', siparis_id: '', stok_seri_no_id: '',
+    maliyet_tipi: 'DIGER', aciklama: '',
+  });
+  const [hata, setHata] = useState(null);
+  const [kaydediliyor, setKaydediliyor] = useState(false);
+
+  useEffect(() => {
+    api.get('/siparisler').then((r) => setSiparisler(r.data)).catch(() => {});
+    api.get('/banka-hesaplari').then((r) => setBankaHesaplari(r.data)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (fatura.para_birimi === 'TRY') { setForm((f) => ({ ...f, kur: '1' })); return; }
+    api.get(`/kur/${fatura.para_birimi}`).then((r) => setForm((f) => ({ ...f, kur: r.data.kur }))).catch(() => {});
+  }, [fatura.para_birimi]);
+
+  useEffect(() => {
+    if (form.dagitim_tipi === 'URUN' && form.siparis_id) {
+      api.get('/stok-seri-no', { params: { siparis_id: form.siparis_id } }).then((r) => setSiparisUrunleri(r.data)).catch(() => {});
+    } else {
+      setSiparisUrunleri([]);
+    }
+  }, [form.dagitim_tipi, form.siparis_id]);
+
+  const secilenBankaHesabi = bankaHesaplari.find((h) => h.id === Number(form.banka_hesap_id));
+
+  async function kaydet(e) {
+    e.preventDefault();
+    setHata(null);
+    setKaydediliyor(true);
+    try {
+      await api.post(`/tedarikci-faturalari/${fatura.id}/ode`, {
+        tutar: Number(form.tutar),
+        odeme_tarihi: form.odeme_tarihi,
+        odeme_yontemi: form.odeme_yontemi,
+        banka_hesap_id: form.odeme_yontemi === 'BANKA' ? Number(form.banka_hesap_id) : null,
+        kur: Number(form.kur),
+        dagitim_tipi: form.dagitim_tipi,
+        siparis_id: form.dagitim_tipi === 'SIPARIS' ? Number(form.siparis_id) : null,
+        stok_seri_no_id: form.dagitim_tipi === 'URUN' ? Number(form.stok_seri_no_id) : null,
+        maliyet_tipi: form.maliyet_tipi,
+        aciklama: form.aciklama || null,
+      });
+      onKaydedildi();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setKaydediliyor(false);
+    }
+  }
+
+  return (
+    <div style={{ padding: 14, background: 'var(--zemin)', borderRadius: 8, marginTop: 8 }}>
+      <form onSubmit={kaydet}>
+        <HataMesaji>{hata}</HataMesaji>
+        <div style={{ fontSize: 12.5, color: 'var(--metin-ikincil)', marginBottom: 10 }}>
+          Kalan bakiye: <strong>{paraFormat(kalanBakiye, fatura.para_birimi)}</strong>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10 }}>
+          <Alan etiket={`Ödenecek tutar (${fatura.para_birimi})`}>
+            <ParaGirdisi required value={form.tutar} onChange={(v) => setForm((f) => ({ ...f, tutar: v }))} />
+          </Alan>
+          <Alan etiket="Ödeme tarihi">
+            <input required type="date" value={form.odeme_tarihi} onChange={(e) => setForm((f) => ({ ...f, odeme_tarihi: e.target.value }))} style={girdiStili} />
+          </Alan>
+          <Alan etiket="Ödeme yöntemi">
+            <select value={form.odeme_yontemi} onChange={(e) => setForm((f) => ({ ...f, odeme_yontemi: e.target.value }))} style={girdiStili}>
+              <option value="BANKA">Banka</option>
+              <option value="NAKIT">Kasa (Nakit)</option>
+            </select>
+          </Alan>
+          {form.odeme_yontemi === 'BANKA' && (
+            <Alan etiket="Banka hesabı">
+              <select required value={form.banka_hesap_id} onChange={(e) => setForm((f) => ({ ...f, banka_hesap_id: e.target.value }))} style={girdiStili}>
+                <option value="">Seçin...</option>
+                {bankaHesaplari.map((h) => (
+                  <option key={h.id} value={h.id}>{h.banka_adi} — {h.hesap_adi || h.para_birimi}</option>
+                ))}
+              </select>
+            </Alan>
+          )}
+          {fatura.para_birimi !== 'TRY' && (
+            <Alan etiket={`Kur (${fatura.para_birimi}/TRY) — otomatik, değiştirilebilir`}>
+              <input required type="number" step="0.0001" value={form.kur} onChange={(e) => setForm((f) => ({ ...f, kur: e.target.value }))} style={girdiStili} />
+            </Alan>
+          )}
+          <Alan etiket="Maliyet tipi">
+            <select value={form.maliyet_tipi} onChange={(e) => setForm((f) => ({ ...f, maliyet_tipi: e.target.value }))} style={girdiStili}>
+              {Object.entries(MALIYET_TIP_METIN).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+          </Alan>
+          <Alan etiket="Bu masraf neye yansıyacak?">
+            <select value={form.dagitim_tipi} onChange={(e) => setForm((f) => ({ ...f, dagitim_tipi: e.target.value }))} style={girdiStili}>
+              <option value="SIPARIS">Bir siparişin TÜM ürünlerine (orantılı dağıt)</option>
+              <option value="URUN">Tek bir ürüne (seri no)</option>
+            </select>
+          </Alan>
+          <Alan etiket="Sipariş">
+            <AramaliSecici
+              secenekler={siparisler}
+              deger={form.siparis_id}
+              onDegistir={(v) => setForm((f) => ({ ...f, siparis_id: v, stok_seri_no_id: '' }))}
+              etiketFn={(s) => s.siparis_no}
+              bosMetin="Sipariş no yazarak arayın..."
+            />
+          </Alan>
+          {form.dagitim_tipi === 'URUN' && (
+            <Alan etiket="Ürün (seri no)">
+              <select required value={form.stok_seri_no_id} onChange={(e) => setForm((f) => ({ ...f, stok_seri_no_id: e.target.value }))} style={girdiStili}>
+                <option value="">Seçin...</option>
+                {siparisUrunleri.map((u) => <option key={u.id} value={u.id}>{u.seri_no}</option>)}
+              </select>
+            </Alan>
+          )}
+          <Alan etiket="Açıklama (opsiyonel — örn. 'TSE ücreti', 'İlave gümrük vergisi')">
+            <input value={form.aciklama} onChange={(e) => setForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
+          </Alan>
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+          <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Kaydediliyor...' : 'Ödemeyi Kaydet'}</Buton>
+          <Buton type="button" variant="ikincil" onClick={onVazgec}>Vazgeç</Buton>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+export default function TedarikciFaturalariSayfasi() {
+  const [faturalar, setFaturalar] = useState([]);
+  const [yukleniyor, setYukleniyor] = useState(true);
+  const [hata, setHata] = useState(null);
+  const [formAcik, setFormAcik] = useState(false);
+  const [odemeAcikId, setOdemeAcikId] = useState(null);
+  const [detayAcikId, setDetayAcikId] = useState(null);
+
+  function yukle() {
+    setYukleniyor(true);
+    api.get('/tedarikci-faturalari')
+      .then((r) => setFaturalar(r.data))
+      .catch((e) => setHata(hataMesajiCikar(e)))
+      .finally(() => setYukleniyor(false));
+  }
+  useEffect(yukle, []);
+
+  async function sil(fatura) {
+    if (!(await ozelOnayIste(`${fatura.fatura_no || '#' + fatura.id} numaralı faturayı silmek istediğinize emin misiniz?`))) return;
+    try {
+      await api.delete(`/tedarikci-faturalari/${fatura.id}`);
+      yukle();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    }
+  }
+
+  return (
+    <div>
+      <SayfaBasligi
+        baslik="Tedarikçi/Hizmet Faturaları"
+        aciklama="Firmalardan gelen faturaları kaydedin; öderken hangi sipariş/ürüne maliyet olarak yansıyacağını seçin."
+      />
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+        <Buton onClick={() => setFormAcik((a) => !a)}>{formAcik ? 'Kapat' : '+ Yeni Fatura'}</Buton>
+      </div>
+      <HataMesaji>{hata}</HataMesaji>
+      {formAcik && <YeniFaturaFormu onKaydedildi={() => { setFormAcik(false); yukle(); }} onVazgec={() => setFormAcik(false)} />}
+
+      <Kart style={{ padding: 0 }}>
+        {yukleniyor ? (
+          <TabloIskeleti sutunSayisi={6} />
+        ) : faturalar.length === 0 ? (
+          <BosDurum baslik="Henüz fatura kaydı yok" aciklama="Yukarıdan yeni bir fatura ekleyin." />
+        ) : (
+          <table>
+            <thead>
+              <tr style={{ background: 'var(--zemin)' }}>
+                {['Firma', 'Fatura No', 'Tarih', 'Tutar', 'Ödenen', 'Kalan', 'İşlem'].map((b) => (
+                  <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {faturalar.map((f) => (
+                <Fragment key={f.id}>
+                  <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                    <td style={{ padding: '12px 16px', fontWeight: 500 }}>{f.tedarikci_unvan || `#${f.tedarikci_cari_id}`}</td>
+                    <td style={{ padding: '12px 16px' }}>{f.fatura_no || '—'}</td>
+                    <td style={{ padding: '12px 16px' }}>{f.tarih}</td>
+                    <td style={{ padding: '12px 16px' }}>{paraFormat(f.tutar, f.para_birimi)}</td>
+                    <td style={{ padding: '12px 16px', color: 'var(--yesil)' }}>{paraFormat(f.toplam_odenen, f.para_birimi)}</td>
+                    <td style={{ padding: '12px 16px', fontWeight: 600, color: Number(f.kalan_bakiye) > 0 ? 'var(--kirmizi)' : 'var(--yesil)' }}>
+                      {paraFormat(f.kalan_bakiye, f.para_birimi)}
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {Number(f.kalan_bakiye) > 0 && (
+                          <button onClick={() => setOdemeAcikId((m) => (m === f.id ? null : f.id))} style={eylemChipStili('yesil')}>
+                            {odemeAcikId === f.id ? 'Kapat' : 'Öde'}
+                          </button>
+                        )}
+                        <button onClick={() => setDetayAcikId((m) => (m === f.id ? null : f.id))} style={eylemChipStili('lacivert')}>
+                          {detayAcikId === f.id ? 'Kapat' : 'Ödeme Geçmişi'}
+                        </button>
+                        <button onClick={() => sil(f)} style={eylemChipStili('kirmizi')}>Sil</button>
+                      </div>
+                    </td>
+                  </tr>
+                  {odemeAcikId === f.id && (
+                    <tr>
+                      <td colSpan={7} style={{ padding: '0 16px 12px' }}>
+                        <OdemeFormu
+                          fatura={f}
+                          kalanBakiye={f.kalan_bakiye}
+                          onKaydedildi={() => { setOdemeAcikId(null); yukle(); }}
+                          onVazgec={() => setOdemeAcikId(null)}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                  {detayAcikId === f.id && (
+                    <tr>
+                      <td colSpan={7} style={{ padding: '0 16px 12px', background: 'var(--zemin)' }}>
+                        {(!f.odemeler || f.odemeler.length === 0) ? (
+                          <div style={{ fontSize: 12.5, color: 'var(--metin-soluk)', padding: '10px 0' }}>Henüz ödeme yapılmamış.</div>
+                        ) : (
+                          <table>
+                            <thead>
+                              <tr>
+                                {['Tarih', 'Tutar', 'Yöntem', 'Dağıtım', 'Maliyet Tipi'].map((b) => (
+                                  <th key={b} style={{ textAlign: 'left', padding: '6px 8px', fontSize: 11.5, color: 'var(--metin-ikincil)' }}>{b}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {f.odemeler.map((o) => (
+                                <tr key={o.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                                  <td style={{ padding: '6px 8px', fontSize: 12.5 }}>{o.odeme_tarihi}</td>
+                                  <td style={{ padding: '6px 8px', fontSize: 12.5 }}>{paraFormat(o.tutar, f.para_birimi)}</td>
+                                  <td style={{ padding: '6px 8px', fontSize: 12.5 }}>{o.odeme_yontemi === 'BANKA' ? 'Banka' : 'Kasa'}</td>
+                                  <td style={{ padding: '6px 8px', fontSize: 12.5 }}>{o.dagitim_tipi === 'SIPARIS' ? 'Sipariş (orantılı)' : 'Tek ürün'}</td>
+                                  <td style={{ padding: '6px 8px', fontSize: 12.5 }}>{MALIYET_TIP_METIN[o.maliyet_tipi] || o.maliyet_tipi}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Kart>
+    </div>
+  );
+}
