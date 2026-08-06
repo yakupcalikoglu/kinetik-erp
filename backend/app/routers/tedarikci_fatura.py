@@ -77,10 +77,15 @@ def fatura_olustur(
     tedarikci = db.get(CariHesap, istek.tedarikci_cari_id)
     if tedarikci is None or tedarikci.sirket_id != sirket_id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Tedarikçi/firma bulunamadı.")
+    try:
+        varsayilan_tip = MaliyetTip(istek.varsayilan_maliyet_tipi)
+    except ValueError:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Geçersiz maliyet tipi: {istek.varsayilan_maliyet_tipi}")
     yeni = TedarikciFaturasi(
         sirket_id=sirket_id, tedarikci_cari_id=istek.tedarikci_cari_id,
         fatura_no=istek.fatura_no, tarih=istek.tarih, tutar=istek.tutar,
         para_birimi=istek.para_birimi, aciklama=istek.aciklama,
+        varsayilan_maliyet_tipi=varsayilan_tip,
     )
     db.add(yeni)
     db.commit()
