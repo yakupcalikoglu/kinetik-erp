@@ -349,6 +349,78 @@ function OdemeAlacakKutusu({ navigate }) {
   );
 }
 
+
+const SON_ISLEM_TUR_METIN = {
+  SIPARIS: 'Sipariş', TEDARIKCI_FATURA: 'Tedarikçi Faturası', TEDARIKCI_FATURA_ODEME: 'Fatura Ödemesi',
+  STOK: 'Stok', CARI: 'Cari',
+};
+
+function zamanGoster(iso) {
+  const d = new Date(iso);
+  return d.toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function SonIslemlerKutusu() {
+  const [liste, setListe] = useState(null);
+  const [hata, setHata] = useState(null);
+  const [genisletildi, setGenisletildi] = useState(false);
+
+  useEffect(() => {
+    api.get('/raporlar/son-islemler', { params: { limit: 50 } })
+      .then((r) => setListe(r.data))
+      .catch((e) => setHata(hataMesajiCikar(e)));
+  }, []);
+
+  const gosterilecekler = genisletildi ? liste : (liste || []).slice(0, 10);
+
+  return (
+    <Kart style={{ marginTop: 16 }}>
+      <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>Son İşlemler</div>
+      <div style={{ fontSize: 12.5, color: 'var(--metin-ikincil)', marginBottom: 14 }}>
+        Sistemde son yapılan işlemler, kayıt zamanına (saat dahil) göre.
+      </div>
+      {hata ? <HataMesaji>{hata}</HataMesaji> : !liste ? (
+        <div style={{ color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
+      ) : liste.length === 0 ? (
+        <BosDurum baslik="Henüz işlem yok" />
+      ) : (
+        <>
+          <div>
+            {gosterilecekler.map((s, i) => (
+              <div
+                key={i}
+                style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  padding: '9px 0', borderTop: i > 0 ? '1px solid var(--kenarlik)' : 'none', fontSize: 13,
+                }}
+              >
+                <div>
+                  <Etiket ton="notr">{SON_ISLEM_TUR_METIN[s.tur] || s.tur}</Etiket>
+                  <span style={{ marginLeft: 10 }}>{s.aciklama}</span>
+                </div>
+                <div style={{ textAlign: 'right', color: 'var(--metin-ikincil)', whiteSpace: 'nowrap' }}>
+                  {s.tutar != null && <span style={{ marginRight: 10, fontWeight: 500 }}>{paraFormat(s.tutar, s.para_birimi || 'TRY')}</span>}
+                  {zamanGoster(s.zaman)}
+                </div>
+              </div>
+            ))}
+          </div>
+          {liste.length > 10 && (
+            <div style={{ textAlign: 'center', marginTop: 10 }}>
+              <button
+                onClick={() => setGenisletildi((g) => !g)}
+                style={{ background: 'none', border: 'none', color: 'var(--lacivert)', cursor: 'pointer', fontSize: 13 }}
+              >
+                {genisletildi ? 'Daha az göster' : `Tümünü göster (${liste.length})`}
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </Kart>
+  );
+}
+
 export default function DashboardSayfasi() {
   const navigate = useNavigate();
 
@@ -364,6 +436,7 @@ export default function DashboardSayfasi() {
         <KiralikUrunlerKutusu navigate={navigate} />
         <OdemeAlacakKutusu navigate={navigate} />
       </div>
+      <SonIslemlerKutusu />
     </div>
   );
 }
