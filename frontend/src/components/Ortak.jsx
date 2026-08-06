@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { MoreHorizontal } from 'lucide-react';
+import { api, hataMesajiCikar } from '../api/client';
 
 export function Kart({ children, style }) {
   return (
@@ -672,6 +673,154 @@ export function TabloIskeleti({ satirSayisi = 5, sutunSayisi = 6 }) {
           100% { background-position: -200% 0; }
         }
       `}</style>
+    </div>
+  );
+}
+
+export const MALIYET_TIP_METIN = {
+  SATINALMA: 'Satınalma', NAKLIYE: 'Nakliye/Navlun', GUMRUK: 'Gümrük', ANTREPO: 'Antrepo',
+  MILLILESTIRME: 'Millileştirme', ARDIYE: 'Ardiye', ILAVE_GUMRUK_VERGISI: 'İlave Gümrük Vergisi',
+  DAMGA_VERGISI: 'Damga Vergisi', TSE_UCRETI: 'TSE Ücreti', GUMRUKCU_MASRAFI: 'Gümrükçü Masrafı',
+  BANKA_MASRAFI: 'Banka Masrafı', KDV: 'KDV', LEASING: 'Leasing', DIGER: 'Diğer',
+};
+
+// Satis turune gore (Leasing / Faturali) BEKLENEN maliyet kategorileri -
+// SatisYapSayfasi'ndaki kontrol listesinde kullanilir.
+export const LEASING_SATIS_MALIYET_TIPLERI = ['ARDIYE', 'GUMRUK', 'ILAVE_GUMRUK_VERGISI', 'DAMGA_VERGISI', 'TSE_UCRETI', 'LEASING', 'BANKA_MASRAFI'];
+export const FATURALI_SATIS_MALIYET_TIPLERI = ['GUMRUK', 'ILAVE_GUMRUK_VERGISI', 'DAMGA_VERGISI', 'TSE_UCRETI', 'GUMRUKCU_MASRAFI', 'BANKA_MASRAFI', 'KDV'];
+
+// Bir StokSeriNo urunune manuel maliyet kalemi eklemek icin genel amacli
+// form - hem Siparisler (ithalat maliyetleri) hem Satis Yap (satis-sonrasi
+// maliyetler) sayfalarinda kullanilir.
+export function ManuelMaliyetKalemiEkleFormu({ urun, onKaydedildi, onVazgec, varsayilanTip = 'NAKLIYE' }) {
+  const [cariler, setCariler] = useState([]);
+  const [form, setForm] = useState({
+    tip: varsayilanTip, tutar: '', para_birimi: 'TRY', kur: '1', referans_usd_kuru: '',
+    tedarikci_cari_id: '', belge_no: '', tarih: new Date().toISOString().slice(0, 10), aciklama: '',
+  });
+  const [hata, setHata] = useState(null);
+  const [kaydediliyor, setKaydediliyor] = useState(false);
+
+  useEffect(() => {
+    api.get('/cariler').then((r) => setCariler(r.data)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (form.para_birimi === 'TRY') {
+      setForm((f) => ({ ...f, kur: '1' }));
+      api.get('/kur/USD').then((r) => setForm((f) => ({ ...f, referans_usd_kuru: r.data.kur }))).catch(() => {});
+      return;
+    }
+    api.get(`/kur/${form.para_birimi}`).then((r) => setForm((f) => ({ ...f, kur: r.data.kur }))).catch(() => {});
+  }, [form.para_birimi]); // eslint-disable-line
+
+  async function kaydet(e) {
+    e.preventDefault();
+    setHata(null);
+    setKaydediliyor(true);
+    try {
+      await api.post(`/stok-seri-no/${urun.id}/maliyet-kalemi`, {
+        tip: form.tip,
+        tutar: Number(form.tutar),
+        para_birimi: form.para_birimi,
+        kur: Number(form.kur),
+        tedarikci_cari_id: form.tedarikci_cari_id ? Number(form.tedarikci_cari_id) : null,
+        belge_no: form.belge_no || null,
+        tarih: form.tarih,
+        aciklama: form.aciklama || null,
+        referans_usd_kuru: form.para_birimi === 'TRY' && form.referans_usd_kuru ? Number(form.referans_usd_kuru) : null,
+      });
+      onKaydedildi();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setKaydediliyor(false);
+    }
+  }
+
+  return (
+    <form onSubmit={kaydet} style={{ padding: 14, background: 'var(--zemin)', borderRadius: 8, marginTop: 8 }}>
+      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>
+        {urun.seri_no} — Manuel maliyet kalemi ekle
+      </div>
+      <HataMesaji>{hata}</HataMesaji>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12 }}>
+        <Alan etiket="Maliyet tipi">
+          <select value={form.tip} onChange={(e) => setForm((f) => ({ ...f, tip: e.target.value }))} style={girdiStili}>
+            {Object.entries(MALIYET_TIP_METIN).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+        </Alan>
+        <Alan etiket="Para birimi">
+          <select value={form.para_birimi} onChange={(e) => setForm((f) => ({ ...f, para_birimi: e.target.value }))} style={girdiStili}>
+            <option value="TRY">TRY</option>
+            <option value="USD">USD</option>
+            <option value="EUR">EUR</option>
+          </select>
+        </Alan>
+        <Alan etiket="Tutar">
+          <ParaGirdisi required value={form.tutar} onChange={(v) => setForm((f) => ({ ...f, tutar: v }))} />
+        </Alan>
+        {form.para_birimi !== 'TRY' ? (
+          <Alan etiket="Kur (otomatik, elle değiştirilebilir)">
+            <input required type="number" step="0.0001" value={form.kur} onChange={(e) => setForm((f) => ({ ...f, kur: e.target.value }))} style={girdiStili} />
+          </Alan>
+        ) : (
+          <Alan etiket="O günkü USD kuru (opsiyonel)">
+            <input type="number" step="0.0001" value={form.referans_usd_kuru} onChange={(e) => setForm((f) => ({ ...f, referans_usd_kuru: e.target.value }))} style={girdiStili} />
+          </Alan>
+        )}
+        <Alan etiket="Tedarikçi/firma (opsiyonel)">
+          <select value={form.tedarikci_cari_id} onChange={(e) => setForm((f) => ({ ...f, tedarikci_cari_id: e.target.value }))} style={girdiStili}>
+            <option value="">Seçin...</option>
+            {cariler.map((c) => <option key={c.id} value={c.id}>{c.unvan}</option>)}
+          </select>
+        </Alan>
+        <Alan etiket="Belge/fatura no">
+          <input value={form.belge_no} onChange={(e) => setForm((f) => ({ ...f, belge_no: e.target.value }))} style={girdiStili} />
+        </Alan>
+        <Alan etiket="Tarih">
+          <input required type="date" value={form.tarih} onChange={(e) => setForm((f) => ({ ...f, tarih: e.target.value }))} style={girdiStili} />
+        </Alan>
+        <Alan etiket="Açıklama">
+          <input value={form.aciklama} onChange={(e) => setForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
+        </Alan>
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Kaydediliyor...' : 'Kaydet'}</Buton>
+        <Buton type="button" variant="ikincil" onClick={onVazgec}>Vazgeç</Buton>
+      </div>
+    </form>
+  );
+}
+
+// Satis turune (odemeTipi) gore, o satisa BEKLENEN maliyet kategorilerinin
+// girilip girilmedigini gosteren kontrol listesi.
+export function SatisMaliyetKontrolListesi({ urun, odemeTipi }) {
+  const beklenenTipler = odemeTipi === 'LEASINGLI' ? LEASING_SATIS_MALIYET_TIPLERI : FATURALI_SATIS_MALIYET_TIPLERI;
+  const SUTUN_ESLEME = {
+    ARDIYE: 'ardiye_maliyeti_try', GUMRUK: 'gumruk_maliyeti_try', ILAVE_GUMRUK_VERGISI: 'ilave_gumruk_vergisi_try',
+    DAMGA_VERGISI: 'damga_vergisi_try', TSE_UCRETI: 'tse_ucreti_try', GUMRUKCU_MASRAFI: 'gumrukcu_masrafi_try',
+    BANKA_MASRAFI: 'banka_masrafi_try', KDV: 'kdv_try', LEASING: 'leasing_maliyeti_try', DIGER: 'diger_maliyet_try',
+  };
+  const eksikSayisi = beklenenTipler.filter((tip) => !Number(urun[SUTUN_ESLEME[tip]] || 0)).length;
+
+  return (
+    <div style={{ padding: '10px 12px', background: eksikSayisi > 0 ? 'var(--amber-acik, #fdf0d5)' : 'var(--yesil-acik, #e3f5e9)', borderRadius: 8, marginBottom: 8 }}>
+      <div style={{ fontWeight: 600, fontSize: 12.5, marginBottom: 6 }}>
+        Satış Maliyeti Kontrolü ({odemeTipi === 'LEASINGLI' ? 'Leasing' : 'Faturalı'}) {eksikSayisi > 0 ? `— ${eksikSayisi} kalem eksik olabilir` : '— tamam'}
+      </div>
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 12 }}>
+        {beklenenTipler.map((tip) => {
+          const deger = Number(urun[SUTUN_ESLEME[tip]] || 0);
+          return (
+            <div key={tip} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <span>{deger > 0 ? '✅' : '⚠️'}</span>
+              <span style={{ color: 'var(--metin-ikincil)' }}>{MALIYET_TIP_METIN[tip]}</span>
+              {deger > 0 && <strong>({paraFormat(deger)})</strong>}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
