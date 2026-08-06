@@ -104,8 +104,11 @@ def genel_arama(
         ))
 
     tedarikci_faturalari = list(db.execute(
-        select(TedarikciFaturasi).where(
-            TedarikciFaturasi.sirket_id == sirket_id, TedarikciFaturasi.fatura_no.ilike(q_like),
+        select(TedarikciFaturasi)
+        .join(CariHesap, CariHesap.id == TedarikciFaturasi.tedarikci_cari_id)
+        .where(
+            TedarikciFaturasi.sirket_id == sirket_id,
+            or_(TedarikciFaturasi.fatura_no.ilike(q_like), CariHesap.unvan.ilike(q_like)),
         ).limit(8)
     ).scalars())
     for f in tedarikci_faturalari:
