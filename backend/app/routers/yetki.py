@@ -314,6 +314,7 @@ def test_verilerini_temizle(istek: TemizlikOnayIstegi, db: Session = Depends(get
     )
     from app.models.stok import Siparis, SiparisDetay, StokSeriNo, StokMaliyetKalemi, SiparisOdeme
     from app.models.cari import CariHesap, CariHareket
+    from app.models.tedarikci_fatura import TedarikciFaturasi, TedarikciFaturaOdemesi
     from app.models.banka import KasaHareketi, BankaHareketi
     from app.models.virman import UrunSahiplikGecmisi
     from sqlalchemy import update as sa_update
@@ -370,10 +371,20 @@ def test_verilerini_temizle(istek: TemizlikOnayIstegi, db: Session = Depends(get
 
         SiparisOdeme,
         StokMaliyetKalemi,
+
+        # TedarikciFaturaOdemesi, StokSeriNo VE Siparis'e FK ile bagli -
+        # HER IKISINDEN ONCE silinmeli (StokMaliyetKalemi'nden SONRA, cunku
+        # StokMaliyetKalemi bu odemeye referans veriyordu, o ONCE silindi).
+        TedarikciFaturaOdemesi,
+
         StokSeriNo,
 
         SiparisDetay,
         Siparis,
+
+        # TedarikciFaturasi, CariHesap'a FK ile bagli - CariHesap'tan ONCE
+        # silinmeli (aksi halde "cari hala kullanimda" FK ihlali olusur).
+        TedarikciFaturasi,
 
         CariHesap,
     ]
@@ -495,3 +506,49 @@ def aciklamalari_yeniden_uret(
 
     db.commit()
     return {"guncellenen_kayit": guncellenen}
+
+
+@router.get("/yonetim/veritabani-yedek", dependencies=[Depends(izin_gerektir("KULLANICI_YONET"))])
+def veritabani_yedek_indir(db: Session = Depends(get_db)):
+    """
+    Veritabanindaki TUM tablolarin TUM verisini JSON olarak dump eder ve
+    tek bir dosya halinde indirmeyi saglar - komut satiri/pg_dump kurulumu
+    gerektirmeden, uygulama icinden tek tikla yedek almak icin.
+
+    ONEMLI: Bu bir VERI yedegidir (guvenli sakla) - dogrudan "geri yukleme"
+    ozelligi yoktur; ciddi bir veri kaybi durumunda bu JSON'daki veriler
+    elle/bir script ile tekrar veritabanina yazilabilir. Duzenli araliklarla
+    (orn. haftada bir) indirip guvenli bir yerde (bilgisayar, e-posta,
+    bulut depolama) saklamak onerilir.
+    """
+    import json
+    from decimal import Decimal
+    from datetime import date as _date, datetime as _datetime
+    from sqlalchemy import text
+    from fastapi.responses import Response
+
+    def serialize(obj):
+        if isinstance(obj, Decimal):
+            return float(obj)
+        if isinstance(obj, (_date, _datetime)):
+            return obj.isoformat()
+        return str(obj)
+
+    tablo_adlari = [
+        row[0] for row in db.execute(text(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name"
+        )).fetchall()
+    ]
+
+    yedek = {}
+    for tablo in tablo_adlari:
+        satirlar = db.execute(text(f'SELECT * FROM "{tablo}"')).mappings().all()
+        yedek[tablo] = [dict(satir) for satir in satirlar]
+
+    icerik = json.dumps(yedek, default=serialize, ensure_ascii=False, indent=2)
+    dosya_adi = f"kinetik_erp_yedek_{_date.today().isoformat()}.json"
+    return Response(
+        content=icerik,
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{dosya_adi}"'},
+    )
