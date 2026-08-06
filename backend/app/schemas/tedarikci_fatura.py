@@ -22,6 +22,7 @@ class TedarikciFaturaGuncelleIstegi(BaseModel):
     tutar: Decimal | None = None
     para_birimi: str | None = None
     aciklama: str | None = None
+    varsayilan_maliyet_tipi: str | None = None
     sifre: str  # duzenleme onayi icin zorunlu
 
 
