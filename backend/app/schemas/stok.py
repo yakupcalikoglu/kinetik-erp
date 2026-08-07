@@ -57,6 +57,17 @@ class StokSeriNoYanit(BaseModel):
     garanti_bitis_tarihi: date | None
     barkod: str | None
     sahiplik_tipi: str = "TICARI"
+    satis_odeme_tipi: str | None = None
+    # Satis-sonrasi maliyet kalemleri (ITHALAT maliyetlerinden BAGIMSIZ -
+    # toplam_maliyet_try'ye DAHIL DEGIL, ayrica toplam_satis_maliyeti_try
+    # ile gosterilir):
+    ardiye_maliyeti_try: Decimal = Decimal("0")
+    ilave_gumruk_vergisi_try: Decimal = Decimal("0")
+    damga_vergisi_try: Decimal = Decimal("0")
+    tse_ucreti_try: Decimal = Decimal("0")
+    gumrukcu_masrafi_try: Decimal = Decimal("0")
+    banka_masrafi_try: Decimal = Decimal("0")
+    kdv_try: Decimal = Decimal("0")
 
     class Config:
         from_attributes = True
@@ -67,6 +78,12 @@ class StokSeriNoYanit(BaseModel):
                 self.gumruk_maliyeti_try + self.antrepo_maliyeti_try +
                 self.millilestirme_maliyeti_try + self.leasing_maliyeti_try +
                 self.diger_maliyet_try)
+
+    @computed_field
+    def toplam_satis_maliyeti_try(self) -> Decimal:
+        return (self.ardiye_maliyeti_try + self.ilave_gumruk_vergisi_try +
+                self.damga_vergisi_try + self.tse_ucreti_try +
+                self.gumrukcu_masrafi_try + self.banka_masrafi_try + self.kdv_try)
 
 
 # ------------------------------------------------------- Öz Mal / Demirbaş
@@ -118,6 +135,7 @@ class StokDurumGuncelleIstegi(BaseModel):
     musteri_cari_id: int | None = None
     satis_fiyati_try: Decimal | None = None
     satis_tarihi: date | None = None
+    satis_odeme_tipi: str | None = None  # "LEASINGLI" | "FATURALI"
 
 
 class MaliyetKalemiEkleIstegi(BaseModel):
@@ -259,10 +277,20 @@ class SiparisYanit(BaseModel):
 
 class StokSatisIstegi(BaseModel):
     musteri_cari_id: int
-    satis_fiyati_try: Decimal
+    satis_fiyati_try: Decimal  # HER ZAMAN TL karsiligi - raporlama/kar-zarar bu alani kullanir
     satis_tarihi: date
     odeme_yontemi: str  # "NAKIT" | "BANKA"
     banka_hesap_id: int | None = None
+    satis_odeme_tipi: str | None = None  # "LEASINGLI" | "FATURALI"
+    # ASAGIDAKI 3 ALAN, odeme BANKA ile VE hesap doviz cinsindense onemlidir:
+    # banka hesabina GERCEK ISLEM para biriminde/tutarinda yazmak icin
+    # kullanilir - VERILMEZSE (eski davranis) TL varsayilir, bu da hesap
+    # dovizliyse HATALI kaydin (TL tutarinin dogrudan doviz sanilmasi)
+    # onune GECMEZ. Bu yuzden BANKA + dovizli hesap segiliyse frontend
+    # BUNLARI DOLDURMALIDIR.
+    islem_para_birimi: str = "TRY"
+    islem_tutari: Decimal | None = None  # None ise satis_fiyati_try (TL) kullanilir
+    kur: Decimal = Decimal("1")
 
 
 class TeslimAlinanUrun(BaseModel):
