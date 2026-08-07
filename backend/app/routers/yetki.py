@@ -315,6 +315,7 @@ def test_verilerini_temizle(istek: TemizlikOnayIstegi, db: Session = Depends(get
     from app.models.stok import Siparis, SiparisDetay, StokSeriNo, StokMaliyetKalemi, SiparisOdeme
     from app.models.cari import CariHesap, CariHareket
     from app.models.tedarikci_fatura import TedarikciFaturasi, TedarikciFaturaOdemesi
+    from app.models.yedek_parca import YedekParcaHareketi
     from app.models.banka import KasaHareketi, BankaHareketi
     from app.models.virman import UrunSahiplikGecmisi
     from sqlalchemy import update as sa_update
@@ -383,6 +384,12 @@ def test_verilerini_temizle(istek: TemizlikOnayIstegi, db: Session = Depends(get
         # HER IKISINDEN ONCE silinmeli (StokMaliyetKalemi'nden SONRA, cunku
         # StokMaliyetKalemi bu odemeye referans veriyordu, o ONCE silindi).
         TedarikciFaturaOdemesi,
+
+        # YedekParcaHareketi (bakim/kullanim kaydi), stok_seri_no'ya FK ile
+        # bagli olabilir - StokSeriNo'dan ONCE silinmeli. YedekParca'nin
+        # KENDISI (envanterin tanimlari/miktarlari) BILEREK silinmiyor -
+        # bu, urun TANIMI, test verisi degil.
+        YedekParcaHareketi,
 
         StokSeriNo,
 
