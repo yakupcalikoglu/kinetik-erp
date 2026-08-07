@@ -1424,21 +1424,55 @@ function TaksitOdemeFormu({ taksit, akreditif, onKaydedildi, onVazgec }) {
   );
 }
 
+function bosManuelTaksitSatiri(tarih) {
+  return { vade_tarihi: tarih, tutar: '' };
+}
+
 function TaksitlendirFormu({ kalem, onTamamlandi, onVazgec }) {
+  const [mod, setMod] = useState('ESIT'); // 'ESIT' | 'MANUEL'
   const [form, setForm] = useState({ taksit_sayisi: 3, ek_ucret: '0', ilk_vade_tarihi: new Date().toISOString().slice(0, 10) });
+  const [manuelSatirlar, setManuelSatirlar] = useState([
+    bosManuelTaksitSatiri(new Date().toISOString().slice(0, 10)),
+    bosManuelTaksitSatiri(new Date().toISOString().slice(0, 10)),
+  ]);
   const [hata, setHata] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
+
+  const toplamGerekenTutar = Number(kalem.tutar) + Number(form.ek_ucret || 0);
+  const manuelToplam = manuelSatirlar.reduce((acc, s) => acc + (Number(s.tutar) || 0), 0);
+  const manuelFark = Math.round((toplamGerekenTutar - manuelToplam) * 100) / 100;
+
+  function manuelSatirGuncelle(i, alan, deger) {
+    setManuelSatirlar((satirlar) => satirlar.map((s, idx) => (idx === i ? { ...s, [alan]: deger } : s)));
+  }
+  function manuelSatirEkle() {
+    setManuelSatirlar((satirlar) => [...satirlar, bosManuelTaksitSatiri(new Date().toISOString().slice(0, 10))]);
+  }
+  function manuelSatirSil(i) {
+    setManuelSatirlar((satirlar) => satirlar.filter((_, idx) => idx !== i));
+  }
 
   async function kaydet(e) {
     e.preventDefault();
     setHata(null);
+    if (mod === 'MANUEL' && Math.abs(manuelFark) > 0.02) {
+      setHata(`Taksitlerin toplamı, ödenecek toplam tutarla (${toplamGerekenTutar.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}) eşleşmiyor — fark: ${manuelFark.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}.`);
+      return;
+    }
     setKaydediliyor(true);
     try {
-      await api.post(`/akreditif-kalemleri/${kalem.id}/taksitlendir`, {
-        taksit_sayisi: Number(form.taksit_sayisi),
-        ek_ucret: Number(form.ek_ucret || 0),
-        ilk_vade_tarihi: form.ilk_vade_tarihi,
-      });
+      if (mod === 'MANUEL') {
+        await api.post(`/akreditif-kalemleri/${kalem.id}/taksitlendir`, {
+          ek_ucret: Number(form.ek_ucret || 0),
+          taksitler: manuelSatirlar.map((s) => ({ vade_tarihi: s.vade_tarihi, tutar: Number(s.tutar) })),
+        });
+      } else {
+        await api.post(`/akreditif-kalemleri/${kalem.id}/taksitlendir`, {
+          taksit_sayisi: Number(form.taksit_sayisi),
+          ek_ucret: Number(form.ek_ucret || 0),
+          ilk_vade_tarihi: form.ilk_vade_tarihi,
+        });
+      }
       onTamamlandi();
     } catch (err) {
       setHata(hataMesajiCikar(err));
@@ -1456,18 +1490,83 @@ function TaksitlendirFormu({ kalem, onTamamlandi, onVazgec }) {
               Taksitlendir — finansman sıkıntısında ek ücret karşılığında böl
             </div>
             <HataMesaji>{hata}</HataMesaji>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-              <Alan etiket="Taksit sayısı">
-                <input required type="number" min="2" value={form.taksit_sayisi} onChange={(e) => setForm((f) => ({ ...f, taksit_sayisi: e.target.value }))} style={girdiStili} />
-              </Alan>
-              <Alan etiket="Ek ücret (taksitlendirme bedeli)">
-                <ParaGirdisi value={form.ek_ucret} onChange={(v) => setForm((f) => ({ ...f, ek_ucret: v }))} />
-              </Alan>
-              <Alan etiket="İlk taksit vade tarihi">
-                <input required type="date" value={form.ilk_vade_tarihi} onChange={(e) => setForm((f) => ({ ...f, ilk_vade_tarihi: e.target.value }))} style={girdiStili} />
-              </Alan>
+
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              {[['ESIT', 'Eşit böl'], ['MANUEL', 'Her taksidi elle gir']].map(([deger, etiket]) => (
+                <button
+                  key={deger}
+                  type="button"
+                  onClick={() => setMod(deger)}
+                  style={{
+                    padding: '6px 14px', borderRadius: 6, fontSize: 12.5, cursor: 'pointer',
+                    border: mod === deger ? '1.5px solid var(--lacivert)' : '1px solid var(--kenarlik-koyu)',
+                    background: mod === deger ? 'var(--lacivert)' : 'white',
+                    color: mod === deger ? 'white' : 'var(--metin-birincil)',
+                    fontWeight: mod === deger ? 600 : 400,
+                  }}
+                >
+                  {etiket}
+                </button>
+              ))}
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
+
+            <div style={{ marginBottom: 10 }}>
+              <Alan etiket="Ek ücret (taksitlendirme bedeli)">
+                <ParaGirdisi value={form.ek_ucret} onChange={(v) => setForm((f) => ({ ...f, ek_ucret: v }))} style={{ maxWidth: 220 }} />
+              </Alan>
+              <div style={{ fontSize: 12, color: 'var(--metin-ikincil)', marginTop: 2 }}>
+                Toplam ödenecek (kalem tutarı + ek ücret): <strong>{toplamGerekenTutar.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</strong>
+              </div>
+            </div>
+
+            {mod === 'ESIT' ? (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <Alan etiket="Taksit sayısı">
+                  <input required type="number" min="2" value={form.taksit_sayisi} onChange={(e) => setForm((f) => ({ ...f, taksit_sayisi: e.target.value }))} style={girdiStili} />
+                </Alan>
+                <Alan etiket="İlk taksit vade tarihi">
+                  <input required type="date" value={form.ilk_vade_tarihi} onChange={(e) => setForm((f) => ({ ...f, ilk_vade_tarihi: e.target.value }))} style={girdiStili} />
+                </Alan>
+              </div>
+            ) : (
+              <div>
+                <table style={{ width: '100%', marginBottom: 8 }}>
+                  <thead>
+                    <tr style={{ background: 'var(--zemin)' }}>
+                      {['Taksit No', 'Vade Tarihi', 'Tutar', ''].map((b) => (
+                        <th key={b} style={{ textAlign: 'left', padding: '6px 8px', fontSize: 11.5, color: 'var(--metin-ikincil)' }}>{b}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {manuelSatirlar.map((s, i) => (
+                      <tr key={i} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                        <td style={{ padding: 6, fontSize: 13 }}>{i + 1}</td>
+                        <td style={{ padding: 6 }}>
+                          <input required type="date" value={s.vade_tarihi} onChange={(e) => manuelSatirGuncelle(i, 'vade_tarihi', e.target.value)} style={girdiStili} />
+                        </td>
+                        <td style={{ padding: 6 }}>
+                          <ParaGirdisi value={s.tutar} onChange={(v) => manuelSatirGuncelle(i, 'tutar', v)} style={{ width: 140 }} />
+                        </td>
+                        <td style={{ padding: 6 }}>
+                          {manuelSatirlar.length > 2 && (
+                            <button type="button" onClick={() => manuelSatirSil(i)} style={eylemChipStili('kirmizi')}>Sil</button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <button type="button" onClick={manuelSatirEkle} style={eylemChipStili('lacivert')}>+ Taksit ekle</button>
+                <div style={{ fontSize: 12.5, marginTop: 8, color: Math.abs(manuelFark) > 0.02 ? 'var(--kirmizi)' : 'var(--yesil)' }}>
+                  Girilen toplam: {manuelToplam.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
+                  {Math.abs(manuelFark) > 0.02 && ` — fark: ${manuelFark.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}`}
+                  {Math.abs(manuelFark) <= 0.02 && ' — ✓ eşleşiyor'}
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
               <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Oluşturuluyor...' : 'Taksitlendir'}</Buton>
               <Buton type="button" variant="ikincil" onClick={onVazgec}>Vazgeç</Buton>
             </div>
