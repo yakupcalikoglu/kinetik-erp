@@ -131,6 +131,10 @@ class StokSeriNo(Base):
 
     satis_fiyati_try = Column(Numeric(18, 2))
     satis_tarihi = Column(Date)
+    # Satisin GERCEKTEN sisteme islendigi an (saat dahil) - satis_tarihi
+    # kullanicinin sectigi/geriye donuk olabilen bir tarih, bu alan ise
+    # "Son Islemler" akisinda dogru zamanla gorunmesi icin OTOMATIK doldurulur.
+    satis_kayit_zamani = Column(DateTime)
     musteri_cari_id = Column(BigInteger, ForeignKey("cari_hesaplar.id"))
     # Satis turu - "LEASINGLI" veya "FATURALI" (KDV'li/pesin/taksitli/cek
     # hepsi FATURALI sayilir). Satis-sonrasi maliyet kontrol listesinde
