@@ -112,10 +112,22 @@ class AkreditifMaliyetDagitimSatiri(BaseModel):
 
 
 # --------------------------------------------------------- Kalem Taksitlendirme
+class TaksitManuelSatir(BaseModel):
+    vade_tarihi: date
+    tutar: Decimal
+
+
 class AkreditifKalemTaksitlendirIstegi(BaseModel):
-    taksit_sayisi: int
+    # taksitler VERILMEZSE (eski/basit kullanim): taksit_sayisi'na gore
+    # toplam ESIT boluniyor, ilk_vade_tarihi'nden aylik araliklarla vade
+    # atanir - GERIYE DONUK UYUMLU eski davranis.
+    # taksitler VERILIRSE: her taksidin KENDI tutari/vadesi kullanicidan
+    # geldigi HALIYLE (esit olmasi ZORUNLU degil) kaydedilir - "taksit
+    # sayisi", "ek_ucret" ve "ilk_vade_tarihi" bu durumda YOK SAYILIR.
+    taksit_sayisi: int = 1
     ek_ucret: Decimal = Decimal("0")  # taksitlendirme hizmeti icin alinan ek ucret
-    ilk_vade_tarihi: date
+    ilk_vade_tarihi: date | None = None
+    taksitler: list[TaksitManuelSatir] | None = None
 
 
 class AkreditifKalemTaksitiYanit(BaseModel):
