@@ -150,9 +150,15 @@ export default function SatisYapSayfasi() {
         });
       } else if (bankaGerekli) {
         if (!bankaHesapId) { setHata('Lütfen paranın yatacağı banka hesabını seçin.'); setKaydediliyor(false); return; }
+        // ONEMLI: Banka hesabina GERCEK ISLEM para biriminde/tutarinda
+        // yazmasi icin, kullanicinin GIRDIGI ORIJINAL tutar+para birimini
+        // (islem_tutari/islem_para_birimi) de gonderiyoruz - sadece
+        // satis_fiyati_try (TL karsiligi) gondermek, hesap dovizliyse bu
+        // TL rakaminin dogrudan doviz sanilip yazilmasina yol aciyordu.
         await api.post(`/stok-seri-no/${urunId}/satis`, {
           musteri_cari_id: Number(musteriCariId), satis_fiyati_try: tutarTRY,
           satis_tarihi: tarih, odeme_yontemi: 'BANKA', banka_hesap_id: Number(bankaHesapId),
+          islem_para_birimi: tutarParaBirimi, islem_tutari: Number(tutar), kur: Number(tutarKur || 1),
         });
       } else if (taksitliBenzeri) {
         if (!seciliUrun) { setHata('Lütfen bir ürün seçin.'); setKaydediliyor(false); return; }
@@ -300,6 +306,17 @@ export default function SatisYapSayfasi() {
                     <option key={h.banka_hesap_id} value={h.banka_hesap_id}>{h.banka_adi} — {h.hesap_adi || h.para_birimi}</option>
                   ))}
                 </select>
+                {bankaHesapId && (() => {
+                  const secilenHesap = bankaHesaplari.find((h) => String(h.banka_hesap_id) === String(bankaHesapId));
+                  if (secilenHesap && secilenHesap.para_birimi !== tutarParaBirimi) {
+                    return (
+                      <div style={{ fontSize: 12, color: 'var(--amber)', marginTop: 4 }}>
+                        ⚠ Bu hesap {secilenHesap.para_birimi} cinsinden, sen {tutarParaBirimi} girdin — sisteme doğru kurla dönüştürülerek yazılacak.
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
               </Alan>
             )}
 
