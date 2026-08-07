@@ -678,7 +678,7 @@ export function TabloIskeleti({ satirSayisi = 5, sutunSayisi = 6 }) {
 }
 
 export const MALIYET_TIP_METIN = {
-  SATINALMA: 'Satınalma', NAKLIYE: 'Nakliye/Navlun', GUMRUK: 'Gümrük', ANTREPO: 'Antrepo',
+  SATINALMA: 'Satınalma', NAKLIYE: 'Nakliye/Navlun', SIGORTA: 'Sigorta', GUMRUK: 'Gümrük', ANTREPO: 'Antrepo',
   MILLILESTIRME: 'Millileştirme', ARDIYE: 'Ardiye', ILAVE_GUMRUK_VERGISI: 'İlave Gümrük Vergisi',
   DAMGA_VERGISI: 'Damga Vergisi', TSE_UCRETI: 'TSE Ücreti', GUMRUKCU_MASRAFI: 'Gümrükçü Masrafı',
   BANKA_MASRAFI: 'Banka Masrafı', KDV: 'KDV', LEASING: 'Leasing', DIGER: 'Diğer',
