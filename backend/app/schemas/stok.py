@@ -45,6 +45,7 @@ class StokSeriNoYanit(BaseModel):
     tedarikci_cari_id: int | None
     satinalma_maliyeti_try: Decimal
     nakliye_maliyeti_try: Decimal
+    sigorta_maliyeti_try: Decimal = Decimal("0")
     gumruk_maliyeti_try: Decimal
     antrepo_maliyeti_try: Decimal
     millilestirme_maliyeti_try: Decimal
@@ -75,7 +76,7 @@ class StokSeriNoYanit(BaseModel):
     @computed_field
     def toplam_maliyet_try(self) -> Decimal:
         return (self.satinalma_maliyeti_try + self.nakliye_maliyeti_try +
-                self.gumruk_maliyeti_try + self.antrepo_maliyeti_try +
+                self.sigorta_maliyeti_try + self.gumruk_maliyeti_try + self.antrepo_maliyeti_try +
                 self.millilestirme_maliyeti_try + self.leasing_maliyeti_try +
                 self.diger_maliyet_try)
 
