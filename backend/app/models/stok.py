@@ -29,6 +29,7 @@ class MaliyetTip(str, enum.Enum):
     # Ithalat asamasi maliyetleri (siparis bazli, urun antrepoya gelene kadar):
     SATINALMA = "SATINALMA"
     NAKLIYE = "NAKLIYE"
+    SIGORTA = "SIGORTA"
     GUMRUK = "GUMRUK"
     ANTREPO = "ANTREPO"
     MILLILESTIRME = "MILLILESTIRME"
@@ -111,6 +112,7 @@ class StokSeriNo(Base):
 
     satinalma_maliyeti_try = Column(Numeric(18, 2), default=0)
     nakliye_maliyeti_try = Column(Numeric(18, 2), default=0)
+    sigorta_maliyeti_try = Column(Numeric(18, 2), default=0)
     gumruk_maliyeti_try = Column(Numeric(18, 2), default=0)
     antrepo_maliyeti_try = Column(Numeric(18, 2), default=0)
     millilestirme_maliyeti_try = Column(Numeric(18, 2), default=0)
@@ -182,6 +184,7 @@ class StokMaliyetKalemi(Base):
 MALIYET_TIP_SUTUN_ESLEME = {
     MaliyetTip.SATINALMA: "satinalma_maliyeti_try",
     MaliyetTip.NAKLIYE: "nakliye_maliyeti_try",
+    MaliyetTip.SIGORTA: "sigorta_maliyeti_try",
     MaliyetTip.GUMRUK: "gumruk_maliyeti_try",
     MaliyetTip.ANTREPO: "antrepo_maliyeti_try",
     MaliyetTip.MILLILESTIRME: "millilestirme_maliyeti_try",
