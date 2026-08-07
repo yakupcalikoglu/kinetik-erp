@@ -4,18 +4,27 @@ Bir odeme/tahsilat "NAKIT" secilirse Ana Kasa'ya, "BANKA" secilirse ilgili
 banka hesabina bir hareket kaydi acar. Boylece cek/leasing/akreditif/taksit/
 kiralama gibi modullerdeki her odeme/tahsilat islemi gercek nakit/banka
 bakiyesine yansir.
-
 para_birimi/kur parametreleri GERIYE DONUK UYUMLUDUR: cagiran taraf bu
 parametreleri vermezse islem TRY kabul edilir (eski davranis degismez).
 Bir modulun dovizli nakit odemesini dogru TL karsiligiyla kasaya
 yazdirmak icin ilgili router'in para_birimi ve (TRY disi ise) kur
 degerini bu fonksiyona iletmesi yeterlidir.
+
+ONEMLI GUVENLIK KURALI (BANKA icin): "tutar" parametresi HER ZAMAN
+hedef banka hesabinin KENDI para biriminde olmalidir - "para_birimi"
+parametresi bu tutarin GERCEKTEN hangi para biriminde oldugunu dogrulamak
+icindir. Eger cagiran taraf, hesabin para birimiyle UYUSMAYAN bir
+"para_birimi" gonderirse (orn. TL tutarini "TRY" olarak, ama hesap USD
+ise), bu fonksiyon ESKIDEN sessizce YANLIS KAYDEDIYORDU (TL tutari
+dogrudan USD sanilip yaziliyordu - devasa hatali bakiyelere yol aciyordu).
+Artik boyle bir UYUSMAZLIK tespit edilirse net bir hata firlatilir -
+boylece hata SESSIZCE gecmez, cagiran tarafin (router/frontend) dogru
+tutari/parayi gondermesi ZORUNLU hale gelir.
 """
 from datetime import date
 from decimal import Decimal
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
-
 from app.models.banka import BankaHesabi, BankaHareketi, BankaHareketTip, KasaHareketi, HareketYon
 
 
@@ -44,6 +53,37 @@ def para_hareketi_olustur(
         if hesap is None or hesap.sirket_id != sirket_id:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Banka hesabı bulunamadı (ID={banka_hesap_id}).")
 
+        hesap_pb = hesap.para_birimi.value if hasattr(hesap.para_birimi, "value") else hesap.para_birimi
+        gonderilen_pb = para_birimi
+
+        # KRITIK GUVENLIK KONTROLU: gonderilen tutarin para birimi, hedef
+        # hesabin para birimiyle AYNI OLMAK ZORUNDA. Farkliysa, dogru kurla
+        # DONUSTURUYORUZ (sessizce yanlis kaydetmek yerine). Kur verilmemisse
+        # (eski cagrilar) ve donusum GEREKIYORSA, bu bir HATA - cagiran
+        # tarafin dogru para_birimi/kur ile CAGIRMASI gerekir.
+        if gonderilen_pb != hesap_pb:
+            if kur is None or kur == 0:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    f"'{hesap.banka_adi}' hesabı {hesap_pb} cinsinden ama gönderilen tutar {gonderilen_pb} "
+                    f"olarak işaretlenmiş ve kur belirtilmemiş. Yanlış hesaba yazılmasını önlemek için işlem durduruldu — "
+                    f"lütfen doğru banka hesabını seçin ya da kur bilgisini gönderin."
+                )
+            # gonderilen_pb -> hesap_pb donusumu: ikisi de dovizse (orn. USD
+            # tutar TRY hesaba) ya da TRY -> doviz ise, "kur" parametresi
+            # HER ZAMAN "gonderilen_pb'nin TRY karsiligi" anlaminda kullanilir
+            # (projedeki tum diger kur kullanimlarindaki kural budur).
+            tutar_try = tutar if gonderilen_pb == "TRY" else tutar * kur
+            if hesap_pb == "TRY":
+                tutar = tutar_try
+            else:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    f"'{hesap.banka_adi}' hesabı {hesap_pb} cinsinden, gönderilen tutar {gonderilen_pb} cinsinden — "
+                    f"iki farklı döviz arasında otomatik dönüşüm desteklenmiyor. Lütfen tutarı {hesap_pb} cinsinden girin "
+                    f"ya da TRY hesabı seçin."
+                )
+
         imzali_tutar = tutar if yon == "GIRIS" else -tutar
         db.add(BankaHareketi(
             sirket_id=sirket_id,
@@ -67,7 +107,6 @@ def para_hareketi_olustur(
                     f"Nakit ödeme {para_birimi} cinsinden yapılıyor; TL karşılığı için kur zorunludur."
                 )
             tutar_try_karsiligi = tutar * kur
-
         db.add(KasaHareketi(
             sirket_id=sirket_id,
             tarih=date.today(),
