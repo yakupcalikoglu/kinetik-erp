@@ -301,9 +301,9 @@ def test_verilerini_temizle(istek: TemizlikOnayIstegi, db: Session = Depends(get
     from sqlalchemy import delete as sa_delete
 
     from app.models.finansal import (
-        Cek, CekGecmis, LeasingSozlesme, LeasingOdeme, LeasingSozlesmeKalemi,
+        Cek, CekGecmis, LeasingSozlesme, LeasingOdeme, LeasingSozlesmeKalemi, LeasingKalemUrunu,
         TaksitliSatisPlani, TaksitDetay, TaksitliSatisKalemi,
-        KiralamaSozlesme, KiralamaOdeme, KiralamaSozlesmeKalemi, BakimKaydi,
+        KiralamaSozlesme, KiralamaOdeme, KiralamaSozlesmeKalemi, KiralamaKalemUrunu, BakimKaydi,
     )
     from app.models.akreditif import Akreditif, AkreditifKalemi
     from app.models.akreditif_maliyet import AkreditifMaliyetDagitimi
@@ -333,6 +333,10 @@ def test_verilerini_temizle(istek: TemizlikOnayIstegi, db: Session = Depends(get
         Akreditif,
 
         LeasingOdeme,
+        # LeasingKalemUrunu (baglanti tablosu), LeasingSozlesmeKalemi'ne FK
+        # ile bagli - ONDAN ONCE silinmeli, aksi halde "hala referans
+        # ediliyor" FK ihlali alinir.
+        LeasingKalemUrunu,
         LeasingSozlesmeKalemi,
         LeasingSozlesme,
 
@@ -341,6 +345,9 @@ def test_verilerini_temizle(istek: TemizlikOnayIstegi, db: Session = Depends(get
         TaksitliSatisPlani,
 
         KiralamaOdeme,
+        # Ayni sekilde KiralamaKalemUrunu da KiralamaSozlesmeKalemi'nden
+        # ONCE silinmeli.
+        KiralamaKalemUrunu,
         KiralamaSozlesmeKalemi,
         KiralamaSozlesme,
 
