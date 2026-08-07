@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
-import { api, hataMesajiCikar } from '../api/client';
+import { api, hataMesajiCikar, ozelOnayIste } from '../api/client';
 import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, paraFormat, Sekmeler, eylemChipStili, Etiket } from '../components/Ortak';
 import AramaliSecici from '../components/AramaliSecici';
 
@@ -140,6 +140,26 @@ export default function SatisYapSayfasi() {
     if (!urunId) { setHata('Lütfen satılacak ürünü seçin.'); return; }
     if (!musteriCariId) { setHata('Lütfen müşteriyi seçin.'); return; }
     if (!tutar || Number(tutar) <= 0) { setHata('Lütfen geçerli bir tutar girin.'); return; }
+
+    // BANKA ile odemede, hesabin BAKIYESININ NE OLACAGINI ONCEDEN GOSTERIP
+    // ONAY ISTIYORUZ - "25.000 USD'lik satisi 47,54 kurla islerken TL
+    // tutari yanlislikla USD sanildi" gibi hatalar, islem TAMAMLANMADAN
+    // ONCE gozle fark edilebilsin diye (sonradan avlamak yerine).
+    if (bankaGerekli && bankaHesapId) {
+      const secilenHesap = bankaHesaplari.find((h) => String(h.banka_hesap_id) === String(bankaHesapId));
+      if (secilenHesap) {
+        const eskiBakiye = Number(secilenHesap.bakiye || 0);
+        const hesapPB = secilenHesap.para_birimi;
+        const islenecekTutar = hesapPB === tutarParaBirimi ? Number(tutar) : tutarTRY;
+        const yeniBakiye = eskiBakiye + islenecekTutar;
+        const oranAsiriMi = eskiBakiye !== 0 && Math.abs(yeniBakiye / eskiBakiye) > 5;
+        const uyariBasligi = oranAsiriMi
+          ? `⚠️ DİKKAT: Bu işlem bakiyeyi ${Math.abs(yeniBakiye / eskiBakiye).toFixed(1)} KAT değiştiriyor — bir hata olabilir!\n\n`
+          : '';
+        const onayMetni = `${uyariBasligi}${secilenHesap.banka_adi} (${hesapPB}) hesabı:\n${paraFormat(eskiBakiye, hesapPB)} → ${paraFormat(yeniBakiye, hesapPB)}\n\nOnaylıyor musunuz?`;
+        if (!(await ozelOnayIste(onayMetni))) return;
+      }
+    }
 
     setKaydediliyor(true);
     try {
