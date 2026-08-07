@@ -539,19 +539,40 @@ def akreditif_kalemi_taksitlendir(
     if mevcut_taksitler:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bu kalem zaten taksitlendirilmiş.")
 
-    from dateutil.relativedelta import relativedelta
     toplam = kalem.tutar + istek.ek_ucret
-    taksit_tutari = round(toplam / istek.taksit_sayisi, 2)
-
     olusturulanlar = []
-    for i in range(1, istek.taksit_sayisi + 1):
-        vade = istek.ilk_vade_tarihi + relativedelta(months=i - 1)
-        tutar = taksit_tutari
-        if i == istek.taksit_sayisi:
-            tutar = toplam - taksit_tutari * (istek.taksit_sayisi - 1)
-        yeni = AkreditifKalemTaksiti(kalem_id=kalem_id, taksit_no=i, vade_tarihi=vade, tutar=tutar)
-        db.add(yeni)
-        olusturulanlar.append(yeni)
+
+    if istek.taksitler:
+        # MANUEL GIRIS: kullanici her taksidin tutarini/vadesini kendi
+        # belirlemis - TEK sart, toplamlarinin (kalem tutari + ek ucret)
+        # ile TAM olarak eslesmesi (kurus farki HATA SAYILMAZ, 0.02 TL
+        # tolerans birakiyoruz - yuvarlama farklarindan dolayi).
+        girilen_toplam = sum((s.tutar for s in istek.taksitler), Decimal("0"))
+        if abs(girilen_toplam - toplam) > Decimal("0.02"):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"Girdiğiniz taksitlerin toplamı ({girilen_toplam}), kalem tutarı + ek ücret toplamına "
+                f"({toplam}) eşit değil. Lütfen taksit tutarlarını kontrol edin."
+            )
+        for i, satir in enumerate(istek.taksitler, start=1):
+            yeni = AkreditifKalemTaksiti(kalem_id=kalem_id, taksit_no=i, vade_tarihi=satir.vade_tarihi, tutar=satir.tutar)
+            db.add(yeni)
+            olusturulanlar.append(yeni)
+    else:
+        # ESIT BOLME (eski/basit davranis): toplam, taksit_sayisi'na esit
+        # bolunur, ilk_vade_tarihi'nden aylik araliklarla vade atanir.
+        if not istek.ilk_vade_tarihi:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Eşit bölme için ilk_vade_tarihi zorunludur.")
+        from dateutil.relativedelta import relativedelta
+        taksit_tutari = round(toplam / istek.taksit_sayisi, 2)
+        for i in range(1, istek.taksit_sayisi + 1):
+            vade = istek.ilk_vade_tarihi + relativedelta(months=i - 1)
+            tutar = taksit_tutari
+            if i == istek.taksit_sayisi:
+                tutar = toplam - taksit_tutari * (istek.taksit_sayisi - 1)
+            yeni = AkreditifKalemTaksiti(kalem_id=kalem_id, taksit_no=i, vade_tarihi=vade, tutar=tutar)
+            db.add(yeni)
+            olusturulanlar.append(yeni)
 
     db.commit()
     for t in olusturulanlar:
