@@ -1496,6 +1496,22 @@ def son_islemler(
                     zaman=u.olusturma_tarihi, tur="STOK",
                     aciklama=f"Ürün kaydedildi — {u.seri_no}",
                 ))
+
+        # Satislar (durum degisikligi - yeni kayit degil, bu yuzden AYRI bir
+        # zaman damgasi olan satis_kayit_zamani'ni kullanir).
+        satilanlar = list(db.execute(
+            select(StokSeriNo).where(
+                StokSeriNo.sirket_id == sirket_id,
+                StokSeriNo.durum == StokDurum.SATILDI,
+                StokSeriNo.satis_kayit_zamani.isnot(None),
+            ).order_by(StokSeriNo.satis_kayit_zamani.desc()).limit(limit)
+        ).scalars())
+        for u in satilanlar:
+            satirlar.append(SonIslemSatiri(
+                zaman=u.satis_kayit_zamani, tur="STOK_SATIS",
+                aciklama=f"Satış yapıldı — {u.seri_no}",
+                tutar=u.satis_fiyati_try, para_birimi="TRY",
+            ))
     except Exception:
         pass
 
