@@ -84,6 +84,10 @@ function Siparis360Paneli({ siparis, onKapat }) {
   const [hata, setHata] = useState(null);
 
   useEffect(() => {
+    api.get('/kur/USD').then((r) => setGuncelUsdKur(Number(r.data.kur))).catch(() => {});
+  }, []);
+
+  useEffect(() => {
     Promise.all([
       api.get(`/siparisler/${siparis.id}/odemeler`).catch(() => ({ data: [] })),
       api.get(`/siparisler/${siparis.id}/bakiye`).catch(() => ({ data: null })),
@@ -538,7 +542,8 @@ function SiparisOdemeleriPaneli({ siparis, onKapat }) {
 
 const BEKLENEN_MALIYET_KATEGORILERI = [
   { anahtar: 'satinalma_maliyeti_try', tip: 'SATINALMA', ad: 'Satınalma (mal bedeli)' },
-  { anahtar: 'nakliye_maliyeti_try', tip: 'NAKLIYE', ad: 'Nakliye / Navlun / Sigorta / İç Nakliye' },
+  { anahtar: 'nakliye_maliyeti_try', tip: 'NAKLIYE', ad: 'Nakliye / Navlun / İç Nakliye' },
+  { anahtar: 'sigorta_maliyeti_try', tip: 'SIGORTA', ad: 'Sigorta' },
   { anahtar: 'gumruk_maliyeti_try', tip: 'GUMRUK', ad: 'Gümrük Vergisi' },
   { anahtar: 'ilave_gumruk_vergisi_try', tip: 'ILAVE_GUMRUK_VERGISI', ad: 'İlave Gümrük Vergisi' },
   { anahtar: 'antrepo_maliyeti_try', tip: 'ANTREPO', ad: 'Antrepo (Beyanname, İndirme, Ardiye)' },
@@ -586,6 +591,7 @@ export default function SiparislerSayfasi() {
   const navigate = useNavigate();
   const { oturum } = useAuth();
   const [siparisler, setSiparisler] = useState([]);
+  const [guncelUsdKur, setGuncelUsdKur] = useState(null);
   const [stokKartlari, setStokKartlari] = useState([]);
   const [cariler, setCariler] = useState([]);
   const [yukleniyor, setYukleniyor] = useState(true);
@@ -1063,36 +1069,88 @@ export default function SiparislerSayfasi() {
                               <div style={{ fontWeight: 600, fontSize: 12.5, marginBottom: 6, marginTop: 14 }}>
                                 Teslim Alınmış Ürünler — Maliyet Kalemi Ekle (manuel/istisnai giriş)
                               </div>
-                              {siparisUrunleriHaritasi[s.id].map((u) => (
-                                <div key={u.id} style={{ marginBottom: 6 }}>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', background: 'white', border: '1px solid var(--kenarlik)', borderRadius: 6 }}>
-                                    <span style={{ fontSize: 12.5 }}>
-                                      {urunAdi(u.stok_karti_id)} — {u.seri_no} — Toplam maliyet: <strong>{paraFormat(u.toplam_maliyet_try)}</strong>
-                                    </span>
-                                    <button
-                                      onClick={() => setMaliyetAcikUrunId((mevcut) => (mevcut === u.id ? null : u.id))}
-                                      style={eylemChipStili('lacivert')}
-                                    >
-                                      {maliyetAcikUrunId === u.id ? 'Kapat' : 'Maliyet Ekle'}
-                                    </button>
-                                  </div>
-                                  {maliyetAcikUrunId === u.id && (
-                                    <ManuelMaliyetKalemiEkleFormu
-                                      key={maliyetVarsayilanTip}
-                                      urun={u}
-                                      varsayilanTip={maliyetVarsayilanTip}
-                                      digerUrunler={siparisUrunleriHaritasi[s.id]}
-                                      onKaydedildi={() => {
-                                        setMaliyetAcikUrunId(null);
-                                        api.get('/stok-seri-no', { params: { siparis_id: s.id } })
-                                          .then((r) => setSiparisUrunleriHaritasi((h) => ({ ...h, [s.id]: r.data })))
-                                          .catch(() => {});
-                                      }}
-                                      onVazgec={() => setMaliyetAcikUrunId(null)}
-                                    />
-                                  )}
-                                </div>
-                              ))}
+                              <div style={{ background: 'white', border: '1px solid var(--kenarlik)', borderRadius: 6, overflowX: 'auto' }}>
+                                <table style={{ width: '100%', minWidth: 1900 }}>
+                                  <thead>
+                                    <tr style={{ background: 'var(--zemin)' }}>
+                                      {[
+                                        'Ürün Adı', 'Seri No', 'Satınalma', 'Nakliye/Navlun', 'Sigorta', 'Gümrük Vergisi',
+                                        'İlave Gümrük Vergisi', 'Antrepo', 'Millileştirme', 'Ardiye', 'Damga Vergisi',
+                                        'TSE Ücreti', 'Gümrükçü Masrafı', 'Banka Masrafı', 'KDV', 'Diğer', 'Toplam Maliyet', 'İşlem',
+                                      ].map((b) => (
+                                        <th key={b} style={{ textAlign: 'left', padding: '6px 10px', fontSize: 11, color: 'var(--metin-ikincil)', fontWeight: 500, whiteSpace: 'nowrap' }}>{b}</th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {siparisUrunleriHaritasi[s.id].map((u) => {
+                                      const hucre = (deger) => (
+                                        <td style={{ padding: '6px 10px', fontSize: 12, whiteSpace: 'nowrap' }}>
+                                          {paraFormat(deger)}
+                                          {guncelUsdKur && Number(deger) > 0 && (
+                                            <div style={{ fontSize: 10.5, color: 'var(--metin-soluk)' }}>≈ {paraFormat(Number(deger) / guncelUsdKur, 'USD')}</div>
+                                          )}
+                                        </td>
+                                      );
+                                      return (
+                                        <Fragment key={u.id}>
+                                          <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                                            <td style={{ padding: '6px 10px', fontSize: 12.5, whiteSpace: 'nowrap' }}>{urunAdi(u.stok_karti_id)}</td>
+                                            <td style={{ padding: '6px 10px', fontSize: 12.5, whiteSpace: 'nowrap' }}>{u.seri_no}</td>
+                                            {hucre(u.satinalma_maliyeti_try)}
+                                            {hucre(u.nakliye_maliyeti_try)}
+                                            {hucre(u.sigorta_maliyeti_try)}
+                                            {hucre(u.gumruk_maliyeti_try)}
+                                            {hucre(u.ilave_gumruk_vergisi_try)}
+                                            {hucre(u.antrepo_maliyeti_try)}
+                                            {hucre(u.millilestirme_maliyeti_try)}
+                                            {hucre(u.ardiye_maliyeti_try)}
+                                            {hucre(u.damga_vergisi_try)}
+                                            {hucre(u.tse_ucreti_try)}
+                                            {hucre(u.gumrukcu_masrafi_try)}
+                                            {hucre(u.banka_masrafi_try)}
+                                            {hucre(u.kdv_try)}
+                                            {hucre(u.diger_maliyet_try)}
+                                            <td style={{ padding: '6px 10px', fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                              {paraFormat(u.toplam_maliyet_try)}
+                                              {guncelUsdKur && (
+                                                <div style={{ fontSize: 10.5, color: 'var(--metin-soluk)', fontWeight: 400 }}>≈ {paraFormat(Number(u.toplam_maliyet_try) / guncelUsdKur, 'USD')}</div>
+                                              )}
+                                            </td>
+                                            <td style={{ padding: '6px 10px' }}>
+                                              <button
+                                                onClick={() => setMaliyetAcikUrunId((mevcut) => (mevcut === u.id ? null : u.id))}
+                                                style={eylemChipStili('lacivert')}
+                                              >
+                                                {maliyetAcikUrunId === u.id ? 'Kapat' : 'Maliyet Ekle'}
+                                              </button>
+                                            </td>
+                                          </tr>
+                                          {maliyetAcikUrunId === u.id && (
+                                            <tr>
+                                              <td colSpan={18} style={{ padding: '0 10px 10px' }}>
+                                                <ManuelMaliyetKalemiEkleFormu
+                                                  key={maliyetVarsayilanTip}
+                                                  urun={u}
+                                                  varsayilanTip={maliyetVarsayilanTip}
+                                                  digerUrunler={siparisUrunleriHaritasi[s.id]}
+                                                  onKaydedildi={() => {
+                                                    setMaliyetAcikUrunId(null);
+                                                    api.get('/stok-seri-no', { params: { siparis_id: s.id } })
+                                                      .then((r) => setSiparisUrunleriHaritasi((h) => ({ ...h, [s.id]: r.data })))
+                                                      .catch(() => {});
+                                                  }}
+                                                  onVazgec={() => setMaliyetAcikUrunId(null)}
+                                                />
+                                              </td>
+                                            </tr>
+                                          )}
+                                        </Fragment>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
                             </div>
                           )}
                         </td>
