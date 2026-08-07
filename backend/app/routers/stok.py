@@ -567,6 +567,9 @@ def stok_durum_guncelle(
         kayit.satis_fiyati_try = istek.satis_fiyati_try
     if istek.satis_tarihi is not None:
         kayit.satis_tarihi = istek.satis_tarihi
+    if istek.durum == StokDurum.SATILDI:
+        from datetime import datetime as _datetime
+        kayit.satis_kayit_zamani = _datetime.now()
 
     db.commit()
     db.refresh(kayit)
@@ -682,10 +685,12 @@ def stok_satisi_yap(
     if kayit.durum == StokDurum.SATILDI:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bu ürün zaten satılmış.")
 
+    from datetime import datetime as _datetime
     kayit.durum = StokDurum.SATILDI
     kayit.musteri_cari_id = istek.musteri_cari_id
     kayit.satis_fiyati_try = istek.satis_fiyati_try
     kayit.satis_tarihi = istek.satis_tarihi
+    kayit.satis_kayit_zamani = _datetime.now()
 
     # Banka hesabina GERCEK ISLEM para biriminde/tutarinda yazmak icin -
     # istek.islem_tutari verilmemisse (eski/basit cagrilar) TL varsayilir.
@@ -847,6 +852,7 @@ def stok_satisini_geri_al(
     kayit.satis_fiyati_try = None
     kayit.satis_tarihi = None
     kayit.satis_cek_id = None
+    kayit.satis_kayit_zamani = None
 
     db.commit()
     db.refresh(kayit)
