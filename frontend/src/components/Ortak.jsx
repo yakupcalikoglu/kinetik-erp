@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { MoreHorizontal } from 'lucide-react';
-import { api, hataMesajiCikar } from '../api/client';
+import { api, hataMesajiCikar, ozelOnayIste } from '../api/client';
 
 export function Kart({ children, style }) {
   return (
@@ -853,4 +853,26 @@ export function SatisMaliyetKontrolListesi({ urun, odemeTipi }) {
       </div>
     </div>
   );
+}
+
+
+// Bir odeme/tahsilat GERCEKTEN gonderilmeden ONCE, ilgili Kasa/Banka
+// hesabinin bakiyesinin NE OLACAGINI gosterip onay ister. Bakiye anormal
+// (5 katindan fazla) degisiyorsa, kullaniciyi ekstra uyarir - "TL tutari
+// yanlislikla doviz sanildi" gibi hatalar, islem TAMAMLANMADAN ONCE gozle
+// fark edilebilsin diye (sonradan avlamak yerine). Tum odeme formlarinda
+// (Akreditif/Leasing/Taksit/Kiralama/Bakim) AYNI davranisi saglamak icin
+// tek bir yerden yonetilir.
+// hesapEtiketi: "KuveytTurk (USD)" gibi gosterim metni.
+// eskiBakiye/tutar: SAYI (Number), AYNI para biriminde olmali.
+// yon: "GIRIS" | "CIKIS" - CIKIS ise tutar bakiyeden DUSULUR.
+export async function odemeOnizlemeOnayi({ hesapEtiketi, paraBirimi, eskiBakiye, tutar, yon = 'CIKIS' }) {
+  const degisim = yon === 'GIRIS' ? tutar : -tutar;
+  const yeniBakiye = eskiBakiye + degisim;
+  const oranAsiriMi = eskiBakiye !== 0 && Math.abs(yeniBakiye / eskiBakiye) > 5;
+  const uyariBasligi = oranAsiriMi
+    ? `⚠️ DİKKAT: Bu işlem bakiyeyi ${Math.abs(yeniBakiye / eskiBakiye).toFixed(1)} KAT değiştiriyor — bir hata olabilir!\n\n`
+    : '';
+  const onayMetni = `${uyariBasligi}${hesapEtiketi}:\n${paraFormat(eskiBakiye, paraBirimi)} → ${paraFormat(yeniBakiye, paraBirimi)}\n\nOnaylıyor musunuz?`;
+  return ozelOnayIste(onayMetni);
 }
