@@ -15,6 +15,7 @@ const KAYNAK_TABLO_METIN = {
   CEK: 'Çek', AKREDITIF_KALEMI: 'Akreditif Ödemesi', AKREDITIF_KALEM_TAKSIT: 'Akreditif Taksiti',
   LEASING_ODEME: 'Leasing Ödemesi', KIRALAMA_ODEME: 'Kiralama Tahsilatı', PERSONEL_ODEME: 'Personel Ödemesi',
   SABIT_GIDER: 'Diğer Gider', BORC_ODEME: 'Borç Ödemesi', BAKIM_KAYDI: 'Bakım',
+  TEDARIKCI_FATURA_ODEME: 'Tedarikçi Faturası Ödemesi',
 };
 
 function kategoriGoster(kaynakTablo) {
@@ -176,6 +177,7 @@ const GERI_AL_HARITASI = {
   BORC_ODEME: { yontem: 'DELETE', url: (id) => `/borc-odemeleri/${id}` },
   STOK_SATIS: { yontem: 'PUT', url: (id) => `/stok-seri-no/${id}/satisi-geri-al` },
   CEKLER: { yontem: 'PUT', url: (id) => `/cekler/${id}/durumu-geri-al` },
+  TEDARIKCI_FATURA_ODEME: { yontem: 'PUT', url: (id) => `/tedarikci-faturalari/odemeler/${id}/geri-al` },
 };
 
 // Bir bankaya/kasaya hareket acan kaydin, DUZENLEME yapilabilecek ekrana
@@ -197,6 +199,7 @@ const KAYNAK_YOL_HARITASI = {
   SIPARIS_ODEME: '/siparisler',
   DEMIRBAS_SATIS: '/oz-mal',
   YEDEK_PARCA_HAREKET: '/yedek-parcalar',
+  TEDARIKCI_FATURA_ODEME: '/tedarikci-faturalari',
 };
 
 function KaynakDetayi({ kaynakTablo, kaynakId, onIslemTamamlandi }) {
@@ -230,7 +233,29 @@ function KaynakDetayi({ kaynakTablo, kaynakId, onIslemTamamlandi }) {
     }
   }
 
-  if (hata) return <div style={{ padding: '10px 16px', fontSize: 12.5, color: 'var(--kirmizi)' }}>{hata}</div>;
+  // KAYNAK_YOL_HARITASI'nda tanimli bir tur ise, detay endpoint'i
+  // desteklemese/hata verse bile en azindan "Kaynaga Git" ve "Geri Al"
+  // butonlarini gosterebiliriz - kullanicinin islemi hic yapamamasindan
+  // (sadece detay metnini goremiyor olmasindan) daha iyidir.
+  if (hata) {
+    return (
+      <div style={{ padding: '12px 16px', background: 'var(--zemin)', fontSize: 13 }}>
+        <div style={{ color: 'var(--kirmizi)', marginBottom: 8 }}>{hata}</div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {KAYNAK_YOL_HARITASI[kaynakTablo] && (
+            <button onClick={() => navigate(KAYNAK_YOL_HARITASI[kaynakTablo])} style={eylemChipStili('lacivert')}>
+              Kaynağa Git ve Düzelt
+            </button>
+          )}
+          {geriAlBilgisi && (
+            <button onClick={geriAl} disabled={islemYapiliyor} style={eylemChipStili('kirmizi')}>
+              {islemYapiliyor ? 'İşleniyor...' : 'Bu İşlemi Geri Al'}
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
   if (!detay) return <div style={{ padding: '10px 16px', fontSize: 12.5, color: 'var(--metin-soluk)' }}>Yükleniyor...</div>;
 
   return (
@@ -947,6 +972,13 @@ function HareketlerSekmesi() {
                       {tarihGrup.acikAylar.has(ayAnahtari) && tarihGrup.gruplar[yil][ayAnahtari].map((h) => {
                 const tiklanabilir = !!(h.kaynak_tablo && h.kaynak_id);
                 const otomatikGeldi = !!h.kaynak_tablo;
+                const hesapPB = hesapParaBirimi(h.banka_hesap_id);
+                // Hesap dovizliyse VE bu hareket icin (donusum yapilmis bir
+                // odemede) kullanilan_kur biliniyorsa, TL karsiligini da
+                // GOSTERIYORUZ - boylece "bu ne kadar TL'ye denk geliyor"
+                // sorusuna ekrandan hemen cevap bulunabilir, ayri bir
+                // hesaplama yapmaya gerek kalmaz.
+                const tlKarsiligiGoster = hesapPB !== 'TRY' && h.kullanilan_kur;
                 if (duzenlenenId === h.id) {
                   return (
                     <BankaHareketiDuzenleFormu
@@ -974,7 +1006,12 @@ function HareketlerSekmesi() {
                         <Etiket ton={h.kaynak_tablo ? 'yesil' : 'notr'}>{kategoriGoster(h.kaynak_tablo)}</Etiket>
                       </td>
                       <td onClick={() => satiraTikla(h)} style={{ padding: '10px 16px', fontWeight: 500, color: Number(h.tutar) >= 0 ? 'var(--yesil)' : 'var(--kirmizi)', cursor: tiklanabilir ? 'pointer' : 'default' }}>
-                        {paraFormat(h.tutar, hesapParaBirimi(h.banka_hesap_id))}
+                        {paraFormat(h.tutar, hesapPB)}
+                        {tlKarsiligiGoster && (
+                          <div style={{ fontSize: 11, color: 'var(--metin-soluk)', fontWeight: 400 }}>
+                            ≈ {paraFormat(Number(h.tutar) * Number(h.kullanilan_kur))}
+                          </div>
+                        )}
                       </td>
                       <td onClick={() => satiraTikla(h)} style={{ padding: '10px 16px', color: 'var(--metin-ikincil)', cursor: tiklanabilir ? 'pointer' : 'default' }}>
                         {h.cari_id ? (cariHaritasi[h.cari_id] || `#${h.cari_id}`) : '—'}
