@@ -352,7 +352,7 @@ function OdemeAlacakKutusu({ navigate }) {
 
 const SON_ISLEM_TUR_METIN = {
   SIPARIS: 'Sipariş', TEDARIKCI_FATURA: 'Tedarikçi Faturası', TEDARIKCI_FATURA_ODEME: 'Fatura Ödemesi',
-  STOK: 'Stok', CARI: 'Cari',
+  STOK: 'Stok', STOK_SATIS: 'Satış', CARI: 'Cari',
 };
 
 function zamanGoster(iso) {
