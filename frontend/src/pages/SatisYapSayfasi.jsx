@@ -85,6 +85,7 @@ export default function SatisYapSayfasi() {
   const [stokKartlari, setStokKartlari] = useState([]);
   const [cariler, setCariler] = useState([]);
   const [bankaHesaplari, setBankaHesaplari] = useState([]);
+  const [kasaBakiye, setKasaBakiye] = useState(null);
   const [urunId, setUrunId] = useState(onSeciliUrunId || '');
   const [musteriCariId, setMusteriCariId] = useState('');
   const [odemeTipi, setOdemeTipi] = useState('PESIN_NAKIT');
@@ -113,6 +114,7 @@ export default function SatisYapSayfasi() {
     api.get('/stok-kartlari').then((r) => setStokKartlari(r.data)).catch(() => {});
     api.get('/cariler').then((r) => setCariler(r.data)).catch(() => {});
     api.get('/banka-bakiyeleri').then((r) => setBankaHesaplari(r.data)).catch(() => {});
+    api.get('/kasa-bakiye').then((r) => setKasaBakiye(r.data)).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -140,6 +142,20 @@ export default function SatisYapSayfasi() {
     if (!urunId) { setHata('Lütfen satılacak ürünü seçin.'); return; }
     if (!musteriCariId) { setHata('Lütfen müşteriyi seçin.'); return; }
     if (!tutar || Number(tutar) <= 0) { setHata('Lütfen geçerli bir tutar girin.'); return; }
+
+    // NAKIT (Ana Kasa - HER ZAMAN TL) icin de AYNI on-izleme/uyari -
+    // buyuk/anormal bir tutar girildiyse, kaydetmeden ONCE goze carpsin.
+    if (odemeTipi === 'PESIN_NAKIT' && kasaBakiye) {
+      const tlSatiri = kasaBakiye.bakiyeler.find((b) => b.para_birimi === 'TRY');
+      const eskiBakiye = tlSatiri ? Number(tlSatiri.net_bakiye) : 0;
+      const yeniBakiye = eskiBakiye + tutarTRY;
+      const oranAsiriMi = eskiBakiye !== 0 && Math.abs(yeniBakiye / eskiBakiye) > 5;
+      const uyariBasligi = oranAsiriMi
+        ? `⚠️ DİKKAT: Bu işlem Ana Kasa bakiyesini ${Math.abs(yeniBakiye / eskiBakiye).toFixed(1)} KAT değiştiriyor — bir hata olabilir!\n\n`
+        : '';
+      const onayMetni = `${uyariBasligi}Ana Kasa (TL):\n${paraFormat(eskiBakiye)} → ${paraFormat(yeniBakiye)}\n\nOnaylıyor musunuz?`;
+      if (!(await ozelOnayIste(onayMetni))) return;
+    }
 
     // BANKA ile odemede, hesabin BAKIYESININ NE OLACAGINI ONCEDEN GOSTERIP
     // ONAY ISTIYORUZ - "25.000 USD'lik satisi 47,54 kurla islerken TL
