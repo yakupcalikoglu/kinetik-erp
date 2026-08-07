@@ -687,11 +687,19 @@ def stok_satisi_yap(
     kayit.satis_fiyati_try = istek.satis_fiyati_try
     kayit.satis_tarihi = istek.satis_tarihi
 
+    # Banka hesabina GERCEK ISLEM para biriminde/tutarinda yazmak icin -
+    # istek.islem_tutari verilmemisse (eski/basit cagrilar) TL varsayilir.
+    # para_hareketi_olustur, hesabin KENDI para birimiyle bu deger
+    # UYUSMUYORSA artik NET BIR HATA firlatir (sessizce yanlis kaydetmez -
+    # az once yasadigimiz "TL tutari USD hesaba USD sanilarak yazildi"
+    # hatasi BIR DAHA OLUSAMAZ).
+    gonderilecek_tutar = istek.islem_tutari if istek.islem_tutari is not None else istek.satis_fiyati_try
     para_hareketi_olustur(
-        db, sirket_id, kullanici.id, "GIRIS", istek.satis_fiyati_try,
+        db, sirket_id, kullanici.id, "GIRIS", gonderilecek_tutar,
         istek.odeme_yontemi, istek.banka_hesap_id,
         aciklama=f"Stok satışı - Seri No {kayit.seri_no}",
         kaynak_tablo="STOK_SATIS", kaynak_id=kayit.id, cari_id=istek.musteri_cari_id,
+        para_birimi=istek.islem_para_birimi, kur=istek.kur,
     )
 
     db.commit()
