@@ -825,7 +825,11 @@ export function ManuelMaliyetKalemiEkleFormu({ urun, onKaydedildi, onVazgec, var
 
 // Satis turune (odemeTipi) gore, o satisa BEKLENEN maliyet kategorilerinin
 // girilip girilmedigini gosteren kontrol listesi.
-export function SatisMaliyetKontrolListesi({ urun, odemeTipi }) {
+// onMaliyetEkle verilirse (opsiyonel), her kategoriye TIKLANABILIR olur -
+// tiklaninca o kategori (tip) ile cagrilir, cagiran taraf bunu kullanarak
+// "Maliyet Ekle" formunu o tur onceden secili acabilir (Siparisler
+// sayfasindaki Maliyet Kalemi Kontrolu ile AYNI davranis).
+export function SatisMaliyetKontrolListesi({ urun, odemeTipi, onMaliyetEkle }) {
   const beklenenTipler = odemeTipi === 'LEASINGLI' ? LEASING_SATIS_MALIYET_TIPLERI : FATURALI_SATIS_MALIYET_TIPLERI;
   const SUTUN_ESLEME = {
     ARDIYE: 'ardiye_maliyeti_try', GUMRUK: 'gumruk_maliyeti_try', ILAVE_GUMRUK_VERGISI: 'ilave_gumruk_vergisi_try',
@@ -843,9 +847,14 @@ export function SatisMaliyetKontrolListesi({ urun, odemeTipi }) {
         {beklenenTipler.map((tip) => {
           const deger = Number(urun[SUTUN_ESLEME[tip]] || 0);
           return (
-            <div key={tip} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <div
+              key={tip}
+              onClick={onMaliyetEkle ? () => onMaliyetEkle(tip) : undefined}
+              title={onMaliyetEkle ? 'Bu kalemi eklemek için tıklayın' : undefined}
+              style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: onMaliyetEkle ? 'pointer' : 'default' }}
+            >
               <span>{deger > 0 ? '✅' : '⚠️'}</span>
-              <span style={{ color: 'var(--metin-ikincil)' }}>{MALIYET_TIP_METIN[tip]}</span>
+              <span style={{ color: 'var(--metin-ikincil)', textDecoration: onMaliyetEkle && deger === 0 ? 'underline' : 'none' }}>{MALIYET_TIP_METIN[tip]}</span>
               {deger > 0 && <strong>({paraFormat(deger)})</strong>}
             </div>
           );
