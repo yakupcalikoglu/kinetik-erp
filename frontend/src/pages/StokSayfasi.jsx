@@ -74,6 +74,11 @@ const MALIYET_TIP_METIN = {
   MILLILESTIRME: 'Millileştirme', LEASING: 'Leasing', DIGER: 'Diğer',
 };
 
+const SATIS_YONTEMI_METIN = {
+  PESIN_NAKIT: 'Nakit', PESIN_HAVALE: 'Havale/EFT', PESIN_KART: 'Kredi Kartı',
+  TAKSITLI: 'Taksitli', LEASINGLI: 'Leasing', CEK: 'Çek',
+};
+
 function MaliyetKalemiDuzenleFormu({ kalem, urunId, onKaydedildi, onVazgec }) {
   const [cariler, setCariler] = useState([]);
   const [form, setForm] = useState({
@@ -833,6 +838,7 @@ export default function StokSayfasi() {
   const [urunler, setUrunler] = useState([]);
   const [stokKartlari, setStokKartlari] = useState([]);
   const [siparisler, setSiparisler] = useState([]);
+  const [cariler, setCariler] = useState([]);
   const [durumFiltre, setDurumFiltre] = useState('');
   const [satilanlariGoster, setSatilanlariGoster] = useState(false);
   const [dovizMaliyetHaritasi, setDovizMaliyetHaritasi] = useState({});
@@ -981,6 +987,7 @@ export default function StokSayfasi() {
     tumUrunleriYukle();
     stokKartlariniYukle();
     api.get('/siparisler').then((r) => setSiparisler(r.data)).catch(() => {});
+    api.get('/cariler').then((r) => setCariler(r.data)).catch(() => {});
     api.get('/kur/USD').then((r) => setUsdKur(Number(r.data.kur))).catch(() => {});
     api.get('/stok-seri-no/toplam-doviz-maliyet-haritasi').then((r) => setDovizMaliyetHaritasi(r.data)).catch(() => {});
   }, []);
@@ -998,6 +1005,12 @@ export default function StokSayfasi() {
     if (!siparisId) return '—';
     const s = siparisler.find((x) => x.id === siparisId);
     return s ? s.siparis_no : `#${siparisId}`;
+  }
+
+  function musteriAdiGoster(musteriCariId) {
+    if (!musteriCariId) return '—';
+    const c = cariler.find((x) => x.id === musteriCariId);
+    return c ? c.unvan : `#${musteriCariId}`;
   }
 
   // Ayni siparise ait urunler ekranda yan yana gorunsun diye siparis_id'ye
@@ -1032,9 +1045,15 @@ export default function StokSayfasi() {
       if (satildiGorunumu) {
         // satis_kayit_zamani (saat dahil, GERCEK satis ani) varsa onu
         // kullan - yoksa (eski kayitlar) satis_tarihi'ne (gun) geri don.
+        // "Satış Tarihi" basligina tiklanirsa (siralama.alan ===
+        // 'satis_tarihi'), yon (asc/desc) kullaniciya birakilir - aksi
+        // halde VARSAYILAN olarak en YENI satis en USTTE gosterilir.
         const az = a.satis_kayit_zamani || a.satis_tarihi || '';
         const bz = b.satis_kayit_zamani || b.satis_tarihi || '';
-        return bz.localeCompare(az); // DESC - en yeni ustte
+        if (siralama.alan === 'satis_tarihi') {
+          return siralama.yon === 'asc' ? az.localeCompare(bz) : bz.localeCompare(az);
+        }
+        return bz.localeCompare(az); // varsayilan: en yeni ustte
       }
       if (a.siparis_id === b.siparis_id) return a.id - b.id;
       if (a.siparis_id == null) return 1;
@@ -1295,14 +1314,16 @@ export default function StokSayfasi() {
                     onChange={tumunuSecVeyaKaldir}
                   />
                 </th>
+                <SiraliBaslik alanAdi="satis_tarihi" siralama={siralama}>Satış Tarihi</SiraliBaslik>
                 <SiraliBaslik alanAdi="seri_no" siralama={siralama}>Seri No</SiraliBaslik>
                 <SiraliBaslik alanAdi="_urun_adi" siralama={siralama}>Ürün</SiraliBaslik>
                 <SiraliBaslik alanAdi="_siparis_no" siralama={siralama}>Sipariş</SiraliBaslik>
                 <SiraliBaslik alanAdi="durum" siralama={siralama}>Durum</SiraliBaslik>
                 <SiraliBaslik alanAdi="sahiplik_tipi" siralama={siralama}>Sahiplik</SiraliBaslik>
+                <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>Nasıl Satıldı</th>
+                <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>Kime Satıldı</th>
                 <SiraliBaslik alanAdi="toplam_maliyet_try" siralama={siralama}>Toplam Maliyet (TL)</SiraliBaslik>
                 <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>Toplam Maliyet (USD)</th>
-                <SiraliBaslik alanAdi="satis_tarihi" siralama={siralama}>Satış Tarihi</SiraliBaslik>
                 <SiraliBaslik alanAdi="satis_fiyati_try" siralama={siralama}>Satış Fiyatı (TL)</SiraliBaslik>
                 <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>Satış Fiyatı (USD)</th>
                 <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>Kâr/Zarar</th>
@@ -1329,7 +1350,7 @@ export default function StokSayfasi() {
                   const ozet = u.siparis_id != null ? siparisOzetleri[u.siparis_id] : null;
                   return (
                     <tr key={`grup-${u.siparis_id}`}>
-                      <td colSpan={13} style={{ padding: 0 }}>
+                      <td colSpan={15} style={{ padding: 0 }}>
                         <GrupBasligi
                           baslik={`Sipariş: ${siparisNoGoster(u.siparis_id)}`}
                           altBaslik={ozet ? `${ozet.toplam} üründen ${ozet.elde_kalan} tanesi elimizde` : null}
@@ -1376,7 +1397,7 @@ export default function StokSayfasi() {
                   <Fragment key={u.id}>
                     {grupBasi && ozet && (
                       <tr>
-                        <td colSpan={13} style={{ padding: 0 }}>
+                        <td colSpan={15} style={{ padding: 0 }}>
                           <GrupBasligi
                             baslik={`Sipariş: ${siparisNoGoster(u.siparis_id)}`}
                             altBaslik={`${ozet.toplam} üründen ${ozet.elde_kalan} tanesi elimizde`}
@@ -1397,6 +1418,7 @@ export default function StokSayfasi() {
                       <td style={{ padding: '12px 16px' }}>
                         <input type="checkbox" checked={seciliMi(u.id)} onChange={() => secimiDegistir(u.id)} />
                       </td>
+                      <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>{u.satis_tarihi ? tarihFormat(u.satis_tarihi) : '—'}</td>
                       <td style={{ padding: '12px 16px', fontWeight: 500, fontFamily: 'var(--font-mono)' }}>{u.seri_no}</td>
                       <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>
                         {urunAdiGoster(u.stok_karti_id)}
@@ -1411,6 +1433,8 @@ export default function StokSayfasi() {
                       <td style={{ padding: '12px 16px' }}>
                         <Etiket ton={u.sahiplik_tipi === 'OZ_MAL' ? 'amber' : 'notr'}>{u.sahiplik_tipi === 'OZ_MAL' ? 'Öz Mal' : 'Ticari'}</Etiket>
                       </td>
+                      <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>{u.satis_yontemi ? (SATIS_YONTEMI_METIN[u.satis_yontemi] || u.satis_yontemi) : '—'}</td>
+                      <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>{musteriAdiGoster(u.musteri_cari_id)}</td>
                       <td style={{ padding: '12px 16px' }}>{paraFormat(u.toplam_maliyet_try)}</td>
                       <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>
                         {(() => {
@@ -1420,7 +1444,6 @@ export default function StokSayfasi() {
                           return '—';
                         })()}
                       </td>
-                      <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>{u.satis_tarihi ? tarihFormat(u.satis_tarihi) : '—'}</td>
                       <td style={{ padding: '12px 16px' }}>{u.satis_fiyati_try != null ? paraFormat(u.satis_fiyati_try) : '—'}</td>
                       <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>
                         {u.satis_fiyati_try != null && usdKur ? paraFormat(u.satis_fiyati_try / usdKur, 'USD') : '—'}
