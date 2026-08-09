@@ -573,12 +573,38 @@ def siparis_bakiyesi(
     sirket_id: int = Depends(aktif_sirket_id_getir),
     db: Session = Depends(get_db),
 ):
+    """
+    ONEMLI: Bu siparisin odemesi Akreditif uzerinden yapilmis olabilir
+    (SiparisOdeme uzerinden DEGIL) - akreditifli alimlarda tedarikciye
+    odeme, akreditifin KENDI kalem/taksit odemeleri araciligiyla yapilir.
+    Bu yuzden "toplam_odenen", SiparisOdeme TOPLAMI + bu siparise bagli
+    TUM akreditiflerin toplam_odenen'i OLARAK hesaplanir - aksi halde
+    akreditifli siparisler, gercekte odenmis olsa bile "Hic Odenmedi"
+    gorunurdu.
+    """
+    from app.models.akreditif import Akreditif, AkreditifKalemi, AkreditifDurum
+    from app.models.akreditif_taksit import AkreditifKalemTaksiti
+
     siparis = _siparis_getir_veya_404(db, siparis_id, sirket_id)
     urunler = list(db.execute(select(SiparisDetay).where(SiparisDetay.siparis_id == siparis_id)).scalars())
     toplam_siparis_tutari = sum((u.miktar * u.birim_fiyat for u in urunler), Decimal("0"))
+
     toplam_odenen = db.execute(
         select(func.coalesce(func.sum(SiparisOdeme.tutar), 0)).where(SiparisOdeme.siparis_id == siparis_id)
     ).scalar_one()
+
+    akreditifler = list(db.execute(
+        select(Akreditif).where(Akreditif.siparis_id == siparis_id, Akreditif.durum != AkreditifDurum.IPTAL)
+    ).scalars())
+    for ak in akreditifler:
+        kalemler = list(db.execute(select(AkreditifKalemi).where(AkreditifKalemi.akreditif_id == ak.id)).scalars())
+        for k in kalemler:
+            taksitler = list(db.execute(select(AkreditifKalemTaksiti).where(AkreditifKalemTaksiti.kalem_id == k.id)).scalars())
+            if taksitler:
+                toplam_odenen += sum((t.tutar for t in taksitler if t.odendi_mi), Decimal("0"))
+            else:
+                toplam_odenen += k.odenen_tutar or Decimal("0")
+
     return SiparisBakiyeYanit(
         siparis_id=siparis_id, para_birimi=siparis.para_birimi,
         toplam_siparis_tutari=toplam_siparis_tutari, toplam_odenen=toplam_odenen,
