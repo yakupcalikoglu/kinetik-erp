@@ -1412,7 +1412,6 @@ export default function StokSayfasi() {
                         <Etiket ton={u.sahiplik_tipi === 'OZ_MAL' ? 'amber' : 'notr'}>{u.sahiplik_tipi === 'OZ_MAL' ? 'Öz Mal' : 'Ticari'}</Etiket>
                       </td>
                       <td style={{ padding: '12px 16px' }}>{paraFormat(u.toplam_maliyet_try)}</td>
-                      <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>{u.satis_tarihi ? tarihFormat(u.satis_tarihi) : '—'}</td>
                       <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>
                         {(() => {
                           const gercekUsd = dovizMaliyetHaritasi[String(u.id)]?.USD;
@@ -1421,6 +1420,7 @@ export default function StokSayfasi() {
                           return '—';
                         })()}
                       </td>
+                      <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>{u.satis_tarihi ? tarihFormat(u.satis_tarihi) : '—'}</td>
                       <td style={{ padding: '12px 16px' }}>{u.satis_fiyati_try != null ? paraFormat(u.satis_fiyati_try) : '—'}</td>
                       <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>
                         {u.satis_fiyati_try != null && usdKur ? paraFormat(u.satis_fiyati_try / usdKur, 'USD') : '—'}
