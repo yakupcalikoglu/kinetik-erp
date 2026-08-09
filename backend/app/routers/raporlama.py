@@ -1529,5 +1529,49 @@ def son_islemler(
     except Exception:
         pass
 
+    # TUM Kasa/Banka hareketleri - kaynagi ne olursa olsun (Akreditif,
+    # Leasing, Taksit, Kiralama, Bakim, Cek, Stok Satisi, Tedarikci Faturasi
+    # vb.) HER PARA HAREKETI, olusturma_tarihi (saat dahil) ile burada
+    # gorunur. Boylece "Son Islemler" akisina her yeni modul icin AYRI AYRI
+    # kod eklemeye gerek kalmiyor - HANGI MODULDEN GELIRSE GELSIN, bir para
+    # hareketi olusturuldugu an burada listelenir.
+    try:
+        kasa_hareketleri = list(db.execute(
+            select(KasaHareketi).where(KasaHareketi.sirket_id == sirket_id)
+            .order_by(KasaHareketi.olusturma_tarihi.desc()).limit(limit)
+        ).scalars())
+        for h in kasa_hareketleri:
+            if h.olusturma_tarihi:
+                yon_metin = "Giriş" if h.yon.value == "GIRIS" else "Çıkış"
+                satirlar.append(SonIslemSatiri(
+                    zaman=h.olusturma_tarihi, tur="KASA_HAREKETI",
+                    aciklama=f"Ana Kasa {yon_metin} — {h.aciklama or (h.kaynak_tablo or 'Serbest')}",
+                    tutar=abs(h.tutar), para_birimi=h.para_birimi.value if hasattr(h.para_birimi, "value") else h.para_birimi,
+                ))
+    except Exception:
+        pass
+
+    try:
+        from app.models.banka import BankaHareketi, BankaHesabi
+        banka_hareketleri = list(db.execute(
+            select(BankaHareketi).where(BankaHareketi.sirket_id == sirket_id)
+            .order_by(BankaHareketi.olusturma_tarihi.desc()).limit(limit)
+        ).scalars())
+        hesap_haritasi = {
+            h.id: h for h in db.execute(select(BankaHesabi).where(BankaHesabi.sirket_id == sirket_id)).scalars()
+        }
+        for h in banka_hareketleri:
+            if h.olusturma_tarihi:
+                hesap = hesap_haritasi.get(h.banka_hesap_id)
+                hesap_pb = hesap.para_birimi.value if hesap and hasattr(hesap.para_birimi, "value") else (hesap.para_birimi if hesap else "TRY")
+                yon_metin = "Giriş" if h.tutar >= 0 else "Çıkış"
+                satirlar.append(SonIslemSatiri(
+                    zaman=h.olusturma_tarihi, tur="BANKA_HAREKETI",
+                    aciklama=f"{hesap.banka_adi if hesap else 'Banka'} {yon_metin} — {h.aciklama or (h.kaynak_tablo or 'Serbest')}",
+                    tutar=abs(h.tutar), para_birimi=hesap_pb,
+                ))
+    except Exception:
+        pass
+
     satirlar.sort(key=lambda s: s.zaman, reverse=True)
     return satirlar[:limit]
