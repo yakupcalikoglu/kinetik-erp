@@ -183,7 +183,7 @@ export default function SatisYapSayfasi() {
         await api.post(`/stok-seri-no/${urunId}/satis`, {
           musteri_cari_id: Number(musteriCariId), satis_fiyati_try: tutarTRY,
           satis_tarihi: tarih, odeme_yontemi: 'NAKIT', banka_hesap_id: null,
-          satis_odeme_tipi: 'FATURALI',
+          satis_odeme_tipi: 'FATURALI', satis_yontemi: odemeTipi,
         });
       } else if (bankaGerekli) {
         if (!bankaHesapId) { setHata('Lütfen paranın yatacağı banka hesabını seçin.'); setKaydediliyor(false); return; }
@@ -196,7 +196,7 @@ export default function SatisYapSayfasi() {
           musteri_cari_id: Number(musteriCariId), satis_fiyati_try: tutarTRY,
           satis_tarihi: tarih, odeme_yontemi: 'BANKA', banka_hesap_id: Number(bankaHesapId),
           islem_para_birimi: tutarParaBirimi, islem_tutari: Number(tutar), kur: Number(tutarKur || 1),
-          satis_odeme_tipi: odemeTipi === 'LEASINGLI' ? 'LEASINGLI' : 'FATURALI',
+          satis_odeme_tipi: odemeTipi === 'LEASINGLI' ? 'LEASINGLI' : 'FATURALI', satis_yontemi: odemeTipi,
         });
       } else if (taksitliBenzeri) {
         if (!seciliUrun) { setHata('Lütfen bir ürün seçin.'); setKaydediliyor(false); return; }
@@ -208,7 +208,7 @@ export default function SatisYapSayfasi() {
         await api.put(`/stok-seri-no/${urunId}/durum`, {
           durum: 'SATILDI', musteri_cari_id: Number(musteriCariId),
           satis_fiyati_try: tutarTRY, satis_tarihi: tarih,
-          satis_odeme_tipi: odemeTipi === 'LEASINGLI' ? 'LEASINGLI' : 'FATURALI',
+          satis_odeme_tipi: odemeTipi === 'LEASINGLI' ? 'LEASINGLI' : 'FATURALI', satis_yontemi: odemeTipi,
         });
       } else if (odemeTipi === 'CEK') {
         if (!cekVadeTarihi) { setHata('Lütfen çekin vade tarihini girin.'); setKaydediliyor(false); return; }
@@ -223,7 +223,7 @@ export default function SatisYapSayfasi() {
         await api.put(`/stok-seri-no/${urunId}/durum`, {
           durum: 'SATILDI', musteri_cari_id: Number(musteriCariId),
           satis_fiyati_try: tutarTRY, satis_tarihi: tarih,
-          satis_odeme_tipi: 'FATURALI',
+          satis_odeme_tipi: 'FATURALI', satis_yontemi: 'CEK',
         });
         await api.put(`/stok-seri-no/${urunId}/satis-cek-baglantisi`, { cek_id: yeniCek.id });
       }
