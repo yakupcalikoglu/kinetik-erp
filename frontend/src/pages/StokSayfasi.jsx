@@ -1055,10 +1055,16 @@ export default function StokSayfasi() {
         }
         return bz.localeCompare(az); // varsayilan: en yeni ustte
       }
-      if (a.siparis_id === b.siparis_id) return a.id - b.id;
-      if (a.siparis_id == null) return 1;
-      if (b.siparis_id == null) return -1;
-      return a.siparis_id - b.siparis_id;
+      if (a.siparis_id !== b.siparis_id) {
+        if (a.siparis_id == null) return 1;
+        if (b.siparis_id == null) return -1;
+        return a.siparis_id - b.siparis_id;
+      }
+      // Ayni siparis icinde, urun turune (stok_karti_id) gore alt-grupla -
+      // ayni siparisteki farkli urun turleri (orn. 5 elektrikli + 3 dizel)
+      // bir arada, karisik gorunmesin.
+      if (a.stok_karti_id !== b.stok_karti_id) return a.stok_karti_id - b.stok_karti_id;
+      return a.id - b.id;
     });
 
   // Siparis bazli ozet: bu siparisten (tum urunler.map(), filtreden BAGIMSIZ,
@@ -1319,15 +1325,12 @@ export default function StokSayfasi() {
                 <SiraliBaslik alanAdi="_urun_adi" siralama={siralama}>Ürün</SiraliBaslik>
                 <SiraliBaslik alanAdi="_siparis_no" siralama={siralama}>Sipariş</SiraliBaslik>
                 <SiraliBaslik alanAdi="durum" siralama={siralama}>Durum</SiraliBaslik>
-                <SiraliBaslik alanAdi="sahiplik_tipi" siralama={siralama}>Sahiplik</SiraliBaslik>
-                <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>Nasıl Satıldı</th>
-                <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>Kime Satıldı</th>
-                <SiraliBaslik alanAdi="toplam_maliyet_try" siralama={siralama}>Toplam Maliyet (TL)</SiraliBaslik>
-                <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>Toplam Maliyet (USD)</th>
-                <SiraliBaslik alanAdi="satis_fiyati_try" siralama={siralama}>Satış Fiyatı (TL)</SiraliBaslik>
-                <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>Satış Fiyatı (USD)</th>
-                <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>Kâr/Zarar</th>
-                <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>İşlem</th>
+                <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>Nasıl Satıldı</th>
+                <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>Kime Satıldı</th>
+                <SiraliBaslik alanAdi="toplam_maliyet_try" siralama={siralama} style={{ padding: '8px 10px' }}>Toplam Maliyet</SiraliBaslik>
+                <SiraliBaslik alanAdi="satis_fiyati_try" siralama={siralama} style={{ padding: '8px 10px' }}>Satış Fiyatı</SiraliBaslik>
+                <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>Kâr/Zarar</th>
+                <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>İşlem</th>
               </tr>
             </thead>
             <tbody>
@@ -1343,6 +1346,16 @@ export default function StokSayfasi() {
                 // Grup kapaliysa, o gruba ait BASLIK DISINDAKI satirlari (urun
                 // satiri, duzenleme/durum formlari dahil) hic render etme.
                 const grupKapali = !siralama.alan && !satildiGorunumu && u.siparis_id != null && kapaliSiparisGruplari.has(u.siparis_id);
+                // ALT grup basligi: ayni siparis icinde urun turu (stok_karti_id)
+                // degistiginde - "5 Elektrikli + 3 Dizel" gibi karisik bir
+                // listeyi, urun turune gore ayri ayri gruplar (acilir/kapanir
+                // DEGIL, sadece gorsel bir ayirici basligi).
+                const altGrupBasi = !siralama.alan && !satildiGorunumu && !grupKapali && (
+                  grupBasi || (oncekiUrun && oncekiUrun.stok_karti_id !== u.stok_karti_id && oncekiUrun.siparis_id === u.siparis_id)
+                );
+                const buSiparisteBuUrundenKac = u.siparis_id != null
+                  ? gruplananUrunler.filter((x) => x.siparis_id === u.siparis_id && x.stok_karti_id === u.stok_karti_id).length
+                  : 0;
                 if (grupKapali && !grupBasi) {
                   return null;
                 }
@@ -1350,7 +1363,7 @@ export default function StokSayfasi() {
                   const ozet = u.siparis_id != null ? siparisOzetleri[u.siparis_id] : null;
                   return (
                     <tr key={`grup-${u.siparis_id}`}>
-                      <td colSpan={15} style={{ padding: 0 }}>
+                      <td colSpan={12} style={{ padding: 0 }}>
                         <GrupBasligi
                           baslik={`Sipariş: ${siparisNoGoster(u.siparis_id)}`}
                           altBaslik={ozet ? `${ozet.toplam} üründen ${ozet.elde_kalan} tanesi elimizde` : null}
@@ -1397,13 +1410,20 @@ export default function StokSayfasi() {
                   <Fragment key={u.id}>
                     {grupBasi && ozet && (
                       <tr>
-                        <td colSpan={15} style={{ padding: 0 }}>
+                        <td colSpan={12} style={{ padding: 0 }}>
                           <GrupBasligi
                             baslik={`Sipariş: ${siparisNoGoster(u.siparis_id)}`}
                             altBaslik={`${ozet.toplam} üründen ${ozet.elde_kalan} tanesi elimizde`}
                             acik
                             onTikla={() => u.siparis_id != null && siparisGrubuAcKapat(u.siparis_id)}
                           />
+                        </td>
+                      </tr>
+                    )}
+                    {altGrupBasi && (
+                      <tr>
+                        <td colSpan={12} style={{ padding: '6px 16px 6px 32px', background: 'var(--zemin)', borderTop: grupBasi ? 'none' : '1px solid var(--kenarlik)', fontSize: 12, fontWeight: 600, color: 'var(--metin-ikincil)' }}>
+                          {urunAdiGoster(u.stok_karti_id)} — {buSiparisteBuUrundenKac} adet
                         </td>
                       </tr>
                     )}
@@ -1419,39 +1439,40 @@ export default function StokSayfasi() {
                         <input type="checkbox" checked={seciliMi(u.id)} onChange={() => secimiDegistir(u.id)} />
                       </td>
                       <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>{u.satis_tarihi ? tarihFormat(u.satis_tarihi) : '—'}</td>
-                      <td style={{ padding: '12px 16px', fontWeight: 500, fontFamily: 'var(--font-mono)' }}>{u.seri_no}</td>
-                      <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>
+                      <td style={{ padding: '8px 10px', fontWeight: 500, fontFamily: 'var(--font-mono)', fontSize: 12.5 }}>{u.seri_no}</td>
+                      <td style={{ padding: '8px 10px', color: 'var(--metin-ikincil)', fontSize: 12.5 }}>
                         {urunAdiGoster(u.stok_karti_id)}
-                        <span style={{ fontSize: 11, color: 'var(--metin-soluk)', marginLeft: 6 }}>
-                          (bu üründen toplam {urunAdetOzet[u.stok_karti_id] || 0} adet)
-                        </span>
+                        {u.sahiplik_tipi === 'OZ_MAL' && <Etiket ton="amber">Öz Mal</Etiket>}
                       </td>
-                      <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>{siparisNoGoster(u.siparis_id)}</td>
-                      <td style={{ padding: '12px 16px' }}>
+                      <td style={{ padding: '8px 10px', color: 'var(--metin-ikincil)', fontSize: 12.5 }}>{siparisNoGoster(u.siparis_id)}</td>
+                      <td style={{ padding: '8px 10px' }}>
                         <Etiket ton={DURUM_ETIKET[u.durum]}>{DURUM_METIN[u.durum]}</Etiket>
                       </td>
-                      <td style={{ padding: '12px 16px' }}>
-                        <Etiket ton={u.sahiplik_tipi === 'OZ_MAL' ? 'amber' : 'notr'}>{u.sahiplik_tipi === 'OZ_MAL' ? 'Öz Mal' : 'Ticari'}</Etiket>
+                      <td style={{ padding: '8px 10px', color: 'var(--metin-ikincil)', fontSize: 12.5 }}>{u.satis_yontemi ? (SATIS_YONTEMI_METIN[u.satis_yontemi] || u.satis_yontemi) : '—'}</td>
+                      <td style={{ padding: '8px 10px', color: 'var(--metin-ikincil)', fontSize: 12.5 }}>{musteriAdiGoster(u.musteri_cari_id)}</td>
+                      <td style={{ padding: '8px 10px', fontSize: 12.5 }}>
+                        {paraFormat(u.toplam_maliyet_try)}
+                        <div style={{ fontSize: 10.5, color: 'var(--metin-soluk)' }}>
+                          {(() => {
+                            const gercekUsd = dovizMaliyetHaritasi[String(u.id)]?.USD;
+                            if (gercekUsd != null) return paraFormat(gercekUsd, 'USD');
+                            if (usdKur) return `~${paraFormat(u.toplam_maliyet_try / usdKur, 'USD')}`;
+                            return null;
+                          })()}
+                        </div>
                       </td>
-                      <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>{u.satis_yontemi ? (SATIS_YONTEMI_METIN[u.satis_yontemi] || u.satis_yontemi) : '—'}</td>
-                      <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>{musteriAdiGoster(u.musteri_cari_id)}</td>
-                      <td style={{ padding: '12px 16px' }}>{paraFormat(u.toplam_maliyet_try)}</td>
-                      <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>
-                        {(() => {
-                          const gercekUsd = dovizMaliyetHaritasi[String(u.id)]?.USD;
-                          if (gercekUsd != null) return paraFormat(gercekUsd, 'USD');
-                          if (usdKur) return <span title="Gerçek döviz kaydı yok — bugünkü kurla tahmini gösterim">~{paraFormat(u.toplam_maliyet_try / usdKur, 'USD')}</span>;
-                          return '—';
-                        })()}
+                      <td style={{ padding: '8px 10px', fontSize: 12.5 }}>
+                        {u.satis_fiyati_try != null ? (
+                          <>
+                            {paraFormat(u.satis_fiyati_try)}
+                            {usdKur && <div style={{ fontSize: 10.5, color: 'var(--metin-soluk)' }}>{paraFormat(u.satis_fiyati_try / usdKur, 'USD')}</div>}
+                          </>
+                        ) : '—'}
                       </td>
-                      <td style={{ padding: '12px 16px' }}>{u.satis_fiyati_try != null ? paraFormat(u.satis_fiyati_try) : '—'}</td>
-                      <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>
-                        {u.satis_fiyati_try != null && usdKur ? paraFormat(u.satis_fiyati_try / usdKur, 'USD') : '—'}
-                      </td>
-                      <td style={{ padding: '12px 16px', color: karZarar == null ? 'var(--metin-soluk)' : karZarar >= 0 ? 'var(--yesil)' : 'var(--kirmizi)', fontWeight: 500 }}>
+                      <td style={{ padding: '8px 10px', color: karZarar == null ? 'var(--metin-soluk)' : karZarar >= 0 ? 'var(--yesil)' : 'var(--kirmizi)', fontWeight: 500, fontSize: 12.5 }}>
                         {karZarar != null ? paraFormat(karZarar) : '—'}
                       </td>
-                      <td style={{ padding: '12px 16px' }}>
+                      <td style={{ padding: '8px 10px' }}>
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                           {satilabilir && (
                             <Link to={`/satis-yap?urun=${u.id}`}><button style={eylemChipStili('yesil')} type="button">Satış yap</button></Link>
