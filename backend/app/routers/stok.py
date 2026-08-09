@@ -567,6 +567,8 @@ def stok_durum_guncelle(
         kayit.satis_fiyati_try = istek.satis_fiyati_try
     if istek.satis_tarihi is not None:
         kayit.satis_tarihi = istek.satis_tarihi
+    if istek.satis_odeme_tipi is not None:
+        kayit.satis_odeme_tipi = istek.satis_odeme_tipi
     if istek.durum == StokDurum.SATILDI:
         from datetime import datetime as _datetime
         kayit.satis_kayit_zamani = _datetime.now()
@@ -691,6 +693,8 @@ def stok_satisi_yap(
     kayit.satis_fiyati_try = istek.satis_fiyati_try
     kayit.satis_tarihi = istek.satis_tarihi
     kayit.satis_kayit_zamani = _datetime.now()
+    if istek.satis_odeme_tipi is not None:
+        kayit.satis_odeme_tipi = istek.satis_odeme_tipi
 
     # Banka hesabina GERCEK ISLEM para biriminde/tutarinda yazmak icin -
     # istek.islem_tutari verilmemisse (eski/basit cagrilar) TL varsayilir.
