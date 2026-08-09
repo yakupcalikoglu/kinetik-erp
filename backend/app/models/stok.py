@@ -143,6 +143,11 @@ class StokSeriNo(Base):
     # (SatisMaliyetKontrolListesi) hangi kalemlerin beklendigini belirlemek
     # icin kullanilir.
     satis_odeme_tipi = Column(String(20))
+    # Satisin GERCEK yontemi (PESIN_NAKIT/PESIN_HAVALE/PESIN_KART/TAKSITLI/
+    # LEASINGLI/CEK) - satis_odeme_tipi (LEASINGLI/FATURALI, maliyet
+    # kontrolu icin) ile KARISTIRILMASIN; bu alan SADECE "nasil satildi"
+    # bilgisini Stok listesinde gostermek icindir.
+    satis_yontemi = Column(String(20))
     # Cek ile yapilan satislarda, hangi cekin bu satisa karsilik geldigini
     # izler - satis geri alinirken (henuz ciro/tahsil edilmemisse) hem
     # urunu hem cekin kendisini birlikte geri almak icin kullanilir.
