@@ -59,6 +59,7 @@ class StokSeriNoYanit(BaseModel):
     barkod: str | None
     sahiplik_tipi: str = "TICARI"
     satis_odeme_tipi: str | None = None
+    satis_yontemi: str | None = None
     # Satis-sonrasi maliyet kalemleri (ITHALAT maliyetlerinden BAGIMSIZ -
     # toplam_maliyet_try'ye DAHIL DEGIL, ayrica toplam_satis_maliyeti_try
     # ile gosterilir):
@@ -137,6 +138,7 @@ class StokDurumGuncelleIstegi(BaseModel):
     satis_fiyati_try: Decimal | None = None
     satis_tarihi: date | None = None
     satis_odeme_tipi: str | None = None  # "LEASINGLI" | "FATURALI"
+    satis_yontemi: str | None = None  # "PESIN_NAKIT" | "PESIN_HAVALE" | "PESIN_KART" | "TAKSITLI" | "LEASINGLI" | "CEK"
 
 
 class MaliyetKalemiEkleIstegi(BaseModel):
@@ -283,6 +285,7 @@ class StokSatisIstegi(BaseModel):
     odeme_yontemi: str  # "NAKIT" | "BANKA"
     banka_hesap_id: int | None = None
     satis_odeme_tipi: str | None = None  # "LEASINGLI" | "FATURALI"
+    satis_yontemi: str | None = None  # "PESIN_NAKIT" | "PESIN_HAVALE" | "PESIN_KART" | "TAKSITLI" | "LEASINGLI" | "CEK"
     # ASAGIDAKI 3 ALAN, odeme BANKA ile VE hesap doviz cinsindense onemlidir:
     # banka hesabina GERCEK ISLEM para biriminde/tutarinda yazmak icin
     # kullanilir - VERILMEZSE (eski davranis) TL varsayilir, bu da hesap
