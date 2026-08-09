@@ -56,6 +56,7 @@ const API_TABAN_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 import {
   Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat,
   eylemChipStili, ParaGirdisi, DahaFazlaMenu, GrupBasligi, TabloIskeleti, SatisMaliyetKontrolListesi,
+  ManuelMaliyetKalemiEkleFormu,
 } from '../components/Ortak';
 
 const DURUM_ETIKET = {
@@ -173,12 +174,13 @@ function MaliyetKalemiDuzenleFormu({ kalem, urunId, onKaydedildi, onVazgec }) {
   );
 }
 
-function MaliyetDetayi({ urun, stokKartlari, onKapat }) {
+function MaliyetDetayi({ urun, stokKartlari, onKapat, onUrunGuncellendi }) {
   const [kalemler, setKalemler] = useState([]);
   const [yukleniyor, setYukleniyor] = useState(true);
   const [hata, setHata] = useState(null);
   const [duzenlenenId, setDuzenlenenId] = useState(null);
   const [denemeSatisFiyati, setDenemeSatisFiyati] = useState('');
+  const [satisMaliyetEkleTipi, setSatisMaliyetEkleTipi] = useState(null);
 
   function yukle() {
     setYukleniyor(true);
@@ -233,7 +235,25 @@ function MaliyetDetayi({ urun, stokKartlari, onKapat }) {
       <HataMesaji>{hata}</HataMesaji>
 
       {urun.durum === 'SATILDI' && (urun.satis_odeme_tipi === 'LEASINGLI' || urun.satis_odeme_tipi === 'FATURALI') && (
-        <SatisMaliyetKontrolListesi urun={urun} odemeTipi={urun.satis_odeme_tipi} />
+        <>
+          <SatisMaliyetKontrolListesi
+            urun={urun} odemeTipi={urun.satis_odeme_tipi}
+            onMaliyetEkle={(tip) => setSatisMaliyetEkleTipi(tip)}
+          />
+          {satisMaliyetEkleTipi && (
+            <ManuelMaliyetKalemiEkleFormu
+              key={satisMaliyetEkleTipi}
+              urun={urun}
+              varsayilanTip={satisMaliyetEkleTipi}
+              onKaydedildi={() => {
+                setSatisMaliyetEkleTipi(null);
+                yukle();
+                api.get(`/stok-seri-no/${urun.id}`).then((r) => onUrunGuncellendi(r.data)).catch(() => {});
+              }}
+              onVazgec={() => setSatisMaliyetEkleTipi(null)}
+            />
+          )}
+        </>
       )}
 
       {kalemler.length > 0 && (
@@ -999,10 +1019,23 @@ export default function StokSayfasi() {
   // Satilmis urunler, listeyi gereksiz kalabalik gostermesin diye
   // varsayilan olarak GIZLENIR - "Satilanlari da göster" acikca
   // isaretlenmedikce (ya da durum filtresi ozellikle "SATILDI" secilmedikce).
+  // "Satildi" filtresi secildiginde grup gorunumu (siparis bazli) yerine,
+  // DUZ bir liste - satis tarihine gore (varsayilan: en YENI satis en
+  // ustte) - daha mantikli oluyor, cunku farkli siparislerden gelen
+  // urunler ayni anda satilmis olabiliyor, "hangi siparisten geldigi"
+  // ARTIK ikincil bir bilgi.
+  const satildiGorunumu = durumFiltre === 'SATILDI';
   const gruplananUrunler = [...urunler]
     .filter((u) => satilanlariGoster || durumFiltre === 'SATILDI' || u.durum !== 'SATILDI')
     .filter((u) => !seriNoArama || (u.seri_no || '').toLocaleLowerCase('tr').includes(seriNoArama.toLocaleLowerCase('tr')) || (u.sasi_no || '').toLocaleLowerCase('tr').includes(seriNoArama.toLocaleLowerCase('tr')))
     .sort((a, b) => {
+      if (satildiGorunumu) {
+        // satis_kayit_zamani (saat dahil, GERCEK satis ani) varsa onu
+        // kullan - yoksa (eski kayitlar) satis_tarihi'ne (gun) geri don.
+        const az = a.satis_kayit_zamani || a.satis_tarihi || '';
+        const bz = b.satis_kayit_zamani || b.satis_tarihi || '';
+        return bz.localeCompare(az); // DESC - en yeni ustte
+      }
       if (a.siparis_id === b.siparis_id) return a.id - b.id;
       if (a.siparis_id == null) return 1;
       if (b.siparis_id == null) return -1;
@@ -1148,6 +1181,7 @@ export default function StokSayfasi() {
           urun={maliyetGosterilecekUrun}
           stokKartlari={stokKartlari}
           onKapat={() => { setMaliyetGosterilecekUrun(null); urunleriYukle(); }}
+          onUrunGuncellendi={(yeniUrun) => { setMaliyetGosterilecekUrun(yeniUrun); urunleriYukle(); }}
         />
       )}
 
@@ -1268,6 +1302,7 @@ export default function StokSayfasi() {
                 <SiraliBaslik alanAdi="sahiplik_tipi" siralama={siralama}>Sahiplik</SiraliBaslik>
                 <SiraliBaslik alanAdi="toplam_maliyet_try" siralama={siralama}>Toplam Maliyet (TL)</SiraliBaslik>
                 <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>Toplam Maliyet (USD)</th>
+                <SiraliBaslik alanAdi="satis_tarihi" siralama={siralama}>Satış Tarihi</SiraliBaslik>
                 <SiraliBaslik alanAdi="satis_fiyati_try" siralama={siralama}>Satış Fiyatı (TL)</SiraliBaslik>
                 <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>Satış Fiyatı (USD)</th>
                 <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>Kâr/Zarar</th>
@@ -1283,10 +1318,10 @@ export default function StokSayfasi() {
                 const karZarar = u.satis_fiyati_try != null ? u.satis_fiyati_try - u.toplam_maliyet_try : null;
                 const satilabilir = u.durum === 'DEPODA' || u.durum === 'ANTREPODA';
                 const oncekiUrun = gruplananUrunler[index - 1];
-                const grupBasi = !siralama.alan && (index === 0 || (oncekiUrun && oncekiUrun.siparis_id !== u.siparis_id));
+                const grupBasi = !siralama.alan && !satildiGorunumu && (index === 0 || (oncekiUrun && oncekiUrun.siparis_id !== u.siparis_id));
                 // Grup kapaliysa, o gruba ait BASLIK DISINDAKI satirlari (urun
                 // satiri, duzenleme/durum formlari dahil) hic render etme.
-                const grupKapali = !siralama.alan && u.siparis_id != null && kapaliSiparisGruplari.has(u.siparis_id);
+                const grupKapali = !siralama.alan && !satildiGorunumu && u.siparis_id != null && kapaliSiparisGruplari.has(u.siparis_id);
                 if (grupKapali && !grupBasi) {
                   return null;
                 }
@@ -1294,7 +1329,7 @@ export default function StokSayfasi() {
                   const ozet = u.siparis_id != null ? siparisOzetleri[u.siparis_id] : null;
                   return (
                     <tr key={`grup-${u.siparis_id}`}>
-                      <td colSpan={12} style={{ padding: 0 }}>
+                      <td colSpan={13} style={{ padding: 0 }}>
                         <GrupBasligi
                           baslik={`Sipariş: ${siparisNoGoster(u.siparis_id)}`}
                           altBaslik={ozet ? `${ozet.toplam} üründen ${ozet.elde_kalan} tanesi elimizde` : null}
@@ -1341,7 +1376,7 @@ export default function StokSayfasi() {
                   <Fragment key={u.id}>
                     {grupBasi && ozet && (
                       <tr>
-                        <td colSpan={12} style={{ padding: 0 }}>
+                        <td colSpan={13} style={{ padding: 0 }}>
                           <GrupBasligi
                             baslik={`Sipariş: ${siparisNoGoster(u.siparis_id)}`}
                             altBaslik={`${ozet.toplam} üründen ${ozet.elde_kalan} tanesi elimizde`}
@@ -1377,6 +1412,7 @@ export default function StokSayfasi() {
                         <Etiket ton={u.sahiplik_tipi === 'OZ_MAL' ? 'amber' : 'notr'}>{u.sahiplik_tipi === 'OZ_MAL' ? 'Öz Mal' : 'Ticari'}</Etiket>
                       </td>
                       <td style={{ padding: '12px 16px' }}>{paraFormat(u.toplam_maliyet_try)}</td>
+                      <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>{u.satis_tarihi ? tarihFormat(u.satis_tarihi) : '—'}</td>
                       <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>
                         {(() => {
                           const gercekUsd = dovizMaliyetHaritasi[String(u.id)]?.USD;
