@@ -55,7 +55,7 @@ import { excelIndir } from '../utils/disaAktarma';
 const API_TABAN_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 import {
   Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat,
-  eylemChipStili, ParaGirdisi, DahaFazlaMenu, GrupBasligi, TabloIskeleti,
+  eylemChipStili, ParaGirdisi, DahaFazlaMenu, GrupBasligi, TabloIskeleti, SatisMaliyetKontrolListesi,
 } from '../components/Ortak';
 
 const DURUM_ETIKET = {
@@ -231,6 +231,10 @@ function MaliyetDetayi({ urun, stokKartlari, onKapat }) {
         <Buton variant="ikincil" onClick={onKapat}>Kapat</Buton>
       </div>
       <HataMesaji>{hata}</HataMesaji>
+
+      {urun.durum === 'SATILDI' && (urun.satis_odeme_tipi === 'LEASINGLI' || urun.satis_odeme_tipi === 'FATURALI') && (
+        <SatisMaliyetKontrolListesi urun={urun} odemeTipi={urun.satis_odeme_tipi} />
+      )}
 
       {kalemler.length > 0 && (
         <div style={{
