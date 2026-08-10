@@ -907,12 +907,13 @@ function BakimMiniFormu({ cari, onTamamlandi, onVazgec }) {
   );
 }
 
-const HAREKET_TUR_METIN = { SATIS: 'Satış', KIRALAMA: 'Kiralama', BAKIM: 'Bakım', TAKSITLI_SATIS: 'Taksitli Satış', CEK: 'Çek', SIPARIS: 'Sipariş', TEDARIKCI_FATURA: 'Tedarikçi Faturası' };
-const HAREKET_TUR_TON = { SATIS: 'yesil', KIRALAMA: 'amber', BAKIM: 'notr', TAKSITLI_SATIS: 'amber', CEK: 'notr', SIPARIS: 'notr', TEDARIKCI_FATURA: 'kirmizi' };
+const HAREKET_TUR_METIN = { SATIS: 'Satış', KIRALAMA: 'Kiralama', LEASING: 'Leasing', BAKIM: 'Bakım', TAKSITLI_SATIS: 'Taksitli Satış', CEK: 'Çek', SIPARIS: 'Sipariş', TEDARIKCI_FATURA: 'Tedarikçi Faturası' };
+const HAREKET_TUR_TON = { SATIS: 'yesil', KIRALAMA: 'amber', LEASING: 'kirmizi', BAKIM: 'notr', TAKSITLI_SATIS: 'amber', CEK: 'notr', SIPARIS: 'notr', TEDARIKCI_FATURA: 'kirmizi' };
 
 const CARI_HAREKET_YOL_HARITASI = {
   STOK_SATIS: '/stok',
   KIRALAMA_SOZLESME: '/finansal?sekme=kiralama',
+  LEASING: '/finansal?sekme=leasing',
   BAKIM_KAYDI: '/finansal?sekme=bakim',
   TAKSITLI_SATIS_PLANI: '/finansal?sekme=taksit',
   CEKLER: '/finansal?sekme=cek',
