@@ -622,6 +622,18 @@ export default function SiparislerSayfasi() {
   const [akreditifHaritasi, setAkreditifHaritasi] = useState({}); // siparisId -> akreditif
   const [siparisUrunleriHaritasi, setSiparisUrunleriHaritasi] = useState({}); // siparisId -> StokSeriNo[]
   const [maliyetAcikUrunId, setMaliyetAcikUrunId] = useState(null);
+  // Teslim Alinmis Urunler tablosu, urun turune (stok_karti_id) gore
+  // gruplanir - VARSAYILAN KAPALI (sadece "Elektrikli Forklift - 5 adet"
+  // basligi gorunur), tiklaninca acilip o turden urunlerin tum maliyet
+  // sutunlarini gosterir. Key formati: "siparisId-stokKartiId".
+  const [acikUrunTuruGrupSip, setAcikUrunTuruGrupSip] = useState(new Set());
+  function urunTuruGrupSipAcKapat(anahtar) {
+    setAcikUrunTuruGrupSip((s) => {
+      const yeni = new Set(s);
+      if (yeni.has(anahtar)) yeni.delete(anahtar); else yeni.add(anahtar);
+      return yeni;
+    });
+  }
   const [maliyetVarsayilanTip, setMaliyetVarsayilanTip] = useState('NAKLIYE');
 
   // Icerik acildiginda, o siparise ait TESLIM ALINMIS (StokSeriNo) urunleri
@@ -1083,7 +1095,18 @@ export default function SiparislerSayfasi() {
                                     </tr>
                                   </thead>
                                   <tbody>
-                                    {siparisUrunleriHaritasi[s.id].map((u) => {
+                                    {(() => {
+                                      // stok_karti_id'ye gore grupla - HER turden
+                                      // urunu bir arada gostermek icin.
+                                      const gruplar = {};
+                                      const siraliTurler = [];
+                                      siparisUrunleriHaritasi[s.id].forEach((u) => {
+                                        if (!gruplar[u.stok_karti_id]) {
+                                          gruplar[u.stok_karti_id] = [];
+                                          siraliTurler.push(u.stok_karti_id);
+                                        }
+                                        gruplar[u.stok_karti_id].push(u);
+                                      });
                                       const hucre = (deger) => (
                                         <td style={{ padding: '6px 10px', fontSize: 12, whiteSpace: 'nowrap' }}>
                                           {paraFormat(deger)}
@@ -1092,8 +1115,23 @@ export default function SiparislerSayfasi() {
                                           )}
                                         </td>
                                       );
-                                      return (
-                                        <Fragment key={u.id}>
+                                      return siraliTurler.map((stokKartiId) => {
+                                        const turAnahtari = `${s.id}-${stokKartiId}`;
+                                        const turAcik = acikUrunTuruGrupSip.has(turAnahtari);
+                                        const turUrunleri = gruplar[stokKartiId];
+                                        return (
+                                          <Fragment key={stokKartiId}>
+                                            <tr>
+                                              <td
+                                                colSpan={18}
+                                                onClick={() => urunTuruGrupSipAcKapat(turAnahtari)}
+                                                style={{ padding: '8px 10px', background: 'var(--zemin)', borderTop: '1px solid var(--kenarlik)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', userSelect: 'none' }}
+                                              >
+                                                {turAcik ? '▼' : '▶'} {urunAdi(stokKartiId)} — {turUrunleri.length} adet
+                                              </td>
+                                            </tr>
+                                            {turAcik && turUrunleri.map((u) => (
+                                          <Fragment key={u.id}>
                                           <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
                                             <td style={{ padding: '6px 10px', fontSize: 12.5, whiteSpace: 'nowrap' }}>{urunAdi(u.stok_karti_id)}</td>
                                             <td style={{ padding: '6px 10px', fontSize: 12.5, whiteSpace: 'nowrap' }}>{u.seri_no}</td>
@@ -1146,8 +1184,11 @@ export default function SiparislerSayfasi() {
                                             </tr>
                                           )}
                                         </Fragment>
-                                      );
-                                    })}
+                                            ))}
+                                          </Fragment>
+                                        );
+                                      });
+                                    })()}
                                   </tbody>
                                 </table>
                               </div>
