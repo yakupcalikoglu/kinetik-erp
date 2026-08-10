@@ -384,9 +384,12 @@ def taksitli_satis_planlarini_listele(
     if musteri_ids:
         cari_haritasi = {c.id: c.unvan for c in db.execute(select(CariHesap).where(CariHesap.id.in_(musteri_ids))).scalars()}
 
+    urun_tanimi_h = _urun_tanimi_haritasi(db, sirket_id)
     for p in planlar:
         p.musteri_unvan = cari_haritasi.get(p.musteri_cari_id)
         p.kalemler = list(db.execute(select(TaksitliSatisKalemi).where(TaksitliSatisKalemi.plan_id == p.id)).scalars())
+        for k in p.kalemler:
+            k.urun_adi = urun_tanimi_h.get(k.stok_karti_id)
         p.toplam_odenen = _taksitli_satis_toplam_odenen_hesapla(db, p)
         p.kalan_bakiye = p.toplam_tutar - p.toplam_odenen
     return planlar
