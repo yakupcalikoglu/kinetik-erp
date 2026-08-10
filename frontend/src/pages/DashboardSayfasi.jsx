@@ -355,12 +355,38 @@ const SON_ISLEM_TUR_METIN = {
   STOK: 'Stok', STOK_SATIS: 'Satış', CARI: 'Cari',
 };
 
+// "Son Islemler" satirindaki kaynak_tablo degerine gore, hangi sayfaya
+// gidilecegini belirler. Backend'den gelen kaynak_tablo hem kendi "tur"
+// degerlerimizi (SIPARIS, TEDARIKCI_FATURA, STOK, CARI) hem de Kasa/Banka
+// hareketlerinin GERCEK kaynagini (orn. AKREDITIF_KALEMI, TAKSIT_DETAY)
+// tasiyabilir - BankaSayfasi'ndaki KAYNAK_YOL_HARITASI ile AYNI mantik.
+const SON_ISLEM_YOL_HARITASI = {
+  SIPARIS: '/siparisler',
+  TEDARIKCI_FATURA: '/tedarikci-faturalari',
+  STOK: '/stok',
+  CARI: '/cariler',
+  AKREDITIF_KALEMI: '/finansal?sekme=akreditif',
+  AKREDITIF_KALEM_TAKSIT: '/finansal?sekme=akreditif',
+  LEASING_ODEME: '/finansal?sekme=leasing',
+  KIRALAMA_ODEME: '/finansal?sekme=kiralama',
+  TAKSIT_DETAY: '/finansal?sekme=taksit',
+  PERSONEL_ODEME: '/finansal?sekme=personel',
+  SABIT_GIDER: '/finansal?sekme=gider',
+  BORC_ODEME: '/finansal?sekme=borc',
+  BAKIM_KAYDI: '/finansal?sekme=bakim',
+  CEKLER: '/finansal?sekme=cek',
+  SIPARIS_ODEME: '/siparisler',
+  DEMIRBAS_SATIS: '/oz-mal',
+  YEDEK_PARCA_HAREKET: '/yedek-parcalar',
+};
+
 function zamanGoster(iso) {
   const d = new Date(iso);
   return d.toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 function SonIslemlerKutusu() {
+  const navigate = useNavigate();
   const [liste, setListe] = useState(null);
   const [hata, setHata] = useState(null);
   const [genisletildi, setGenisletildi] = useState(false);
@@ -386,24 +412,30 @@ function SonIslemlerKutusu() {
       ) : (
         <>
           <div>
-            {gosterilecekler.map((s, i) => (
-              <div
-                key={i}
-                style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  padding: '9px 0', borderTop: i > 0 ? '1px solid var(--kenarlik)' : 'none', fontSize: 13,
-                }}
-              >
-                <div>
-                  <Etiket ton="notr">{SON_ISLEM_TUR_METIN[s.tur] || s.tur}</Etiket>
-                  <span style={{ marginLeft: 10 }}>{s.aciklama}</span>
+            {gosterilecekler.map((s, i) => {
+              const hedefYol = s.kaynak_tablo ? SON_ISLEM_YOL_HARITASI[s.kaynak_tablo] : null;
+              return (
+                <div
+                  key={i}
+                  onClick={hedefYol ? () => navigate(hedefYol) : undefined}
+                  style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '9px 0', borderTop: i > 0 ? '1px solid var(--kenarlik)' : 'none', fontSize: 13,
+                    cursor: hedefYol ? 'pointer' : 'default',
+                  }}
+                >
+                  <div>
+                    <Etiket ton="notr">{SON_ISLEM_TUR_METIN[s.tur] || s.tur}</Etiket>
+                    <span style={{ marginLeft: 10 }}>{s.aciklama}</span>
+                    {hedefYol && <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--lacivert)' }}>→ görüntüle</span>}
+                  </div>
+                  <div style={{ textAlign: 'right', color: 'var(--metin-ikincil)', whiteSpace: 'nowrap' }}>
+                    {s.tutar != null && <span style={{ marginRight: 10, fontWeight: 500 }}>{paraFormat(s.tutar, s.para_birimi || 'TRY')}</span>}
+                    {zamanGoster(s.zaman)}
+                  </div>
                 </div>
-                <div style={{ textAlign: 'right', color: 'var(--metin-ikincil)', whiteSpace: 'nowrap' }}>
-                  {s.tutar != null && <span style={{ marginRight: 10, fontWeight: 500 }}>{paraFormat(s.tutar, s.para_birimi || 'TRY')}</span>}
-                  {zamanGoster(s.zaman)}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
           {liste.length > 10 && (
             <div style={{ textAlign: 'center', marginTop: 10 }}>
