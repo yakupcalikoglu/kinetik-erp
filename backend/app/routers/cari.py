@@ -127,6 +127,7 @@ async def tum_carilerin_ozeti(
     from app.models.stok import Siparis, SiparisDetay, SiparisOdeme
     from app.models.finansal import (
         TaksitliSatisPlani, TaksitDetay, KiralamaSozlesme, KiralamaOdeme, Cek, CekDurum, CekTip,
+        LeasingSozlesme, LeasingOdeme,
     )
     from app.models.diger import Borc, BorcOdeme, BorcTip
     from app.models.akreditif import Akreditif, AkreditifKalemi, AkreditifDurum
@@ -168,6 +169,19 @@ async def tum_carilerin_ozeti(
             pb = s.para_birimi.value if hasattr(s.para_birimi, "value") else s.para_birimi
             kur = await kur_getir(pb)
             ekle(s.kiraci_cari_id, o.tutar * kur)
+
+    # Leasing borcu (leasing firmasina, odenmemis taksitler)
+    leasing_sozlesmeler = {
+        s.id: s for s in db.execute(select(LeasingSozlesme).where(LeasingSozlesme.sirket_id == sirket_id)).scalars()
+    }
+    if leasing_sozlesmeler:
+        for o in db.execute(select(LeasingOdeme).where(LeasingOdeme.leasing_id.in_(list(leasing_sozlesmeler.keys())), LeasingOdeme.odendi_mi.is_(False))).scalars():
+            s = leasing_sozlesmeler.get(o.leasing_id)
+            if not s:
+                continue
+            pb = s.para_birimi.value if hasattr(s.para_birimi, "value") else s.para_birimi
+            kur = await kur_getir(pb)
+            ekle(s.leasing_firmasi_cari_id, -(o.tutar * kur))
 
     # Siparis borcu + Akreditif dususu
     siparisler = list(db.execute(
@@ -380,7 +394,7 @@ async def cari_ozet(
     from app.models.stok import Siparis, SiparisDetay, SiparisOdeme
     from app.models.finansal import (
         TaksitliSatisPlani, TaksitDetay, KiralamaSozlesme, KiralamaOdeme,
-        Cek, CekDurum, CekTip,
+        Cek, CekDurum, CekTip, LeasingSozlesme, LeasingOdeme,
     )
     from app.models.diger import Borc, BorcOdeme, BorcTip
     from app.models.akreditif import Akreditif, AkreditifKalemi, AkreditifDurum
@@ -427,6 +441,23 @@ async def cari_ozet(
             pb = sozlesme.para_birimi.value if sozlesme and hasattr(sozlesme.para_birimi, "value") else "TRY"
             kur = await kur_getir(pb)
             kira_alacak_try += o.tutar * kur
+
+    # 2b) Leasing borcu (bu cari LEASING FIRMASI ise)
+    leasing_borc_try = _Decimal("0")
+    leasing_sozlesmeler_bu_cari = {
+        s.id: s for s in db.execute(
+            select(LeasingSozlesme).where(LeasingSozlesme.sirket_id == sirket_id, LeasingSozlesme.leasing_firmasi_cari_id == cari_id)
+        ).scalars()
+    }
+    if leasing_sozlesmeler_bu_cari:
+        leasing_odemeler = list(db.execute(
+            select(LeasingOdeme).where(LeasingOdeme.leasing_id.in_(list(leasing_sozlesmeler_bu_cari.keys())), LeasingOdeme.odendi_mi.is_(False))
+        ).scalars())
+        for o in leasing_odemeler:
+            sozlesme = leasing_sozlesmeler_bu_cari.get(o.leasing_id)
+            pb = sozlesme.para_birimi.value if sozlesme and hasattr(sozlesme.para_birimi, "value") else "TRY"
+            kur = await kur_getir(pb)
+            leasing_borc_try += o.tutar * kur
 
     # 3) Tedarikciye olan siparis borcu (bu cari TEDARIKCI ise)
     siparis_borc_try = _Decimal("0")
@@ -511,6 +542,7 @@ async def cari_ozet(
     borclar_listesi = [
         CariOzetKalemi(kategori="Tedarikçiye Olan Borç (Sipariş)", tutar_try=siparis_borc_try),
         CariOzetKalemi(kategori="Akreditif (Ödenmemiş)", tutar_try=akreditif_borc_try),
+        CariOzetKalemi(kategori="Leasing (Ödenmemiş Taksitler)", tutar_try=leasing_borc_try),
         CariOzetKalemi(kategori="Verilen Çekler (Portföyde)", tutar_try=cek_borc_try),
         CariOzetKalemi(kategori="Ortaktan/Dışarıdan Alınan Borç", tutar_try=ortak_borc_try),
     ]
@@ -536,9 +568,21 @@ def cari_tum_hareketler(
     "bu musteriyle simdiye kadar ne is yaptik" sorusuna cevap verir.
     """
     from app.models.stok import StokSeriNo, StokKarti, Siparis
-    from app.models.finansal import TaksitliSatisPlani, KiralamaSozlesme, Cek, CekTip, BakimKaydi, BakimTip
+    from app.models.finansal import TaksitliSatisPlani, KiralamaSozlesme, Cek, CekTip, BakimKaydi, BakimTip, LeasingSozlesme
 
     satirlar: list[CariHareketSatiri] = []
+
+    # 0) Leasing sozlesmeleri (bu cari LEASING FIRMASI ise)
+    leasing_sozlesmeler = list(db.execute(
+        select(LeasingSozlesme).where(LeasingSozlesme.sirket_id == sirket_id, LeasingSozlesme.leasing_firmasi_cari_id == cari_id)
+    ).scalars())
+    for ls in leasing_sozlesmeler:
+        pb = ls.para_birimi.value if hasattr(ls.para_birimi, "value") else ls.para_birimi
+        satirlar.append(CariHareketSatiri(
+            tarih=ls.baslangic_tarihi, tur="LEASING",
+            aciklama=f"Leasing sözleşmesi — {ls.sozlesme_no or ('#' + str(ls.id))} ({ls.toplam_tutar} {pb}, {ls.taksit_sayisi} taksit)",
+            tutar_try=0, kaynak_tablo="LEASING", kaynak_id=ls.id,
+        ))
 
     # 1) Stok satislari (bu cari MUSTERI ise)
     urunler = list(db.execute(
