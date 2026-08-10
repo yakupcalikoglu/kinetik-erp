@@ -1045,3 +1045,93 @@ def maliyet_kalemi_sil(
     db.commit()
     db.refresh(kayit)
     return kayit
+
+
+class UrunBaglantiSatiri(BaseModel):
+    tur: str  # "SIPARIS" | "LEASING" | "KIRALAMA" | "TAKSITLI_SATIS" | "CEK" | "BAKIM"
+    etiket: str
+    kaynak_tablo: str  # frontend navigasyon haritasinda kullanilir
+    kaynak_id: int
+
+
+@router.get("/stok-seri-no/{seri_id}/baglantilar", response_model=list[UrunBaglantiSatiri],
+            dependencies=[Depends(izin_gerektir("STOK_GORUNTULE"))])
+def urun_baglantilarini_getir(
+    seri_id: int,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Bir urunun (StokSeriNo) BAGLI OLDUGU TUM kayitlari (Siparis, Leasing,
+    Kiralama, Taksitli Satis, Cek, Bakim) tek bir listede doner - Stok
+    sayfasindan "bu urun nerede kullaniliyor" sorusuna hizli cevap icin.
+    Sayfa/sekmeler arasindaki kopuklugu azaltmak amaciyla eklenmistir.
+    """
+    from app.models.finansal import (
+        LeasingKalemUrunu, LeasingSozlesmeKalemi, LeasingSozlesme,
+        KiralamaKalemUrunu, KiralamaSozlesmeKalemi, KiralamaSozlesme,
+        TaksitliSatisKalemUrunu, TaksitliSatisKalemi, TaksitliSatisPlani,
+        BakimKaydi,
+    )
+
+    kayit = _seri_no_getir_veya_404(db, seri_id, sirket_id)
+    sonuclar: list[UrunBaglantiSatiri] = []
+
+    if kayit.siparis_id:
+        sonuclar.append(UrunBaglantiSatiri(
+            tur="SIPARIS", etiket=f"Sipariş #{kayit.siparis_id}",
+            kaynak_tablo="SIPARIS", kaynak_id=kayit.siparis_id,
+        ))
+
+    leasing_baglar = list(db.execute(
+        select(LeasingKalemUrunu, LeasingSozlesmeKalemi, LeasingSozlesme)
+        .join(LeasingSozlesmeKalemi, LeasingSozlesmeKalemi.id == LeasingKalemUrunu.kalem_id)
+        .join(LeasingSozlesme, LeasingSozlesme.id == LeasingSozlesmeKalemi.leasing_id)
+        .where(LeasingKalemUrunu.stok_seri_no_id == seri_id)
+    ).all())
+    for _, _, sozlesme in leasing_baglar:
+        sonuclar.append(UrunBaglantiSatiri(
+            tur="LEASING", etiket=f"Leasing — {sozlesme.sozlesme_no or ('#' + str(sozlesme.id))}",
+            kaynak_tablo="LEASING", kaynak_id=sozlesme.id,
+        ))
+
+    kiralama_baglar = list(db.execute(
+        select(KiralamaKalemUrunu, KiralamaSozlesmeKalemi, KiralamaSozlesme)
+        .join(KiralamaSozlesmeKalemi, KiralamaSozlesmeKalemi.id == KiralamaKalemUrunu.kalem_id)
+        .join(KiralamaSozlesme, KiralamaSozlesme.id == KiralamaSozlesmeKalemi.sozlesme_id)
+        .where(KiralamaKalemUrunu.stok_seri_no_id == seri_id)
+    ).all())
+    for _, _, sozlesme in kiralama_baglar:
+        sonuclar.append(UrunBaglantiSatiri(
+            tur="KIRALAMA", etiket=f"Kiralama — Sözleşme #{sozlesme.id} ({sozlesme.durum})",
+            kaynak_tablo="KIRALAMA", kaynak_id=sozlesme.id,
+        ))
+
+    taksit_baglar = list(db.execute(
+        select(TaksitliSatisKalemUrunu, TaksitliSatisKalemi, TaksitliSatisPlani)
+        .join(TaksitliSatisKalemi, TaksitliSatisKalemi.id == TaksitliSatisKalemUrunu.kalem_id)
+        .join(TaksitliSatisPlani, TaksitliSatisPlani.id == TaksitliSatisKalemi.plan_id)
+        .where(TaksitliSatisKalemUrunu.stok_seri_no_id == seri_id)
+    ).all())
+    for _, _, plan in taksit_baglar:
+        sonuclar.append(UrunBaglantiSatiri(
+            tur="TAKSITLI_SATIS", etiket=f"Taksitli Satış — Plan #{plan.id}",
+            kaynak_tablo="TAKSITLI_SATIS", kaynak_id=plan.id,
+        ))
+
+    if kayit.satis_cek_id:
+        sonuclar.append(UrunBaglantiSatiri(
+            tur="CEK", etiket=f"Çek #{kayit.satis_cek_id}",
+            kaynak_tablo="CEKLER", kaynak_id=kayit.satis_cek_id,
+        ))
+
+    bakimlar = list(db.execute(
+        select(BakimKaydi).where(BakimKaydi.stok_seri_no_id == seri_id)
+    ).scalars())
+    if bakimlar:
+        sonuclar.append(UrunBaglantiSatiri(
+            tur="BAKIM", etiket=f"{len(bakimlar)} bakım kaydı",
+            kaynak_tablo="BAKIM_KAYDI", kaynak_id=seri_id,
+        ))
+
+    return sonuclar
