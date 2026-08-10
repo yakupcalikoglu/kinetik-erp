@@ -302,7 +302,7 @@ def test_verilerini_temizle(istek: TemizlikOnayIstegi, db: Session = Depends(get
 
     from app.models.finansal import (
         Cek, CekGecmis, LeasingSozlesme, LeasingOdeme, LeasingSozlesmeKalemi, LeasingKalemUrunu,
-        TaksitliSatisPlani, TaksitDetay, TaksitliSatisKalemi,
+        TaksitliSatisPlani, TaksitDetay, TaksitliSatisKalemi, TaksitliSatisKalemUrunu,
         KiralamaSozlesme, KiralamaOdeme, KiralamaSozlesmeKalemi, KiralamaKalemUrunu, BakimKaydi,
     )
     from app.models.akreditif import Akreditif, AkreditifKalemi
@@ -316,6 +316,7 @@ def test_verilerini_temizle(istek: TemizlikOnayIstegi, db: Session = Depends(get
     from app.models.cari import CariHesap, CariHareket
     from app.models.tedarikci_fatura import TedarikciFaturasi, TedarikciFaturaOdemesi
     from app.models.yedek_parca import YedekParcaHareketi
+    from app.models.demirbas import Demirbas
     from app.models.banka import KasaHareketi, BankaHareketi
     from app.models.virman import UrunSahiplikGecmisi
     from sqlalchemy import update as sa_update
@@ -342,6 +343,10 @@ def test_verilerini_temizle(istek: TemizlikOnayIstegi, db: Session = Depends(get
         LeasingSozlesme,
 
         TaksitDetay,
+        # TaksitliSatisKalemUrunu (baglanti tablosu), TaksitliSatisKalemi'ne
+        # FK ile bagli - ONDAN ONCE silinmeli (Leasing/Kiralama'daki
+        # KalemUrunu tablolariyla AYNI mantik).
+        TaksitliSatisKalemUrunu,
         TaksitliSatisKalemi,
         TaksitliSatisPlani,
 
@@ -399,6 +404,11 @@ def test_verilerini_temizle(istek: TemizlikOnayIstegi, db: Session = Depends(get
         # TedarikciFaturasi, CariHesap'a FK ile bagli - CariHesap'tan ONCE
         # silinmeli (aksi halde "cari hala kullanimda" FK ihlali olusur).
         TedarikciFaturasi,
+
+        # Demirbas (Oz Mal - arac/gayrimenkul/ofis ekipmani), StokKarti/
+        # StokSeriNo'dan TAMAMEN BAGIMSIZ AYRI bir tablo - kiraci_cari_id
+        # ile CariHesap'a bagli, o yuzden CariHesap'tan ONCE silinmeli.
+        Demirbas,
 
         CariHesap,
     ]
