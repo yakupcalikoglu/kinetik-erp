@@ -3471,13 +3471,14 @@ function KiralamaSekmesi() {
 
 // ============================================================== TAKSİTLİ SATIŞ
 function bosTaksitKalemi() {
-  return { stok_karti_id: '', miktar: 1, birim_fiyat: '' };
+  return { stok_karti_id: '', miktar: 1, birim_fiyat: '', stok_seri_no_idleri: [] };
 }
 
 function TaksitSekmesi() {
   const [hata, setHata] = useState(null);
   const cariler = useCariler();
   const urunTanimlari = useUrunTanimlari();
+  const tumUrunSecenekleri = useUrunSecenekleri();
   const [vadesiGecenler, setVadesiGecenler] = useState([]);
   const [formAcik, setFormAcik] = useState(false);
   const [form, setForm] = useState({
@@ -3523,6 +3524,17 @@ function TaksitSekmesi() {
   function kalemSil(i) {
     setForm((f) => ({ ...f, kalemler: f.kalemler.filter((_, idx) => idx !== i) }));
   }
+  function kalemSeriSecimDegistir(i, seriId) {
+    setForm((f) => ({
+      ...f,
+      kalemler: f.kalemler.map((k, idx) => {
+        if (idx !== i) return k;
+        const mevcut = k.stok_seri_no_idleri || [];
+        const yeni = mevcut.includes(seriId) ? mevcut.filter((x) => x !== seriId) : [...mevcut, seriId];
+        return { ...k, stok_seri_no_idleri: yeni };
+      }),
+    }));
+  }
 
   const formToplamTutar = form.kalemler.reduce((acc, k) => acc + (Number(k.miktar) || 0) * (Number(k.birim_fiyat) || 0), 0);
 
@@ -3542,6 +3554,7 @@ function TaksitSekmesi() {
         baslangic_tarihi: form.baslangic_tarihi,
         kalemler: form.kalemler.map((k) => ({
           stok_karti_id: Number(k.stok_karti_id), miktar: Number(k.miktar), birim_fiyat: Number(k.birim_fiyat),
+          stok_seri_no_idleri: (k.stok_seri_no_idleri || []).map(Number),
         })),
       });
       setOlusanPlan(data);
@@ -3692,27 +3705,55 @@ function TaksitSekmesi() {
               <tbody>
                 {form.kalemler.map((k, i) => {
                   const satirToplam = (Number(k.miktar) || 0) * (Number(k.birim_fiyat) || 0);
+                  const eslesenUrunler = k.stok_karti_id
+                    ? tumUrunSecenekleri.filter((u) => String(u.stok_karti_id) === String(k.stok_karti_id))
+                    : [];
                   return (
-                    <tr key={i} style={{ borderTop: '1px solid var(--kenarlik)' }}>
-                      <td style={{ padding: 6 }}>
-                        <select required value={k.stok_karti_id} onChange={(e) => kalemGuncelle(i, 'stok_karti_id', e.target.value)} style={girdiStili}>
-                          <option value="">Seçin...</option>
-                          {urunTanimlari.map((u) => <option key={u.id} value={u.id}>{u.marka} {u.model}</option>)}
-                        </select>
-                      </td>
-                      <td style={{ padding: 6 }}>
-                        <input required type="number" min="1" value={k.miktar} onChange={(e) => kalemGuncelle(i, 'miktar', e.target.value)} style={{ ...girdiStili, width: 80 }} />
-                      </td>
-                      <td style={{ padding: 6 }}>
-                        <ParaGirdisi required value={k.birim_fiyat} onChange={(v) => kalemGuncelle(i, 'birim_fiyat', v)} style={{ width: 130 }} />
-                      </td>
-                      <td style={{ padding: 6, fontSize: 13, fontWeight: 500 }}>{paraFormat(satirToplam)}</td>
-                      <td style={{ padding: 6 }}>
-                        {form.kalemler.length > 1 && (
-                          <button type="button" onClick={() => kalemSil(i)} style={eylemChipStili('kirmizi')}>Sil</button>
-                        )}
-                      </td>
-                    </tr>
+                    <Fragment key={i}>
+                      <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                        <td style={{ padding: 6 }}>
+                          <select required value={k.stok_karti_id} onChange={(e) => kalemGuncelle(i, 'stok_karti_id', e.target.value)} style={girdiStili}>
+                            <option value="">Seçin...</option>
+                            {urunTanimlari.map((u) => <option key={u.id} value={u.id}>{u.marka} {u.model}</option>)}
+                          </select>
+                        </td>
+                        <td style={{ padding: 6 }}>
+                          <input required type="number" min="1" value={k.miktar} onChange={(e) => kalemGuncelle(i, 'miktar', e.target.value)} style={{ ...girdiStili, width: 80 }} />
+                        </td>
+                        <td style={{ padding: 6 }}>
+                          <ParaGirdisi required value={k.birim_fiyat} onChange={(v) => kalemGuncelle(i, 'birim_fiyat', v)} style={{ width: 130 }} />
+                        </td>
+                        <td style={{ padding: 6, fontSize: 13, fontWeight: 500 }}>{paraFormat(satirToplam)}</td>
+                        <td style={{ padding: 6 }}>
+                          {form.kalemler.length > 1 && (
+                            <button type="button" onClick={() => kalemSil(i)} style={eylemChipStili('kirmizi')}>Sil</button>
+                          )}
+                        </td>
+                      </tr>
+                      {k.stok_karti_id && (
+                        <tr>
+                          <td colSpan={5} style={{ padding: '4px 6px 10px', background: 'var(--zemin)' }}>
+                            <div style={{ fontSize: 11.5, color: 'var(--metin-ikincil)', marginBottom: 4 }}>
+                              Seri numaraları (opsiyonel — hangi spesifik ürün(ler) bu kaleme dahil, {(k.stok_seri_no_idleri || []).length}/{k.miktar} seçili):
+                            </div>
+                            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                              {eslesenUrunler.length === 0 ? (
+                                <span style={{ fontSize: 12, color: 'var(--metin-soluk)' }}>Bu üründen uygun stok bulunamadı.</span>
+                              ) : eslesenUrunler.map((u) => (
+                                <label key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={(k.stok_seri_no_idleri || []).includes(u.id)}
+                                    onChange={() => kalemSeriSecimDegistir(i, u.id)}
+                                  />
+                                  {u.etiket}
+                                </label>
+                              ))}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   );
                 })}
               </tbody>
