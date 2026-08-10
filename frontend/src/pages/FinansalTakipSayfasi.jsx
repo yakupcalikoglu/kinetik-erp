@@ -3504,6 +3504,39 @@ function TaksitSekmesi() {
   }
   useEffect(tumPlanlariYukle, []);
 
+  const [odemeAcikGenisTaksitId, setOdemeAcikGenisTaksitId] = useState(null);
+
+  async function genisPlanTaksitleriYenile(planId) {
+    const { data } = await api.get(`/taksitli-satis-planlari/${planId}/taksitler`);
+    setGenisPlanTaksitleri(data);
+    tumPlanlariYukle();
+  }
+
+  async function genisPlanOdemeyiTamamla(taksit, planId, secim) {
+    const { data: sonuc } = await api.put(`/taksit-detay/${taksit.id}/tahsil-et`, secim);
+    setOdemeAcikGenisTaksitId(null);
+    await genisPlanTaksitleriYenile(planId);
+    vadesiGecenleriYukle();
+    if (sonuc.guncellenen_taksitler.length > 1) {
+      await ozelAlert(`Ödeme, taksit ${sonuc.guncellenen_taksitler[0].taksit_no}'dan ${sonuc.guncellenen_taksitler[sonuc.guncellenen_taksitler.length - 1].taksit_no}'a kadar ${sonuc.guncellenen_taksitler.length} takside otomatik olarak uygulandı.`);
+    }
+    if (sonuc.fazla_odeme_var_mi) {
+      await ozelAlert(`Dikkat: Tüm taksitler kapandı ve ${paraFormat(sonuc.fazla_odeme_tutari)} fazla ödeme oldu. Bu fazlalık hiçbir taksite işlenmedi, lütfen kontrol edin.`);
+    }
+  }
+
+  async function genisPlanTahsilatiGeriAl(taksitId, planId) {
+    if (!(await ozelOnayIste('Bu tahsilatı geri almak istediğinize emin misiniz? Oluşan Kasa/Banka hareketi silinecek. Bu ödeme başka taksitlere de yansımışsa, onlar da birlikte geri alınacaktır.'))) return;
+    try {
+      const { data: sonuc } = await api.put(`/taksit-detay/${taksitId}/tahsilati-geri-al`);
+      await genisPlanTaksitleriYenile(planId);
+      vadesiGecenleriYukle();
+      if (sonuc.etkilenen_taksit_sayisi > 1) {
+        await ozelAlert(`${sonuc.etkilenen_taksit_sayisi} taksit birlikte geri alındı (aynı ödemeyle ilişkiliydiler).`);
+      }
+    } catch (err) { setHata(hataMesajiCikar(err)); }
+  }
+
   function planiGenisletVeyaKapat(planId) {
     if (genisletilmisPlanId === planId) {
       setGenisletilmisPlanId(null);
@@ -3646,22 +3679,60 @@ function TaksitSekmesi() {
                           <table>
                             <thead>
                               <tr>
-                                {['Taksit No', 'Vade', 'Tutar', 'Durum'].map((b) => (
+                                {['Taksit No', 'Vade', 'Tutar', 'Kalan Bakiye', 'Durum', ''].map((b) => (
                                   <th key={b} style={{ textAlign: 'left', padding: '6px 10px', fontSize: 12, color: 'var(--metin-ikincil)' }}>{b}</th>
                                 ))}
                               </tr>
                             </thead>
                             <tbody>
-                              {genisPlanTaksitleri.map((t) => (
-                                <tr key={t.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
-                                  <td style={{ padding: '6px 10px' }}>{t.taksit_no}</td>
-                                  <td style={{ padding: '6px 10px', color: 'var(--metin-ikincil)' }}>{t.vade_tarihi}</td>
-                                  <td style={{ padding: '6px 10px' }}>{paraFormat(t.tutar, p.para_birimi)}</td>
-                                  <td style={{ padding: '6px 10px' }}>
-                                    <Etiket ton={t.odendi_mi ? 'yesil' : 'amber'}>{t.odendi_mi ? 'Ödendi' : 'Bekliyor'}</Etiket>
-                                  </td>
-                                </tr>
-                              ))}
+                              {genisPlanTaksitleri.map((t) => {
+                                const kalanBakiye = t.tutar - (t.odenen_tutar || 0);
+                                const kismenOdendi = !t.odendi_mi && Number(t.odenen_tutar || 0) > 0;
+                                return (
+                                  <Fragment key={t.id}>
+                                    <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                                      <td style={{ padding: '6px 10px' }}>{t.taksit_no}</td>
+                                      <td style={{ padding: '6px 10px', color: 'var(--metin-ikincil)' }}>{t.vade_tarihi}</td>
+                                      <td style={{ padding: '6px 10px' }}>{paraFormat(t.tutar, p.para_birimi)}</td>
+                                      <td style={{ padding: '6px 10px', color: kismenOdendi ? 'var(--kirmizi)' : 'var(--metin-ikincil)' }}>
+                                        {t.odendi_mi ? '—' : paraFormat(kalanBakiye, p.para_birimi)}
+                                      </td>
+                                      <td style={{ padding: '6px 10px' }}>
+                                        <Etiket ton={t.odendi_mi ? 'yesil' : kismenOdendi ? 'amber' : 'notr'}>
+                                          {t.odendi_mi ? 'Ödendi' : kismenOdendi ? 'Kısmen Ödendi' : 'Bekliyor'}
+                                        </Etiket>
+                                      </td>
+                                      <td style={{ padding: '6px 10px' }}>
+                                        {t.odendi_mi || kismenOdendi ? (
+                                          <button onClick={() => genisPlanTahsilatiGeriAl(t.id, p.id)} style={eylemChipStili('kirmizi')}>Geri Al</button>
+                                        ) : (
+                                          <button
+                                            onClick={() => setOdemeAcikGenisTaksitId((mevcut) => (mevcut === t.id ? null : t.id))}
+                                            style={eylemChipStili('lacivert')}
+                                          >
+                                            {odemeAcikGenisTaksitId === t.id ? 'Kapat' : 'Tahsil et'}
+                                          </button>
+                                        )}
+                                      </td>
+                                    </tr>
+                                    {odemeAcikGenisTaksitId === t.id && (
+                                      <tr>
+                                        <td colSpan={6} style={{ padding: '0 10px 10px' }}>
+                                          <OdemeFormu
+                                            tutar={kalanBakiye}
+                                            paraBirimi={p.para_birimi}
+                                            aksiyonMetni="Tahsilatı tamamla"
+                                            tutarDuzenlenebilir
+                                            tutarEtiketi={`Tahsil edilecek tutar — kalan bakiye: ${paraFormat(kalanBakiye, p.para_birimi)}`}
+                                            onOde={(secim) => genisPlanOdemeyiTamamla(t, p.id, secim)}
+                                            onVazgec={() => setOdemeAcikGenisTaksitId(null)}
+                                          />
+                                        </td>
+                                      </tr>
+                                    )}
+                                  </Fragment>
+                                );
+                              })}
                             </tbody>
                           </table>
                         )}
