@@ -1,6 +1,6 @@
 import { useEffect, useState, Fragment } from 'react';
 import * as XLSX from 'xlsx';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import AramaliSecici from '../components/AramaliSecici';
 
@@ -77,6 +77,17 @@ const MALIYET_TIP_METIN = {
 const SATIS_YONTEMI_METIN = {
   PESIN_NAKIT: 'Nakit', PESIN_HAVALE: 'Havale/EFT', PESIN_KART: 'Kredi Kartı',
   TAKSITLI: 'Taksitli', LEASINGLI: 'Leasing', CEK: 'Çek',
+};
+
+// Urunun BAGLI OLDUGU kayda (kaynak_tablo) gore gidilecek sayfa - Dashboard/
+// Banka sayfasindaki navigasyon haritalariyla AYNI mantik.
+const BAGLANTI_YOL_HARITASI = {
+  SIPARIS: '/siparisler',
+  LEASING: '/finansal?sekme=leasing',
+  KIRALAMA: '/finansal?sekme=kiralama',
+  TAKSITLI_SATIS: '/finansal?sekme=taksit',
+  CEKLER: '/finansal?sekme=cek',
+  BAKIM_KAYDI: '/finansal?sekme=bakim',
 };
 
 function MaliyetKalemiDuzenleFormu({ kalem, urunId, onKaydedildi, onVazgec }) {
@@ -180,12 +191,18 @@ function MaliyetKalemiDuzenleFormu({ kalem, urunId, onKaydedildi, onVazgec }) {
 }
 
 function MaliyetDetayi({ urun, stokKartlari, onKapat, onUrunGuncellendi }) {
+  const navigate = useNavigate();
   const [kalemler, setKalemler] = useState([]);
   const [yukleniyor, setYukleniyor] = useState(true);
   const [hata, setHata] = useState(null);
   const [duzenlenenId, setDuzenlenenId] = useState(null);
   const [denemeSatisFiyati, setDenemeSatisFiyati] = useState('');
   const [satisMaliyetEkleTipi, setSatisMaliyetEkleTipi] = useState(null);
+  const [baglantilar, setBaglantilar] = useState(null);
+
+  useEffect(() => {
+    api.get(`/stok-seri-no/${urun.id}/baglantilar`).then((r) => setBaglantilar(r.data)).catch(() => setBaglantilar([]));
+  }, [urun.id]);
 
   function yukle() {
     setYukleniyor(true);
@@ -238,6 +255,30 @@ function MaliyetDetayi({ urun, stokKartlari, onKapat, onUrunGuncellendi }) {
         <Buton variant="ikincil" onClick={onKapat}>Kapat</Buton>
       </div>
       <HataMesaji>{hata}</HataMesaji>
+
+      {baglantilar && baglantilar.length > 0 && (
+        <div style={{ padding: '10px 12px', background: 'var(--zemin)', borderRadius: 8, marginBottom: 12 }}>
+          <div style={{ fontWeight: 600, fontSize: 12.5, marginBottom: 6 }}>Bu ürün nerede kullanılıyor</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {baglantilar.map((b, i) => {
+              const yol = BAGLANTI_YOL_HARITASI[b.kaynak_tablo];
+              return (
+                <button
+                  key={i}
+                  onClick={yol ? () => navigate(yol) : undefined}
+                  style={{
+                    ...eylemChipStili('lacivert'),
+                    cursor: yol ? 'pointer' : 'default',
+                    opacity: yol ? 1 : 0.7,
+                  }}
+                >
+                  {b.etiket}{yol ? ' →' : ''}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {urun.durum === 'SATILDI' && (urun.satis_odeme_tipi === 'LEASINGLI' || urun.satis_odeme_tipi === 'FATURALI') && (
         <>
