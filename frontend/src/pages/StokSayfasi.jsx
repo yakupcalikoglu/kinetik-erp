@@ -854,6 +854,19 @@ export default function StokSayfasi() {
   const [durumDegistirilenId, setDurumDegistirilenId] = useState(null);
   const [seciliIdler, setSeciliIdler] = useState([]);
   const [kapaliSiparisGruplari, setKapaliSiparisGruplari] = useState(new Set());
+  // Urun turu (stok_karti_id) alt gruplari, siparis grubunun ICINDE -
+  // VARSAYILAN olarak KAPALI (sadece "Elektrikli Forklift - 5 adet" basligi
+  // gorunur), TIKLANINCA acilip o turden urunleri gosterir. Key formati:
+  // "siparisId-stokKartiId".
+  const [acikUrunTuruGruplari, setAcikUrunTuruGruplari] = useState(new Set());
+
+  function urunTuruGrubuAcKapat(anahtar) {
+    setAcikUrunTuruGruplari((s) => {
+      const yeni = new Set(s);
+      if (yeni.has(anahtar)) yeni.delete(anahtar); else yeni.add(anahtar);
+      return yeni;
+    });
+  }
 
   function siparisGrubuAcKapat(siparisId) {
     setKapaliSiparisGruplari((s) => {
@@ -1356,6 +1369,14 @@ export default function StokSayfasi() {
                 const buSiparisteBuUrundenKac = u.siparis_id != null
                   ? gruplananUrunler.filter((x) => x.siparis_id === u.siparis_id && x.stok_karti_id === u.stok_karti_id).length
                   : 0;
+                const urunTuruAnahtari = `${u.siparis_id}-${u.stok_karti_id}`;
+                const urunTuruAcik = acikUrunTuruGruplari.has(urunTuruAnahtari);
+                // Ayni siparis+urun turu icindeyken (altGrupBasi DEGILKEN),
+                // grup KAPALIYSA bu satiri (urun satiri, form satirlari
+                // dahil) hic render etme.
+                if (!satildiGorunumu && !siralama.alan && !grupBasi && !altGrupBasi && !urunTuruAcik) {
+                  return null;
+                }
                 if (grupKapali && !grupBasi) {
                   return null;
                 }
@@ -1422,8 +1443,12 @@ export default function StokSayfasi() {
                     )}
                     {altGrupBasi && (
                       <tr>
-                        <td colSpan={12} style={{ padding: '6px 16px 6px 32px', background: 'var(--zemin)', borderTop: grupBasi ? 'none' : '1px solid var(--kenarlik)', fontSize: 12, fontWeight: 600, color: 'var(--metin-ikincil)' }}>
-                          {urunAdiGoster(u.stok_karti_id)} — {buSiparisteBuUrundenKac} adet
+                        <td
+                          colSpan={12}
+                          onClick={() => urunTuruGrubuAcKapat(urunTuruAnahtari)}
+                          style={{ padding: '6px 16px 6px 32px', background: 'var(--zemin)', borderTop: grupBasi ? 'none' : '1px solid var(--kenarlik)', fontSize: 12, fontWeight: 600, color: 'var(--metin-ikincil)', cursor: 'pointer', userSelect: 'none' }}
+                        >
+                          {urunTuruAcik ? '▼' : '▶'} {urunAdiGoster(u.stok_karti_id)} — {buSiparisteBuUrundenKac} adet
                         </td>
                       </tr>
                     )}
