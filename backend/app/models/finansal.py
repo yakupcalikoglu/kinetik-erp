@@ -144,6 +144,15 @@ class TaksitliSatisKalemi(Base):
     birim_fiyat = Column(Numeric(18, 2), nullable=False)
 
 
+class TaksitliSatisKalemUrunu(Base):
+    """Bir taksitli satis kalemine (urun turune) baglanan SPESIFIK seri numarali fiziksel birim(ler) - LeasingKalemUrunu/KiralamaKalemUrunu ile AYNI mantik."""
+    __tablename__ = "taksitli_satis_kalem_urunleri"
+
+    id = Column(BigInteger, primary_key=True)
+    kalem_id = Column(BigInteger, ForeignKey("taksitli_satis_kalemleri.id"), nullable=False)
+    stok_seri_no_id = Column(BigInteger, ForeignKey("stok_seri_no.id"), nullable=False)
+
+
 class TaksitDetay(Base):
     __tablename__ = "taksit_detay"
 
