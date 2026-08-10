@@ -1415,6 +1415,11 @@ class SonIslemSatiri(BaseModel):
     aciklama: str
     tutar: Decimal | None = None
     para_birimi: str | None = None
+    # Bu satirin GERCEKTE hangi kayda ait oldugu - frontend'de "ilgili
+    # sayfaya git" navigasyonu icin kullanilir. Tiklanabilir olmasi
+    # gerekmeyen satirlarda (orn. serbest bir Kasa hareketi) bos kalir.
+    kaynak_tablo: str | None = None
+    kaynak_id: int | None = None
 
 
 @router.get("/son-islemler", response_model=list[SonIslemSatiri],
@@ -1444,6 +1449,7 @@ def son_islemler(
                 satirlar.append(SonIslemSatiri(
                     zaman=s.olusturma_tarihi, tur="SIPARIS",
                     aciklama=f"Yeni sipariş oluşturuldu — {s.siparis_no}",
+                    kaynak_tablo="SIPARIS", kaynak_id=s.id,
                 ))
     except Exception:
         pass
@@ -1463,6 +1469,7 @@ def son_islemler(
                     zaman=f.olusturma_tarihi, tur="TEDARIKCI_FATURA",
                     aciklama=f"Fatura kaydedildi — {f.fatura_no or ('#' + str(f.id))}" + (f" ({cari.unvan})" if cari else ""),
                     tutar=f.tutar, para_birimi=pb,
+                    kaynak_tablo="TEDARIKCI_FATURA", kaynak_id=f.id,
                 ))
 
         odemeler = list(db.execute(
@@ -1481,6 +1488,7 @@ def son_islemler(
                     zaman=o.olusturma_tarihi, tur="TEDARIKCI_FATURA_ODEME",
                     aciklama=f"Fatura ödemesi yapıldı — {fatura.fatura_no if fatura and fatura.fatura_no else ('#' + str(o.fatura_id))}",
                     tutar=o.tutar, para_birimi=pb,
+                    kaynak_tablo="TEDARIKCI_FATURA", kaynak_id=o.fatura_id,
                 ))
     except Exception:
         pass
@@ -1495,6 +1503,7 @@ def son_islemler(
                 satirlar.append(SonIslemSatiri(
                     zaman=u.olusturma_tarihi, tur="STOK",
                     aciklama=f"Ürün kaydedildi — {u.seri_no}",
+                    kaynak_tablo="STOK", kaynak_id=u.id,
                 ))
 
         # Satislar (durum degisikligi - yeni kayit degil, bu yuzden AYRI bir
@@ -1511,6 +1520,7 @@ def son_islemler(
                 zaman=u.satis_kayit_zamani, tur="STOK_SATIS",
                 aciklama=f"Satış yapıldı — {u.seri_no}",
                 tutar=u.satis_fiyati_try, para_birimi="TRY",
+                kaynak_tablo="STOK", kaynak_id=u.id,
             ))
     except Exception:
         pass
@@ -1525,6 +1535,7 @@ def son_islemler(
                 satirlar.append(SonIslemSatiri(
                     zaman=c.olusturma_tarihi, tur="CARI",
                     aciklama=f"Yeni cari eklendi — {c.unvan}",
+                    kaynak_tablo="CARI", kaynak_id=c.id,
                 ))
     except Exception:
         pass
@@ -1547,6 +1558,7 @@ def son_islemler(
                     zaman=h.olusturma_tarihi, tur="KASA_HAREKETI",
                     aciklama=f"Ana Kasa {yon_metin} — {h.aciklama or (h.kaynak_tablo or 'Serbest')}",
                     tutar=abs(h.tutar), para_birimi=h.para_birimi.value if hasattr(h.para_birimi, "value") else h.para_birimi,
+                    kaynak_tablo=h.kaynak_tablo, kaynak_id=h.kaynak_id,
                 ))
     except Exception:
         pass
@@ -1569,6 +1581,7 @@ def son_islemler(
                     zaman=h.olusturma_tarihi, tur="BANKA_HAREKETI",
                     aciklama=f"{hesap.banka_adi if hesap else 'Banka'} {yon_metin} — {h.aciklama or (h.kaynak_tablo or 'Serbest')}",
                     tutar=abs(h.tutar), para_birimi=hesap_pb,
+                    kaynak_tablo=h.kaynak_tablo, kaynak_id=h.kaynak_id,
                 ))
     except Exception:
         pass
