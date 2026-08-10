@@ -548,6 +548,10 @@ const BEKLENEN_MALIYET_KATEGORILERI = [
   { anahtar: 'ilave_gumruk_vergisi_try', tip: 'ILAVE_GUMRUK_VERGISI', ad: 'İlave Gümrük Vergisi' },
   { anahtar: 'antrepo_maliyeti_try', tip: 'ANTREPO', ad: 'Antrepo (Beyanname, İndirme, Ardiye)' },
   { anahtar: 'millilestirme_maliyeti_try', tip: 'MILLILESTIRME', ad: 'Millileştirme' },
+  // "Diger" HER ZAMAN "eksik" (kirmizi/uyari) GORUNMEZ - listede olmayan
+  // beklenmedik bir masraf oldugunda, aciklama yazarak ekstra bir kalem
+  // eklemek icin bir KACIS YOLU - eksik sayisina DAHIL EDILMEZ (asagida ayri islenir).
+  { anahtar: 'diger_maliyet_try', tip: 'DIGER', ad: 'Diğer (açıklama yazarak ekleyin)' },
 ];
 
 // Bir siparisteki TUM urunlerin maliyet ozet sutunlarini TOPLAYIP, hangi
@@ -561,7 +565,7 @@ function MaliyetKontrolListesi({ urunler, onMaliyetEkle }) {
   BEKLENEN_MALIYET_KATEGORILERI.forEach(({ anahtar }) => {
     toplamlar[anahtar] = urunler.reduce((acc, u) => acc + Number(u[anahtar] || 0), 0);
   });
-  const eksikSayisi = BEKLENEN_MALIYET_KATEGORILERI.filter(({ anahtar }) => toplamlar[anahtar] === 0).length;
+  const eksikSayisi = BEKLENEN_MALIYET_KATEGORILERI.filter(({ anahtar, tip }) => tip !== 'DIGER' && toplamlar[anahtar] === 0).length;
 
   return (
     <div style={{ padding: '10px 12px', background: eksikSayisi > 0 ? 'var(--amber-acik, #fdf0d5)' : 'var(--yesil-acik, #e3f5e9)', borderRadius: 8, marginBottom: 4 }}>
@@ -576,8 +580,8 @@ function MaliyetKontrolListesi({ urunler, onMaliyetEkle }) {
             title="Bu kalemi eklemek için tıklayın"
             style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}
           >
-            <span>{toplamlar[anahtar] > 0 ? '✅' : '⚠️'}</span>
-            <span style={{ color: 'var(--metin-ikincil)', textDecoration: toplamlar[anahtar] === 0 ? 'underline' : 'none' }}>{ad}</span>
+            <span>{tip === 'DIGER' ? '➕' : toplamlar[anahtar] > 0 ? '✅' : '⚠️'}</span>
+            <span style={{ color: 'var(--metin-ikincil)', textDecoration: tip !== 'DIGER' && toplamlar[anahtar] === 0 ? 'underline' : 'none' }}>{ad}</span>
             {toplamlar[anahtar] > 0 && <strong>({paraFormat(toplamlar[anahtar])})</strong>}
           </div>
         ))}
@@ -1075,7 +1079,19 @@ export default function SiparislerSayfasi() {
                                 urunler={siparisUrunleriHaritasi[s.id]}
                                 onMaliyetEkle={(tip) => {
                                   setMaliyetVarsayilanTip(tip);
-                                  setMaliyetAcikUrunId(siparisUrunleriHaritasi[s.id][0]?.id ?? null);
+                                  const ilkUrun = siparisUrunleriHaritasi[s.id][0];
+                                  setMaliyetAcikUrunId(ilkUrun?.id ?? null);
+                                  // Ilk urunun BULUNDUGU alt grup (urun turu) KAPALI
+                                  // olabilir (varsayilan kapali) - formun GORUNMESI
+                                  // icin o grubu da OTOMATIK aciyoruz, aksi halde
+                                  // form state'i dolsa da render edilmiyordu.
+                                  if (ilkUrun) {
+                                    setAcikUrunTuruGrupSip((mevcut) => {
+                                      const yeni = new Set(mevcut);
+                                      yeni.add(`${s.id}-${ilkUrun.stok_karti_id}`);
+                                      return yeni;
+                                    });
+                                  }
                                 }}
                               />
                               <div style={{ fontWeight: 600, fontSize: 12.5, marginBottom: 6, marginTop: 14 }}>
