@@ -2285,17 +2285,17 @@ function PersonelSekmesi() {
           </thead>
           <tbody>
             {siralama.sirala(liste, (item, alan) => item[alan]).map((p) => (
-              <tr key={p.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
-                <td style={{ padding: '10px 16px', fontWeight: 500 }}>{p.ad_soyad}</td>
-                <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{p.pozisyon || '—'}</td>
-                <td style={{ padding: '10px 16px' }}>{p.aylik_maas != null ? paraFormat(p.aylik_maas) : '—'}</td>
+              <tr key={p.id} style={{ borderTop: '1px solid var(--kenarlik)', background: seciliPersonel === p.id ? 'var(--zemin)' : 'transparent' }}>
+                <td onClick={() => odemeleriGoster(p.id)} style={{ padding: '10px 16px', fontWeight: 500, cursor: 'pointer' }}>
+                  {p.ad_soyad}
+                  <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--lacivert)' }}>
+                    {seciliPersonel === p.id ? '▲ detayı gizle' : '▼ ödemeleri gör'}
+                  </span>
+                </td>
+                <td onClick={() => odemeleriGoster(p.id)} style={{ padding: '10px 16px', color: 'var(--metin-ikincil)', cursor: 'pointer' }}>{p.pozisyon || '—'}</td>
+                <td onClick={() => odemeleriGoster(p.id)} style={{ padding: '10px 16px', cursor: 'pointer' }}>{p.aylik_maas != null ? paraFormat(p.aylik_maas) : '—'}</td>
                 <td style={{ padding: '10px 16px' }}>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <button onClick={() => duzenlemeyeBasla(p)} style={eylemChipStili('lacivert')}>Düzenle</button>
-                    <button onClick={() => odemeleriGoster(p.id)} style={eylemChipStili('lacivert')}>
-                      Ödemeler
-                    </button>
-                  </div>
+                  <button onClick={() => duzenlemeyeBasla(p)} style={eylemChipStili('lacivert')}>Düzenle</button>
                 </td>
               </tr>
             ))}
@@ -2837,30 +2837,30 @@ function LeasingSekmesi() {
               filtreCariId ? liste.filter((l) => String(l.leasing_firmasi_cari_id) === String(filtreCariId)) : liste,
               (item, alan) => item[alan]
             ).map((l) => (
-              <tr key={l.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
-                <td style={{ padding: '10px 16px', fontWeight: 500 }}>{l.sozlesme_no || `#${l.id}`}</td>
-                <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{l.leasing_firmasi_unvan || `#${l.leasing_firmasi_cari_id}`}</td>
-                <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>
+              <tr key={l.id} style={{ borderTop: '1px solid var(--kenarlik)', background: seciliPlan?.id === l.id ? 'var(--zemin)' : 'transparent' }}>
+                <td onClick={() => planiGoster(l.id)} style={{ padding: '10px 16px', fontWeight: 500, cursor: 'pointer' }}>{l.sozlesme_no || `#${l.id}`}</td>
+                <td onClick={() => planiGoster(l.id)} style={{ padding: '10px 16px', color: 'var(--metin-ikincil)', cursor: 'pointer' }}>{l.leasing_firmasi_unvan || `#${l.leasing_firmasi_cari_id}`}</td>
+                <td onClick={() => planiGoster(l.id)} style={{ padding: '10px 16px', color: 'var(--metin-ikincil)', cursor: 'pointer' }}>
                   {(l.kalemler || []).map((k) => (
                     `${k.miktar}x ${k.urun_adi || '#' + k.stok_karti_id}${(k.seri_numaralari || []).length > 0 ? ` (${k.seri_numaralari.join(', ')})` : ''}`
                   )).join(' · ') || '—'}
                 </td>
-                <td style={{ padding: '10px 16px' }}>{paraFormat(l.toplam_tutar, l.para_birimi)}</td>
-                <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{tlKarsiligiGoster(l.toplam_tutar, l.para_birimi, kurlar)}</td>
-                <td style={{ padding: '10px 16px', color: 'var(--yesil)' }}>
+                <td onClick={() => planiGoster(l.id)} style={{ padding: '10px 16px', cursor: 'pointer' }}>{paraFormat(l.toplam_tutar, l.para_birimi)}</td>
+                <td onClick={() => planiGoster(l.id)} style={{ padding: '10px 16px', color: 'var(--metin-ikincil)', cursor: 'pointer' }}>{tlKarsiligiGoster(l.toplam_tutar, l.para_birimi, kurlar)}</td>
+                <td onClick={() => planiGoster(l.id)} style={{ padding: '10px 16px', color: 'var(--yesil)', cursor: 'pointer' }}>
                   {odemePlaniHaritasi[l.id] ? paraFormat(odemePlaniHaritasi[l.id].odenen, l.para_birimi) : '—'}
                 </td>
-                <td style={{ padding: '10px 16px', fontWeight: 600, color: odemePlaniHaritasi[l.id] && odemePlaniHaritasi[l.id].kalan > 0 ? 'var(--kirmizi)' : 'var(--yesil)' }}>
+                <td onClick={() => planiGoster(l.id)} style={{ padding: '10px 16px', fontWeight: 600, color: odemePlaniHaritasi[l.id] && odemePlaniHaritasi[l.id].kalan > 0 ? 'var(--kirmizi)' : 'var(--yesil)', cursor: 'pointer' }}>
                   {odemePlaniHaritasi[l.id] ? paraFormat(odemePlaniHaritasi[l.id].kalan, l.para_birimi) : '—'}
                 </td>
-                <td style={{ padding: '10px 16px' }}>{l.taksit_sayisi}</td>
+                <td onClick={() => planiGoster(l.id)} style={{ padding: '10px 16px', cursor: 'pointer' }}>
+                  {l.taksit_sayisi}
+                  <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--lacivert)' }}>
+                    {seciliPlan?.id === l.id ? '▲ detayı gizle' : '▼ ödeme planını gör'}
+                  </span>
+                </td>
                 <td style={{ padding: '10px 16px' }}>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <button onClick={() => planiGoster(l.id)} style={eylemChipStili('lacivert')}>
-                      Ödeme planını gör
-                    </button>
-                    <button onClick={() => sozlesmeSil(l.id)} style={eylemChipStili('kirmizi')}>Sil</button>
-                  </div>
+                  <button onClick={() => sozlesmeSil(l.id)} style={eylemChipStili('kirmizi')}>Sil</button>
                 </td>
               </tr>
             ))}
@@ -3334,8 +3334,8 @@ function KiralamaSekmesi() {
               const suresiDolmus = k.durum === 'AKTIF' && k.bitis_tarihi && k.bitis_tarihi < new Date().toISOString().slice(0, 10);
               return (
               <Fragment key={k.id}>
-              <tr style={{ borderTop: '1px solid var(--kenarlik)', background: suresiDolmus ? 'var(--kirmizi-acik, #fde2e2)' : 'transparent' }}>
-                <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>
+              <tr style={{ borderTop: '1px solid var(--kenarlik)', background: suresiDolmus ? 'var(--kirmizi-acik, #fde2e2)' : seciliSozlesme === k.id ? 'var(--zemin)' : 'transparent' }}>
+                <td onClick={() => odemeleriGoster(k.id)} style={{ padding: '10px 16px', color: 'var(--metin-ikincil)', cursor: 'pointer' }}>
                   {(k.kalemler || []).map((kl) => (
                     `${kl.miktar}x ${kl.urun_adi || '#' + kl.stok_karti_id}${(kl.seri_numaralari || []).length > 0 ? ` (${kl.seri_numaralari.join(', ')})` : ''}`
                   )).join(' · ') || '—'}
@@ -3344,15 +3344,18 @@ function KiralamaSekmesi() {
                       ⚠ Sözleşme süresi {tarihFormat(k.bitis_tarihi)}'de doldu — sonlandırmayı unutma
                     </div>
                   )}
+                  <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--lacivert)' }}>
+                    {seciliSozlesme === k.id ? '▲ detayı gizle' : '▼ ödemeleri gör'}
+                  </span>
                 </td>
-                <td style={{ padding: '10px 16px' }}>
+                <td onClick={() => odemeleriGoster(k.id)} style={{ padding: '10px 16px', cursor: 'pointer' }}>
                   <Etiket ton={ozMalVar ? 'amber' : 'notr'}>{ozMalVar ? 'Öz Mal' : 'Ticari'}</Etiket>
                 </td>
-                <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{k.kiraci_unvan || cariGoster(k.kiraci_cari_id, cariHaritasi)}</td>
-                <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{tarihFormat(k.baslangic_tarihi)}</td>
-                <td style={{ padding: '10px 16px' }}>{paraFormat(k.aylik_kira_tutari, k.para_birimi)}</td>
-                <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{tlKarsiligiGoster(k.aylik_kira_tutari, k.para_birimi, kurlar)}</td>
-                <td style={{ padding: '10px 16px' }}>
+                <td onClick={() => odemeleriGoster(k.id)} style={{ padding: '10px 16px', color: 'var(--metin-ikincil)', cursor: 'pointer' }}>{k.kiraci_unvan || cariGoster(k.kiraci_cari_id, cariHaritasi)}</td>
+                <td onClick={() => odemeleriGoster(k.id)} style={{ padding: '10px 16px', color: 'var(--metin-ikincil)', cursor: 'pointer' }}>{tarihFormat(k.baslangic_tarihi)}</td>
+                <td onClick={() => odemeleriGoster(k.id)} style={{ padding: '10px 16px', cursor: 'pointer' }}>{paraFormat(k.aylik_kira_tutari, k.para_birimi)}</td>
+                <td onClick={() => odemeleriGoster(k.id)} style={{ padding: '10px 16px', color: 'var(--metin-ikincil)', cursor: 'pointer' }}>{tlKarsiligiGoster(k.aylik_kira_tutari, k.para_birimi, kurlar)}</td>
+                <td onClick={() => odemeleriGoster(k.id)} style={{ padding: '10px 16px', cursor: 'pointer' }}>
                   {k.durum === 'AKTIF' ? (
                     <Etiket ton="yesil">Aktif</Etiket>
                   ) : (
@@ -3366,7 +3369,6 @@ function KiralamaSekmesi() {
                     {k.durum === 'AKTIF' && (
                       <>
                         <button onClick={() => duzenlemeyeBasla(k)} style={eylemChipStili('lacivert')}>Düzenle</button>
-                        <button onClick={() => odemeleriGoster(k.id)} style={eylemChipStili('lacivert')}>Ödemeler</button>
                         <button
                           onClick={() => setSonlandirmaAcikId((mevcut) => (mevcut === k.id ? null : k.id))}
                           style={eylemChipStili('kirmizi')}
@@ -3374,9 +3376,6 @@ function KiralamaSekmesi() {
                           {sonlandirmaAcikId === k.id ? 'Kapat' : 'Sonlandır'}
                         </button>
                       </>
-                    )}
-                    {k.durum !== 'AKTIF' && (
-                      <button onClick={() => odemeleriGoster(k.id)} style={eylemChipStili('notr')}>Geçmiş</button>
                     )}
                   </div>
                 </td>
