@@ -150,6 +150,7 @@ class TaksitKalemIstegi(BaseModel):
     stok_karti_id: int
     miktar: int = 1
     birim_fiyat: Decimal
+    stok_seri_no_idleri: list[int] = []  # bu kaleme denk gelen SPESIFIK seri numarali birimler (opsiyonel)
 
 
 class TaksitKalemYanit(BaseModel):
@@ -158,6 +159,8 @@ class TaksitKalemYanit(BaseModel):
     miktar: int
     birim_fiyat: Decimal
     urun_adi: str | None = None
+    seri_numaralari: list[str] = []
+    stok_seri_no_idleri: list[int] = []
 
     class Config:
         from_attributes = True
