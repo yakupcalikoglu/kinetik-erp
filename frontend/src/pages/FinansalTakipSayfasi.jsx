@@ -3318,6 +3318,7 @@ function KiralamaSekmesi() {
               <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>Ürünler</th>
               <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>Sahiplik</th>
               <SiraliBaslik alanAdi="kiraci_unvan" siralama={siralama}>Kiracı</SiraliBaslik>
+              <SiraliBaslik alanAdi="baslangic_tarihi" siralama={siralama}>Başlangıç</SiraliBaslik>
               <SiraliBaslik alanAdi="aylik_kira_tutari" siralama={siralama}>Aylık Kira</SiraliBaslik>
               <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>TL Karşılığı</th>
               <SiraliBaslik alanAdi="durum" siralama={siralama}>Durum</SiraliBaslik>
@@ -3348,6 +3349,7 @@ function KiralamaSekmesi() {
                   <Etiket ton={ozMalVar ? 'amber' : 'notr'}>{ozMalVar ? 'Öz Mal' : 'Ticari'}</Etiket>
                 </td>
                 <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{k.kiraci_unvan || cariGoster(k.kiraci_cari_id, cariHaritasi)}</td>
+                <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{tarihFormat(k.baslangic_tarihi)}</td>
                 <td style={{ padding: '10px 16px' }}>{paraFormat(k.aylik_kira_tutari, k.para_birimi)}</td>
                 <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{tlKarsiligiGoster(k.aylik_kira_tutari, k.para_birimi, kurlar)}</td>
                 <td style={{ padding: '10px 16px' }}>
@@ -3594,7 +3596,7 @@ function TaksitSekmesi() {
           <table>
             <thead>
               <tr style={{ background: 'var(--zemin)' }}>
-                {['Müşteri', 'Başlangıç', 'Taksit Sayısı', 'Toplam Tutar', 'Ödenen', 'Kalan', ''].map((b) => (
+                {['Müşteri', 'Ürün(ler)', 'Başlangıç', 'Taksit Sayısı', 'Toplam Tutar', 'Ödenen', 'Kalan', ''].map((b) => (
                   <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
                 ))}
               </tr>
@@ -3604,6 +3606,11 @@ function TaksitSekmesi() {
                 <Fragment key={p.id}>
                   <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
                     <td style={{ padding: '10px 16px', fontWeight: 500 }}>{p.musteri_unvan || `#${p.musteri_cari_id}`}</td>
+                    <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>
+                      {(p.kalemler || []).map((k) => (
+                        `${k.miktar}x ${k.urun_adi || '#' + k.stok_karti_id}${(k.seri_numaralari || []).length > 0 ? ` (${k.seri_numaralari.join(', ')})` : ''}`
+                      )).join(' · ') || '—'}
+                    </td>
                     <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{p.baslangic_tarihi}</td>
                     <td style={{ padding: '10px 16px' }}>{p.taksit_sayisi}</td>
                     <td style={{ padding: '10px 16px' }}>{paraFormat(p.toplam_tutar, p.para_birimi)}</td>
@@ -3619,7 +3626,7 @@ function TaksitSekmesi() {
                   </tr>
                   {genisletilmisPlanId === p.id && (
                     <tr>
-                      <td colSpan={7} style={{ padding: '12px 16px', background: 'var(--zemin)' }}>
+                      <td colSpan={8} style={{ padding: '12px 16px', background: 'var(--zemin)' }}>
                         {!genisPlanTaksitleri ? (
                           <div style={{ color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
                         ) : (
