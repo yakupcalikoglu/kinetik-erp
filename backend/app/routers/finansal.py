@@ -12,7 +12,7 @@ from app.models.stok import StokSeriNo, StokKarti, StokDurum
 from app.models.finansal import (
     Cek, CekGecmis, CekDurum, CekTip,
     LeasingSozlesme, LeasingOdeme, LeasingSozlesmeKalemi, LeasingKalemUrunu,
-    TaksitliSatisPlani, TaksitDetay, TaksitliSatisKalemi,
+    TaksitliSatisPlani, TaksitDetay, TaksitliSatisKalemi, TaksitliSatisKalemUrunu,
     KiralamaSozlesme, KiralamaOdeme, KiralamaSozlesmeKalemi, KiralamaKalemUrunu,
     BakimKaydi, BakimTip,
 )
@@ -390,6 +390,7 @@ def taksitli_satis_planlarini_listele(
         p.kalemler = list(db.execute(select(TaksitliSatisKalemi).where(TaksitliSatisKalemi.plan_id == p.id)).scalars())
         for k in p.kalemler:
             k.urun_adi = urun_tanimi_h.get(k.stok_karti_id)
+        _kalemler_seri_no_ekle(db, TaksitliSatisKalemUrunu, p.kalemler)
         p.toplam_odenen = _taksitli_satis_toplam_odenen_hesapla(db, p)
         p.kalan_bakiye = p.toplam_tutar - p.toplam_odenen
     return planlar
@@ -426,7 +427,11 @@ def taksitli_satis_olustur(
     db.flush()
 
     for k in istek.kalemler:
-        db.add(TaksitliSatisKalemi(plan_id=yeni.id, stok_karti_id=k.stok_karti_id, miktar=k.miktar, birim_fiyat=k.birim_fiyat))
+        yeni_kalem = TaksitliSatisKalemi(plan_id=yeni.id, stok_karti_id=k.stok_karti_id, miktar=k.miktar, birim_fiyat=k.birim_fiyat)
+        db.add(yeni_kalem)
+        db.flush()
+        for seri_id in k.stok_seri_no_idleri:
+            db.add(TaksitliSatisKalemUrunu(kalem_id=yeni_kalem.id, stok_seri_no_id=seri_id))
 
     kalan = toplam_tutar - istek.pesinat
     taksit_tutari = round(kalan / istek.taksit_sayisi, 2)
@@ -445,6 +450,7 @@ def taksitli_satis_olustur(
     yeni.kalemler = list(db.execute(select(TaksitliSatisKalemi).where(TaksitliSatisKalemi.plan_id == yeni.id)).scalars())
     for k in yeni.kalemler:
         k.urun_adi = urun_tanimi_h.get(k.stok_karti_id)
+    _kalemler_seri_no_ekle(db, TaksitliSatisKalemUrunu, yeni.kalemler)
     return yeni
 
 
