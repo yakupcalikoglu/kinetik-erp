@@ -2151,7 +2151,7 @@ function PersonelSekmesi() {
   const [hata, setHata] = useState(null);
   const [seciliPersonel, setSeciliPersonel] = useState(null);
   const [odemeler, setOdemeler] = useState(null);
-  const [odemeForm, setOdemeForm] = useState({ donem: new Date().toISOString().slice(0, 10), tip: 'MAAS', tutar: '' });
+  const [odemeForm, setOdemeForm] = useState({ donem: new Date().toISOString().slice(0, 10), tip: 'MAAS', tutar: '', aciklama: '' });
   const [odemeAcikId, setOdemeAcikId] = useState(null);
 
   function yukle() {
@@ -2203,7 +2203,7 @@ function PersonelSekmesi() {
     try {
       await api.post(`/personel-odemeleri?personel_id=${seciliPersonel}`, { ...odemeForm, tutar: Number(odemeForm.tutar) });
       odemeleriGoster(seciliPersonel);
-      setOdemeForm({ donem: new Date().toISOString().slice(0, 10), tip: 'MAAS', tutar: '' });
+      setOdemeForm({ donem: new Date().toISOString().slice(0, 10), tip: 'MAAS', tutar: '', aciklama: '' });
     } catch (err) { setHata(hataMesajiCikar(err)); }
   }
 
@@ -2317,7 +2317,7 @@ function PersonelSekmesi() {
             </div>
           )}
 
-          <form onSubmit={odemeEkle} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 10, marginBottom: 14 }}>
+          <form onSubmit={odemeEkle} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1.5fr auto', gap: 10, marginBottom: 14 }}>
             <Alan etiket="Dönem">
               <input required type="date" value={odemeForm.donem} onChange={(e) => setOdemeForm((f) => ({ ...f, donem: e.target.value }))} style={girdiStili} />
             </Alan>
@@ -2333,6 +2333,9 @@ function PersonelSekmesi() {
             <Alan etiket="Tutar">
               <ParaGirdisi required value={odemeForm.tutar} onChange={(v) => setOdemeForm((f) => ({ ...f, tutar: v }))} />
             </Alan>
+            <Alan etiket="Açıklama (opsiyonel)">
+              <input value={odemeForm.aciklama} onChange={(e) => setOdemeForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
+            </Alan>
             <div style={{ alignSelf: 'end' }}><Buton type="submit">Tahakkuk ettir</Buton></div>
           </form>
 
@@ -2341,7 +2344,7 @@ function PersonelSekmesi() {
               <table>
                 <thead>
                   <tr style={{ background: 'var(--zemin)' }}>
-                    {['Dönem', 'Tip', 'Tutar', 'Durum', ''].map((b) => (
+                    {['Dönem', 'Tip', 'Tutar', 'Açıklama', 'Durum', ''].map((b) => (
                       <th key={b} style={{ textAlign: 'left', padding: '8px 0', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
                     ))}
                   </tr>
@@ -2353,6 +2356,7 @@ function PersonelSekmesi() {
                         <td style={{ padding: '8px 0' }}>{o.donem}</td>
                         <td style={{ padding: '8px 0' }}>{o.tip}</td>
                         <td style={{ padding: '8px 0' }}>{paraFormat(o.tutar)}</td>
+                        <td style={{ padding: '8px 0', color: 'var(--metin-ikincil)' }}>{o.aciklama || '—'}</td>
                         <td style={{ padding: '8px 0' }}><Etiket ton={o.odendi_mi ? 'yesil' : 'amber'}>{o.odendi_mi ? 'Ödendi' : 'Bekliyor'}</Etiket></td>
                         <td style={{ padding: '8px 0' }}>
                           <div style={{ display: 'flex', gap: 6 }}>
@@ -2374,7 +2378,7 @@ function PersonelSekmesi() {
                       </tr>
                       {odemeAcikId === o.id && (
                         <tr>
-                          <td colSpan={5} style={{ padding: '0 0 10px' }}>
+                          <td colSpan={6} style={{ padding: '0 0 10px' }}>
                             <OdemeFormu
                               tutar={o.tutar}
                               paraBirimi="TRY"
