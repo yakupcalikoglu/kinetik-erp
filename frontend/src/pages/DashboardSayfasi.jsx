@@ -453,12 +453,44 @@ function SonIslemlerKutusu() {
   );
 }
 
+// Programi ilk kullanan biri bile "ne yapmam lazim" sorusuna hemen cevap
+// bulsun diye - en sik yapilan 4 islem, buyuk ve belirgin butonlar olarak
+// sayfanin en ustunde. Her buton, ilgili sayfaya goturur.
+const HIZLI_ISLEMLER = [
+  { etiket: 'Yeni Sipariş', aciklama: 'Tedarikçiden mal alımı başlat', yol: '/siparisler', renk: 'var(--lacivert)' },
+  { etiket: 'Satış Yap', aciklama: 'Müşteriye ürün sat', yol: '/satis-yap', renk: 'var(--yesil)' },
+  { etiket: 'Ödeme / Tahsilat', aciklama: 'Cari bazlı borç-alacak işlemleri', yol: '/cariler', renk: 'var(--amber, #d97706)' },
+  { etiket: 'Yeni Cari', aciklama: 'Müşteri/tedarikçi ekle', yol: '/cariler', renk: 'var(--metin-ikincil)' },
+];
+
+function HizliIslemlerKutusu({ navigate }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 20 }}>
+      {HIZLI_ISLEMLER.map((h) => (
+        <button
+          key={h.etiket}
+          onClick={() => navigate(h.yol)}
+          style={{
+            textAlign: 'left', padding: '16px 18px', borderRadius: 12, cursor: 'pointer',
+            border: `1.5px solid ${h.renk}`, background: 'white',
+            display: 'flex', flexDirection: 'column', gap: 4,
+          }}
+        >
+          <div style={{ fontSize: 15, fontWeight: 700, color: h.renk }}>{h.etiket}</div>
+          <div style={{ fontSize: 12, color: 'var(--metin-ikincil)' }}>{h.aciklama}</div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function DashboardSayfasi() {
   const navigate = useNavigate();
 
   return (
     <div>
       <SayfaBasligi baslik="Dashboard" aciklama="Genel durumunuza hızlı bakış — herhangi bir kutuya tıklayarak ilgili ekrana gidebilirsiniz" />
+      <HizliIslemlerKutusu navigate={navigate} />
       <NetDurumKutusu />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
         <AnaKasaKutusu navigate={navigate} />
