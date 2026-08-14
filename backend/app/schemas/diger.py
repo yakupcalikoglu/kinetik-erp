@@ -45,6 +45,7 @@ class PersonelOdemeYanit(BaseModel):
     donem: date
     tip: PersonelOdemeTip
     tutar: Decimal
+    aciklama: str | None = None
     odendi_mi: bool
     odeme_tarihi: date | None
 
