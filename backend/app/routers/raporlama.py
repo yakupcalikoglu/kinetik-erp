@@ -114,7 +114,7 @@ def kar_marji_analizi(sirket_id: int = Depends(aktif_sirket_id_getir), db: Sessi
     gruplar = {}
     for u in satilan_urunler:
         toplam_maliyet = (
-            u.satinalma_maliyeti_try + u.nakliye_maliyeti_try + u.gumruk_maliyeti_try +
+            u.satinalma_maliyeti_try + u.nakliye_maliyeti_try + u.sigorta_maliyeti_try + u.gumruk_maliyeti_try +
             u.antrepo_maliyeti_try + u.millilestirme_maliyeti_try + u.leasing_maliyeti_try + u.diger_maliyet_try
         )
         g = gruplar.setdefault(u.stok_karti_id, {"adet": 0, "maliyet": Decimal("0"), "satis": Decimal("0")})
@@ -157,7 +157,7 @@ def seri_no_raporu(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Bu seri numarasına ait kayıt bulunamadı.")
     seri, kart = kayit
 
-    toplam_maliyet = (seri.satinalma_maliyeti_try + seri.nakliye_maliyeti_try +
+    toplam_maliyet = (seri.satinalma_maliyeti_try + seri.nakliye_maliyeti_try + seri.sigorta_maliyeti_try +
                        seri.gumruk_maliyeti_try + seri.antrepo_maliyeti_try +
                        seri.millilestirme_maliyeti_try + seri.leasing_maliyeti_try +
                        seri.diger_maliyet_try)
@@ -829,7 +829,7 @@ def depo_envanteri(
 
     gruplar: dict[int, dict] = {}
     for seri, kart in kayitlar:
-        toplam = (seri.satinalma_maliyeti_try + seri.nakliye_maliyeti_try +
+        toplam = (seri.satinalma_maliyeti_try + seri.nakliye_maliyeti_try + seri.sigorta_maliyeti_try +
                   seri.gumruk_maliyeti_try + seri.antrepo_maliyeti_try +
                   seri.millilestirme_maliyeti_try + seri.leasing_maliyeti_try +
                   seri.diger_maliyet_try)
@@ -964,7 +964,7 @@ async def net_durum(
         select(StokSeriNo).where(StokSeriNo.sirket_id == sirket_id, StokSeriNo.durum != StokDurum.SATILDI)
     ).scalars())
     stok_degeri_try = sum((
-        u.satinalma_maliyeti_try + u.nakliye_maliyeti_try + u.gumruk_maliyeti_try +
+        u.satinalma_maliyeti_try + u.nakliye_maliyeti_try + u.sigorta_maliyeti_try + u.gumruk_maliyeti_try +
         u.antrepo_maliyeti_try + u.millilestirme_maliyeti_try + u.leasing_maliyeti_try + u.diger_maliyet_try
         for u in stok_urunleri
     ), Decimal("0"))
@@ -1268,7 +1268,7 @@ def aylik_net_kar(
     for u in stok_urunleri:
         ay = u.satis_tarihi.strftime("%Y-%m")
         toplam_maliyet = (
-            u.satinalma_maliyeti_try + u.nakliye_maliyeti_try + u.gumruk_maliyeti_try +
+            u.satinalma_maliyeti_try + u.nakliye_maliyeti_try + u.sigorta_maliyeti_try + u.gumruk_maliyeti_try +
             u.antrepo_maliyeti_try + u.millilestirme_maliyeti_try + u.leasing_maliyeti_try + u.diger_maliyet_try
         )
         kar = (u.satis_fiyati_try or Decimal("0")) - toplam_maliyet
