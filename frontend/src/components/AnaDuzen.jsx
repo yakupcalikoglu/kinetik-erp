@@ -9,7 +9,40 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { api, hataMesajiCikar, basariBildirimDinle, yuklemeDurumuDinle, onayIstegiDinle, _onayYaniti, alertIstegiDinle, _alertYaniti, promptIstegiDinle, _promptYaniti } from '../api/client';
 
-const ARAMA_TUR_METIN = { CARI: 'Cari', SIPARIS: 'Sipariş', STOK: 'Stok', URUN_TANIMI: 'Ürün Tanımı', DEMIRBAS: 'Demirbaş', YEDEK_PARCA: 'Yedek Parça' };
+const ARAMA_TUR_METIN = { CARI: 'Cari', SIPARIS: 'Sipariş', STOK: 'Stok', URUN_TANIMI: 'Ürün Tanımı', DEMIRBAS: 'Demirbaş', YEDEK_PARCA: 'Yedek Parça', KOMUT: 'İşlem' };
+
+// Programi hic bilmeyen biri "ne yazacagimi bilmiyorum" demesin diye -
+// GENEL ARAMA kutusuna, VERI kayitlarinin (cari/siparis/urun) YANINDA,
+// SIK yapilan ISLEMLERE dogrudan goturen "komutlar" da eklendi. Anahtar
+// kelimelerden HERHANGI biri sorguda GECERSE komut sonuclarda gorunur -
+// boylece "sipariş", "yeni sipariş", "alım" gibi FARKLI yazimlar ayni
+// komuta ulasabilir. Bu liste backend'e GITMEDEN, TAMAMEN yerel calisir.
+const KOMUTLAR = [
+  { anahtarlar: ['sipariş', 'siparis', 'yeni sipariş', 'alım', 'alim', 'tedarikçi'], baslik: 'Yeni Sipariş Oluştur', altBaslik: 'Tedarikçiden mal alımı başlat', yol: '/siparisler/yeni' },
+  { anahtarlar: ['satış', 'satis', 'satış yap', 'sat'], baslik: 'Satış Yap', altBaslik: 'Müşteriye ürün sat', yol: '/satis-yap' },
+  { anahtarlar: ['cari', 'müşteri', 'musteri', 'tedarikçi', 'yeni cari'], baslik: 'Yeni Cari Ekle', altBaslik: 'Müşteri/tedarikçi kaydı oluştur', yol: '/cariler' },
+  { anahtarlar: ['ödeme', 'odeme', 'tahsilat', 'borç', 'borc', 'alacak'], baslik: 'Ödeme / Tahsilat', altBaslik: 'Cari bazlı borç-alacak işlemleri', yol: '/cariler' },
+  { anahtarlar: ['stok', 'envanter', 'ürün', 'urun'], baslik: 'Stok / Envanter', altBaslik: 'Fiziksel ürün listesi', yol: '/stok' },
+  { anahtarlar: ['banka', 'hesap'], baslik: 'Banka', altBaslik: 'Banka hesapları ve hareketleri', yol: '/banka' },
+  { anahtarlar: ['kasa', 'nakit'], baslik: 'Ana Kasa', altBaslik: 'Nakit giriş/çıkış', yol: '/kasa' },
+  { anahtarlar: ['akreditif'], baslik: 'Akreditif', altBaslik: 'Finansal Takip → Akreditif', yol: '/finansal?sekme=akreditif' },
+  { anahtarlar: ['leasing'], baslik: 'Leasing', altBaslik: 'Finansal Takip → Leasing', yol: '/finansal?sekme=leasing' },
+  { anahtarlar: ['taksit', 'taksitli'], baslik: 'Taksitli Satış', altBaslik: 'Finansal Takip → Taksitli Satış', yol: '/finansal?sekme=taksit' },
+  { anahtarlar: ['kiralama', 'kirala'], baslik: 'Kiralama', altBaslik: 'Finansal Takip → Kiralama', yol: '/finansal?sekme=kiralama' },
+  { anahtarlar: ['çek', 'cek'], baslik: 'Çek', altBaslik: 'Finansal Takip → Çek', yol: '/finansal?sekme=cek' },
+  { anahtarlar: ['fatura'], baslik: 'Tedarikçi Faturaları', altBaslik: 'Fatura kaydı ve ödemesi', yol: '/tedarikci-faturalari' },
+  { anahtarlar: ['rapor'], baslik: 'Raporlar', altBaslik: 'Kâr/zarar ve diğer raporlar', yol: '/raporlar' },
+  { anahtarlar: ['yedek parça', 'yedek parca', 'sarf'], baslik: 'Yedek Parça / Sarf', altBaslik: 'Miktar bazlı parça takibi', yol: '/yedek-parcalar' },
+  { anahtarlar: ['demirbaş', 'demirbas', 'öz mal', 'oz mal', 'araç', 'arac'], baslik: 'Öz Mal / Demirbaş', altBaslik: 'Araç, gayrimenkul, ofis ekipmanı', yol: '/oz-mal' },
+];
+
+function komutlariBul(sorgu) {
+  const s = sorgu.trim().toLocaleLowerCase('tr');
+  if (!s) return [];
+  return KOMUTLAR
+    .filter((k) => k.anahtarlar.some((a) => a.includes(s) || s.includes(a)))
+    .map((k) => ({ tur: 'KOMUT', id: k.yol, baslik: k.baslik, alt_baslik: k.altBaslik, yol: k.yol }));
+}
 
 function Bildirimler() {
   const [acik, setAcik] = useState(false);
@@ -147,10 +180,22 @@ function GenelArama() {
       setAramaHata(null);
       return;
     }
+    // Komutlar (Yeni Sipariş, Satış Yap vb.) YEREL calisir ve backend'i
+    // beklemeden ANINDA gorunur - kullanici "ne yazacagimi bilmiyorum"
+    // dediginde bile, yazdigi ilk birkac harfle bir ISLEM onerisi gorur.
+    const komutSonuclari = komutlariBul(sorgu);
     const zamanlayici = setTimeout(() => {
       api.get('/arama', { params: { q: sorgu } })
-        .then((r) => { setSonuclar(r.data); setAramaHata(null); setSecilenIndex(-1); })
-        .catch((e) => { setSonuclar([]); setAramaHata(hataMesajiCikar(e)); });
+        .then((r) => { setSonuclar([...komutSonuclari, ...r.data]); setAramaHata(null); setSecilenIndex(-1); })
+        .catch((e) => {
+          if (komutSonuclari.length > 0) {
+            setSonuclar(komutSonuclari);
+            setAramaHata(null);
+          } else {
+            setSonuclar([]);
+            setAramaHata(hataMesajiCikar(e));
+          }
+        });
     }, 300);
     return () => clearTimeout(zamanlayici);
   }, [sorgu]);
@@ -201,7 +246,9 @@ function GenelArama() {
   function sonucaGit(s) {
     setAcik(false);
     setSorgu('');
-    if (ARANABILIR_TURLER.includes(s.tur)) {
+    if (s.tur === 'KOMUT') {
+      navigate(s.yol);
+    } else if (ARANABILIR_TURLER.includes(s.tur)) {
       navigate(`${s.yol}?ara=${encodeURIComponent(s.baslik)}`);
     } else {
       navigate(s.yol);
