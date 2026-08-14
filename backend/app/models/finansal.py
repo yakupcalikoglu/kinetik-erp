@@ -225,6 +225,7 @@ class KiralamaOdeme(Base):
     donem_basi = Column(Date, nullable=False)
     donem_sonu = Column(Date, nullable=False)
     tutar = Column(Numeric(18, 2), nullable=False)
+    aciklama = Column(String(300))
     odendi_mi = Column(Boolean, default=False)
     odeme_tarihi = Column(Date)
     tahsilat_kaynak_tablo = Column(String(50))
