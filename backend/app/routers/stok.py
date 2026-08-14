@@ -260,7 +260,7 @@ def urun_ozet(
         if u.durum != StokDurum.SATILDI:
             continue
         toplam_maliyet = (
-            u.satinalma_maliyeti_try + u.nakliye_maliyeti_try + u.gumruk_maliyeti_try +
+            u.satinalma_maliyeti_try + u.nakliye_maliyeti_try + u.sigorta_maliyeti_try + u.gumruk_maliyeti_try +
             u.antrepo_maliyeti_try + u.millilestirme_maliyeti_try + u.leasing_maliyeti_try + u.diger_maliyet_try
         )
         kar = (u.satis_fiyati_try - toplam_maliyet) if u.satis_fiyati_try is not None else None
@@ -946,7 +946,7 @@ def kar_raporu(
     db: Session = Depends(get_db),
 ):
     kayit = _seri_no_getir_veya_404(db, seri_id, sirket_id)
-    toplam = (kayit.satinalma_maliyeti_try + kayit.nakliye_maliyeti_try +
+    toplam = (kayit.satinalma_maliyeti_try + kayit.nakliye_maliyeti_try + kayit.sigorta_maliyeti_try +
               kayit.gumruk_maliyeti_try + kayit.antrepo_maliyeti_try +
               kayit.millilestirme_maliyeti_try + kayit.leasing_maliyeti_try +
               kayit.diger_maliyet_try)
