@@ -3053,7 +3053,7 @@ function KiralamaSekmesi() {
   const [seciliSozlesme, setSeciliSozlesme] = useState(null);
   const [sonlandirmaAcikId, setSonlandirmaAcikId] = useState(null);
   const [odemeler, setOdemeler] = useState(null);
-  const [odemeForm, setOdemeForm] = useState({ donem_basi: '', donem_sonu: '', tutar: '' });
+  const [odemeForm, setOdemeForm] = useState({ donem_basi: '', donem_sonu: '', tutar: '', aciklama: '' });
   const [odemeAcikId, setOdemeAcikId] = useState(null);
 
   function yukle() {
@@ -3158,7 +3158,7 @@ function KiralamaSekmesi() {
     try {
       await api.post(`/kiralama-sozlesmeleri/${seciliSozlesme}/odemeler`, odemeForm);
       odemeleriGoster(seciliSozlesme);
-      setOdemeForm({ donem_basi: '', donem_sonu: '', tutar: '' });
+      setOdemeForm({ donem_basi: '', donem_sonu: '', tutar: '', aciklama: '' });
     } catch (err) { setHata(hataMesajiCikar(err)); }
   }
 
@@ -3400,7 +3400,7 @@ function KiralamaSekmesi() {
             Sözleşme #{seciliSozlesme}{aktifSozlesme?.kiraci_unvan ? ` — ${aktifSozlesme.kiraci_unvan}` : ''} — kira ödemeleri
           </div>
 
-          <form onSubmit={odemeEkle} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 10, marginBottom: 14 }}>
+          <form onSubmit={odemeEkle} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1.5fr auto', gap: 10, marginBottom: 14 }}>
             <Alan etiket="Dönem başı">
               <input required type="date" value={odemeForm.donem_basi} onChange={(e) => setOdemeForm((f) => ({ ...f, donem_basi: e.target.value }))} style={girdiStili} />
             </Alan>
@@ -3410,6 +3410,9 @@ function KiralamaSekmesi() {
             <Alan etiket="Tutar">
               <ParaGirdisi required value={odemeForm.tutar} onChange={(v) => setOdemeForm((f) => ({ ...f, tutar: v }))} />
             </Alan>
+            <Alan etiket="Açıklama (opsiyonel)">
+              <input value={odemeForm.aciklama} onChange={(e) => setOdemeForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
+            </Alan>
             <div style={{ alignSelf: 'end' }}><Buton type="submit">Dönem ekle</Buton></div>
           </form>
 
@@ -3418,7 +3421,7 @@ function KiralamaSekmesi() {
               <table>
                 <thead>
                   <tr style={{ background: 'var(--zemin)' }}>
-                    {['Dönem', 'Tutar', 'Durum', ''].map((b) => (
+                    {['Dönem', 'Tutar', 'Açıklama', 'Durum', ''].map((b) => (
                       <th key={b} style={{ textAlign: 'left', padding: '8px 0', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
                     ))}
                   </tr>
@@ -3429,6 +3432,7 @@ function KiralamaSekmesi() {
                       <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
                         <td style={{ padding: '8px 0' }}>{tarihFormat(o.donem_basi)} → {tarihFormat(o.donem_sonu)}</td>
                         <td style={{ padding: '8px 0' }}>{paraFormat(o.tutar, aktifSozlesme?.para_birimi)}</td>
+                        <td style={{ padding: '8px 0', color: 'var(--metin-ikincil)' }}>{o.aciklama || '—'}</td>
                         <td style={{ padding: '8px 0' }}><Etiket ton={o.odendi_mi ? 'yesil' : 'amber'}>{o.odendi_mi ? 'Tahsil Edildi' : 'Bekliyor'}</Etiket></td>
                         <td style={{ padding: '8px 0' }}>
                           {o.odendi_mi ? (
@@ -3445,7 +3449,7 @@ function KiralamaSekmesi() {
                       </tr>
                       {odemeAcikId === o.id && (
                         <tr>
-                          <td colSpan={4} style={{ padding: '0 0 10px' }}>
+                          <td colSpan={5} style={{ padding: '0 0 10px' }}>
                             <OdemeFormu
                               tutar={o.tutar}
                               paraBirimi={aktifSozlesme?.para_birimi || 'TRY'}
