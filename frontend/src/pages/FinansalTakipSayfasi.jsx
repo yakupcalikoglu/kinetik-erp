@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { api, hataMesajiCikar, ozelOnayIste, ozelAlert } from '../api/client';
 import {
   Kart, SayfaBasligi, Buton, Etiket, Alan, girdiStili, BosDurum, HataMesaji, paraFormat, Sekmeler, eylemChipStili,
-  OtomatikTamamlamaGirdisi, ParaGirdisi, useTarihGruplama, YilBasligi, AyBasligi, BilgiIpucu,
+  OtomatikTamamlamaGirdisi, ParaGirdisi, useTarihGruplama, YilBasligi, AyBasligi, BilgiIpucu, DahaFazlaMenu,
 } from '../components/Ortak';
 import AramaliSecici from '../components/AramaliSecici';
 
@@ -884,28 +884,20 @@ function CekSekmesi() {
                     <td style={{ padding: '10px 16px' }}>{tarihFormat(c.vade_tarihi)}</td>
                     <td style={{ padding: '10px 16px' }}><Etiket ton={CEK_DURUM_TON[c.durum]}>{CEK_DURUM_METIN[c.durum]}</Etiket></td>
                     <td style={{ padding: '10px 16px' }}>
-                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                         {c.durum === 'PORTFOYDE' && (
                           <>
-                            <button
-                              onClick={() => setDuzenlenenCekId((mevcut) => (mevcut === c.id ? null : c.id))}
-                              style={eylemChipStili('notr')}
-                            >
-                              {duzenlenenCekId === c.id ? 'Kapat' : 'Düzenle'}
-                            </button>
-                            <button
-                              onClick={() => setCiroAcikCekId((mevcut) => (mevcut === c.id ? null : c.id))}
-                              style={eylemChipStili('lacivert')}
-                            >
-                              {ciroAcikCekId === c.id ? 'Kapat' : 'Ciro et'}
-                            </button>
                             <button
                               onClick={() => setOdemeAcikCekId((mevcut) => (mevcut === c.id ? null : c.id))}
                               style={eylemChipStili('yesil')}
                             >
                               {odemeAcikCekId === c.id ? 'Kapat' : (c.tip === 'ALINAN' ? 'Tahsil et' : 'Öde')}
                             </button>
-                            <button onClick={() => cekSil(c.id)} style={eylemChipStili('kirmizi')}>Sil</button>
+                            <DahaFazlaMenu kompakt ogeler={[
+                              { etiket: 'Düzenle', onClick: () => setDuzenlenenCekId((mevcut) => (mevcut === c.id ? null : c.id)) },
+                              { etiket: 'Ciro et', onClick: () => setCiroAcikCekId((mevcut) => (mevcut === c.id ? null : c.id)) },
+                              { etiket: 'Sil', onClick: () => cekSil(c.id) },
+                            ]} />
                           </>
                         )}
                         {(c.durum === 'TAHSIL_EDILDI' || c.durum === 'ODENDI') && (
@@ -2101,21 +2093,18 @@ function AkreditifSekmesi() {
                             {k.odendi_mi ? (
                               <button onClick={() => kalemOdemesiniGeriAl(k.id)} style={eylemChipStili('kirmizi')}>Ödemeyi Geri Al</button>
                             ) : (
-                              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                                 <button
                                   onClick={() => setOdemeYapilacakKalemId((mevcut) => (mevcut === k.id ? null : k.id))}
                                   style={eylemChipStili('lacivert')}
                                 >
                                   {odemeYapilacakKalemId === k.id ? 'Kapat' : 'Öde'}
                                 </button>
-                                <button
-                                  onClick={() => setTaksitPaneliAcikKalemId((mevcut) => (mevcut === k.id ? null : k.id))}
-                                  style={eylemChipStili('amber')}
-                                >
-                                  {taksitPaneliAcikKalemId === k.id ? 'Kapat' : 'Taksitler'}
-                                </button>
-                                <button onClick={() => setDuzenlenenKalemId(k.id)} style={eylemChipStili('lacivert')}>Düzenle</button>
-                                <button onClick={() => kalemiSil(k.id)} style={eylemChipStili('kirmizi')}>Sil</button>
+                                <DahaFazlaMenu kompakt ogeler={[
+                                  { etiket: 'Taksitler', onClick: () => setTaksitPaneliAcikKalemId((mevcut) => (mevcut === k.id ? null : k.id)) },
+                                  { etiket: 'Düzenle', onClick: () => setDuzenlenenKalemId(k.id) },
+                                  { etiket: 'Sil', onClick: () => kalemiSil(k.id) },
+                                ]} />
                               </div>
                             )}
                           </td>
