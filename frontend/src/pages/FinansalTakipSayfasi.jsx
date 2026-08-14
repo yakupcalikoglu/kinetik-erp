@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { api, hataMesajiCikar, ozelOnayIste, ozelAlert } from '../api/client';
 import {
   Kart, SayfaBasligi, Buton, Etiket, Alan, girdiStili, BosDurum, HataMesaji, paraFormat, Sekmeler, eylemChipStili,
-  OtomatikTamamlamaGirdisi, ParaGirdisi, useTarihGruplama, YilBasligi, AyBasligi,
+  OtomatikTamamlamaGirdisi, ParaGirdisi, useTarihGruplama, YilBasligi, AyBasligi, BilgiIpucu,
 } from '../components/Ortak';
 import AramaliSecici from '../components/AramaliSecici';
 
@@ -60,33 +60,33 @@ const SEKME_GRUPLARI = [
     baslik: 'Satış & Tahsilat',
     aciklama: 'Müşteriden gelir toplama',
     sekmeler: [
-      { deger: 'taksit', etiket: 'Taksitli Satış' },
-      { deger: 'kiralama', etiket: 'Kiralama' },
+      { deger: 'taksit', etiket: 'Taksitli Satış', bilgi: 'Ürün doğrudan satılır, mülkiyet hemen müşteriye geçer. Bedel taksitler halinde tahsil edilir.' },
+      { deger: 'kiralama', etiket: 'Kiralama', bilgi: 'Ürünün mülkiyeti sizde kalır. Müşteriye belirli bir süre için (genelde aylık) kiraya verilir, süre bitince ürün size döner.' },
     ],
   },
   {
     baslik: 'Tedarik & Ödeme',
     aciklama: 'Yurt dışı alım ödemeleri',
     sekmeler: [
-      { deger: 'akreditif', etiket: 'Akreditif' },
-      { deger: 'leasing', etiket: 'Leasing' },
+      { deger: 'akreditif', etiket: 'Akreditif', bilgi: 'İthalatta bankanın araya girdiği güvenceli ödeme yöntemi — şartlar sağlandığında banka, sizin adınıza tedarikçiye ödemeyi garanti eder.' },
+      { deger: 'leasing', etiket: 'Leasing', bilgi: 'Bir finans kuruluşu ürünü satın alıp size kiralar. Taksitleri ödedikçe borç kapanır, sözleşme sonunda mülkiyet size geçer.' },
     ],
   },
   {
     baslik: 'İşletme Giderleri',
     aciklama: 'Personel ve diğer giderler',
     sekmeler: [
-      { deger: 'personel', etiket: 'Personel' },
-      { deger: 'gider', etiket: 'Diğer Giderler' },
-      { deger: 'bakim', etiket: 'Bakım' },
+      { deger: 'personel', etiket: 'Personel', bilgi: 'Maaş, avans, prim gibi personel ödemelerinin takibi.' },
+      { deger: 'gider', etiket: 'Diğer Giderler', bilgi: 'Kira, elektrik, sigorta gibi rutin/sabit işletme giderleri.' },
+      { deger: 'bakim', etiket: 'Bakım', bilgi: 'Satılmış/kiralık ürünlere yapılan bakım-servis hizmetlerinin gelir/gider kaydı.' },
     ],
   },
   {
     baslik: 'Nakit Araçları',
     aciklama: 'Çek ve ortak/dış borç',
     sekmeler: [
-      { deger: 'cek', etiket: 'Çek' },
-      { deger: 'borc', etiket: 'Ortak / Dış Borç' },
+      { deger: 'cek', etiket: 'Çek', bilgi: 'Alınan veya verilen çeklerin portföy takibi — tahsil/ödeme, ciro işlemleri.' },
+      { deger: 'borc', etiket: 'Ortak / Dış Borç', bilgi: 'Şirket ortaklarından ya da üçüncü kişilerden alınan/verilen borçların takibi (faiz dahil).' },
     ],
   },
 ];
@@ -110,19 +110,21 @@ function GruplananSekmeler({ aktif, onDegistir }) {
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {grup.sekmeler.map((s) => (
-              <button
-                key={s.deger}
-                onClick={() => onDegistir(s.deger)}
-                style={{
-                  padding: '6px 10px', borderRadius: 7, fontSize: 12.5, cursor: 'pointer',
-                  border: aktif === s.deger ? '1.5px solid var(--lacivert)' : '1px solid var(--kenarlik)',
-                  background: aktif === s.deger ? 'var(--lacivert)' : 'white',
-                  color: aktif === s.deger ? 'white' : 'var(--metin-birincil)',
-                  fontWeight: aktif === s.deger ? 600 : 400,
-                }}
-              >
-                {s.etiket}
-              </button>
+              <span key={s.deger} style={{ display: 'inline-flex', alignItems: 'center' }}>
+                <button
+                  onClick={() => onDegistir(s.deger)}
+                  style={{
+                    padding: '6px 10px', borderRadius: 7, fontSize: 12.5, cursor: 'pointer',
+                    border: aktif === s.deger ? '1.5px solid var(--lacivert)' : '1px solid var(--kenarlik)',
+                    background: aktif === s.deger ? 'var(--lacivert)' : 'white',
+                    color: aktif === s.deger ? 'white' : 'var(--metin-birincil)',
+                    fontWeight: aktif === s.deger ? 600 : 400,
+                  }}
+                >
+                  {s.etiket}
+                </button>
+                {s.bilgi && <BilgiIpucu metin={s.bilgi} />}
+              </span>
             ))}
           </div>
         </div>
