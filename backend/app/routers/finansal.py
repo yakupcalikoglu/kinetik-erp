@@ -815,7 +815,7 @@ def kiralama_odemesi_tahsil_et(
     urun_parcasi = ""
     if sozlesme_kalemleri:
         urun_parcasi = ", ".join(f"{k.miktar}x {urun_tanimi_h.get(k.stok_karti_id, '')}" for k in sozlesme_kalemleri) + " - "
-    aciklama = f"Kiralama - {urun_parcasi}{odeme.donem_basi} - {odeme.donem_sonu}"
+    aciklama = f"Kiralama - {urun_parcasi}{odeme.donem_basi} - {odeme.donem_sonu}" + (f" ({odeme.aciklama})" if odeme.aciklama else "")
 
     para_hareketi_olustur(
         db, sirket_id, kullanici.id, "GIRIS", odeme.tutar,
