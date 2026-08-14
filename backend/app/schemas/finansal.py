@@ -314,6 +314,7 @@ class KiralamaOdemeOlusturIstegi(BaseModel):
     donem_basi: date
     donem_sonu: date
     tutar: Decimal
+    aciklama: str | None = None
 
 
 class KiralamaOdemeYanit(BaseModel):
@@ -321,6 +322,7 @@ class KiralamaOdemeYanit(BaseModel):
     donem_basi: date
     donem_sonu: date
     tutar: Decimal
+    aciklama: str | None = None
     odendi_mi: bool
     odeme_tarihi: date | None
 
