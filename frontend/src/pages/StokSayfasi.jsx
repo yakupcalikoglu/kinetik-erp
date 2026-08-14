@@ -283,7 +283,7 @@ function MaliyetDetayi({ urun, stokKartlari, onKapat, onUrunGuncellendi }) {
       {urun.durum === 'SATILDI' && (urun.satis_odeme_tipi === 'LEASINGLI' || urun.satis_odeme_tipi === 'FATURALI') && (
         <>
           <SatisMaliyetKontrolListesi
-            urun={urun} odemeTipi={urun.satis_odeme_tipi}
+            urun={urun} odemeTipi={urun.satis_odeme_tipi} kalemler={kalemler}
             onMaliyetEkle={(tip) => setSatisMaliyetEkleTipi(tip)}
           />
           {satisMaliyetEkleTipi && (
