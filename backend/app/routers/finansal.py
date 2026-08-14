@@ -14,7 +14,7 @@ from app.models.finansal import (
     LeasingSozlesme, LeasingOdeme, LeasingSozlesmeKalemi, LeasingKalemUrunu,
     TaksitliSatisPlani, TaksitDetay, TaksitliSatisKalemi, TaksitliSatisKalemUrunu,
     KiralamaSozlesme, KiralamaOdeme, KiralamaSozlesmeKalemi, KiralamaKalemUrunu,
-    BakimKaydi, BakimTip,
+    BakimKaydi, BakimTip, PosTaksitPlani, PosTaksitDetay,
 )
 import json
 from app.models.denetim import DuzenlemeKaydi
@@ -27,6 +27,7 @@ from app.schemas.finansal import (
     KiralamaOlusturIstegi, KiralamaYanit, KiralamaOdemeOlusturIstegi, KiralamaOdemeYanit,
     KiralamaDuzenleIstegi, KiralamaSonlandirIstegi,
     BakimOlusturIstegi, BakimYanit,
+    PosTaksitOlusturIstegi, PosTaksitYanit, PosTaksitDetayYanit, PosTaksitYatirIstegi,
 )
 from app.services.para_hareketi import para_hareketi_olustur
 
@@ -1242,3 +1243,206 @@ def kiralama_odemesini_geri_al(
     odeme.odeme_tarihi = None
     db.commit()
     return {"geri_alindi": True}
+
+
+# ============================================================ KREDİ KARTI (POS) TAKSİT TAKİBİ
+def _pos_taksit_yatan_hesapla(db: Session, plan_id: int) -> Decimal:
+    detaylar = list(db.execute(select(PosTaksitDetay).where(PosTaksitDetay.plan_id == plan_id)).scalars())
+    return sum((d.tutar for d in detaylar if d.yatti_mi), Decimal("0"))
+
+
+def _pos_taksit_zenginlestir(db: Session, plan: PosTaksitPlani) -> PosTaksitPlani:
+    urun = db.get(StokSeriNo, plan.stok_seri_no_id)
+    if urun is not None:
+        kart = db.get(StokKarti, urun.stok_karti_id)
+        plan.urun_seri_no = urun.seri_no
+        plan.urun_adi = f"{kart.marka} {kart.model}" if kart else None
+    else:
+        plan.urun_seri_no = None
+        plan.urun_adi = None
+    if plan.musteri_cari_id:
+        musteri = db.get(CariHesap, plan.musteri_cari_id)
+        plan.musteri_unvan = musteri.unvan if musteri else None
+    else:
+        plan.musteri_unvan = None
+    from app.models.banka import BankaHesabi
+    banka = db.get(BankaHesabi, plan.banka_hesap_id)
+    plan.banka_adi = f"{banka.banka_adi} — {banka.hesap_adi or banka.para_birimi.value}" if banka else None
+    plan.yatan_tutar = _pos_taksit_yatan_hesapla(db, plan.id)
+    plan.kalan_tutar = plan.toplam_tutar - plan.yatan_tutar
+    return plan
+
+
+@router.post("/pos-taksit-planlari", response_model=PosTaksitYanit,
+             dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
+def pos_taksit_plani_olustur(
+    istek: PosTaksitOlusturIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Musteri, urunu KREDI KARTI ile TAKSITLI odedi - satis ANINDA
+    TAMAMLANMIS sayilir (urun SATILDI olur, musteri bize BORCLU degildir),
+    ama PARA bankaya HER AY parca parca yatacaktir (POS bankasinin kendi
+    anlasmasina gore). Bu yuzden burada Kasa/Banka'ya HICBIR HAREKET
+    ACILMAZ - sadece "hangi ayda ne kadar yatmasi beklendigini" takip eden
+    bir plan olusturulur; her taksit GERCEKTEN yattiginda ayrica
+    isaretlenir (bkz. pos_taksit_detay_yatir).
+    """
+    urun = db.get(StokSeriNo, istek.stok_seri_no_id)
+    if urun is None or urun.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ürün bulunamadı.")
+    if urun.durum not in (StokDurum.DEPODA, StokDurum.ANTREPODA):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Sadece Depoda/Antrepoda durumundaki bir ürün satılabilir.")
+
+    from app.models.banka import BankaHesabi
+    banka = db.get(BankaHesabi, istek.banka_hesap_id)
+    if banka is None or banka.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Banka hesabı bulunamadı.")
+
+    yeni = PosTaksitPlani(
+        sirket_id=sirket_id, stok_seri_no_id=istek.stok_seri_no_id,
+        musteri_cari_id=istek.musteri_cari_id, banka_hesap_id=istek.banka_hesap_id,
+        toplam_tutar=istek.toplam_tutar, taksit_sayisi=istek.taksit_sayisi,
+        baslangic_tarihi=istek.baslangic_tarihi, notlar=istek.notlar,
+    )
+    db.add(yeni)
+    db.flush()
+
+    taksit_tutari = round(istek.toplam_tutar / istek.taksit_sayisi, 2)
+    for i in range(1, istek.taksit_sayisi + 1):
+        vade = istek.baslangic_tarihi + relativedelta(months=i - 1)
+        tutar = taksit_tutari
+        if i == istek.taksit_sayisi:
+            tutar = istek.toplam_tutar - taksit_tutari * (istek.taksit_sayisi - 1)
+        db.add(PosTaksitDetay(plan_id=yeni.id, taksit_no=i, vade_tarihi=vade, tutar=tutar))
+
+    # Satis, ANINDA tamamlanmis sayilir - musteri bize BORCLU degil, kart
+    # bankasi odemeyi garanti etmistir.
+    urun.durum = StokDurum.SATILDI
+    urun.musteri_cari_id = istek.musteri_cari_id
+    urun.satis_fiyati_try = istek.toplam_tutar
+    urun.satis_tarihi = istek.baslangic_tarihi
+    urun.satis_odeme_tipi = "FATURALI"
+    urun.satis_yontemi = "KART_TAKSITLI"
+    from datetime import datetime as _datetime
+    urun.satis_kayit_zamani = _datetime.now()
+
+    db.commit()
+    db.refresh(yeni)
+    return _pos_taksit_zenginlestir(db, yeni)
+
+
+@router.get("/pos-taksit-planlari", response_model=list[PosTaksitYanit],
+            dependencies=[Depends(izin_gerektir("STOK_GORUNTULE"))])
+def pos_taksit_planlarini_listele(
+    sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
+):
+    planlar = list(db.execute(select(PosTaksitPlani).where(PosTaksitPlani.sirket_id == sirket_id)).scalars())
+    return [_pos_taksit_zenginlestir(db, p) for p in planlar]
+
+
+@router.get("/pos-taksit-planlari/{plan_id}/taksitler", response_model=list[PosTaksitDetayYanit],
+            dependencies=[Depends(izin_gerektir("STOK_GORUNTULE"))])
+def pos_taksitleri_listele(plan_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
+    plan = db.get(PosTaksitPlani, plan_id)
+    if plan is None or plan.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Plan bulunamadı.")
+    sorgu = select(PosTaksitDetay).where(PosTaksitDetay.plan_id == plan_id).order_by(PosTaksitDetay.taksit_no)
+    return list(db.execute(sorgu).scalars())
+
+
+@router.put("/pos-taksit-detay/{taksit_id}/yatir", response_model=PosTaksitDetayYanit,
+            dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
+def pos_taksiti_yatir(
+    taksit_id: int, istek: PosTaksitYatirIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    kullanici: Kullanici = Depends(aktif_kullanici_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Bir POS taksidinin GERCEKTEN bankaya yattigini isaretler ve bu tutar
+    icin bir BANKA HAREKETI (GIRIS) olusturur - artik para GERCEKTEN
+    hesapta oldugu icin.
+    """
+    taksit = db.get(PosTaksitDetay, taksit_id)
+    if taksit is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Taksit bulunamadı.")
+    plan = db.get(PosTaksitPlani, taksit.plan_id)
+    if plan is None or plan.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Taksit bulunamadı.")
+    if taksit.yatti_mi:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bu taksit zaten hesaba yatmış olarak işaretli.")
+
+    taksit.yatti_mi = True
+    taksit.yatma_tarihi = istek.yatma_tarihi
+
+    urun = db.get(StokSeriNo, plan.stok_seri_no_id)
+    urun_bilgisi = f" — {urun.seri_no}" if urun else ""
+    para_hareketi_olustur(
+        db, sirket_id, kullanici.id, "GIRIS", taksit.tutar,
+        "BANKA", plan.banka_hesap_id,
+        aciklama=f"Kredi kartı taksidi (POS) {taksit.taksit_no}/{plan.taksit_sayisi}{urun_bilgisi}",
+        kaynak_tablo="POS_TAKSIT_DETAY", kaynak_id=taksit.id, cari_id=plan.musteri_cari_id,
+        para_birimi="TRY",
+    )
+
+    db.commit()
+    db.refresh(taksit)
+    return taksit
+
+
+@router.put("/pos-taksit-detay/{taksit_id}/yatirmayi-geri-al",
+            dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
+def pos_taksitinin_yatirmasi_geri_al(
+    taksit_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
+):
+    taksit = db.get(PosTaksitDetay, taksit_id)
+    if taksit is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Taksit bulunamadı.")
+    plan = db.get(PosTaksitPlani, taksit.plan_id)
+    if plan is None or plan.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Taksit bulunamadı.")
+    if not taksit.yatti_mi:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bu taksit zaten hesaba yatmamış durumda.")
+
+    from app.models.banka import KasaHareketi, BankaHareketi
+    for h in list(db.execute(
+        select(BankaHareketi).where(BankaHareketi.kaynak_tablo == "POS_TAKSIT_DETAY", BankaHareketi.kaynak_id == taksit_id)
+    ).scalars()):
+        db.delete(h)
+
+    taksit.yatti_mi = False
+    taksit.yatma_tarihi = None
+    db.commit()
+    return {"geri_alindi": True}
+
+
+@router.delete("/pos-taksit-planlari/{plan_id}", dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
+def pos_taksit_plani_sil(plan_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
+    """
+    Plani siler. Yatmis (bankaya girmis) bir taksiti olan plan silinemez -
+    once o taksidin yatirilmasi geri alinmali. Urun, DEPODA'ya geri doner.
+    """
+    plan = db.get(PosTaksitPlani, plan_id)
+    if plan is None or plan.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Plan bulunamadı.")
+    taksitler = list(db.execute(select(PosTaksitDetay).where(PosTaksitDetay.plan_id == plan_id)).scalars())
+    if any(t.yatti_mi for t in taksitler):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Hesaba yatmış taksiti olan bir plan silinemez.")
+    for t in taksitler:
+        db.delete(t)
+
+    urun = db.get(StokSeriNo, plan.stok_seri_no_id)
+    if urun is not None and urun.durum == StokDurum.SATILDI:
+        urun.durum = StokDurum.DEPODA
+        urun.musteri_cari_id = None
+        urun.satis_fiyati_try = None
+        urun.satis_tarihi = None
+        urun.satis_odeme_tipi = None
+        urun.satis_yontemi = None
+        urun.satis_kayit_zamani = None
+
+    db.delete(plan)
+    db.commit()
+    return {"silindi": True}
