@@ -4230,8 +4230,11 @@ function SabitGiderSekmesi() {
                       </tr>
                       {sabitGiderTarihGrup.acikAylar.has(ayAnahtari) && sabitGiderTarihGrup.gruplar[yil][ayAnahtari].map((g) => (
                 <Fragment key={g.id}>
-                  <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
-                    <td style={{ padding: '10px 16px', fontWeight: 500 }}>{g.kategori || '—'}</td>
+                  <tr style={{ borderTop: '1px solid var(--kenarlik)', background: odemeAcikId === g.id ? 'var(--zemin)' : 'transparent' }}>
+                    <td onClick={!g.odendi_mi ? () => setOdemeAcikId((mevcut) => (mevcut === g.id ? null : g.id)) : undefined} style={{ padding: '10px 16px', fontWeight: 500, cursor: !g.odendi_mi ? 'pointer' : 'default' }}>
+                      {g.kategori || '—'}
+                      {!g.odendi_mi && <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--lacivert)' }}>{odemeAcikId === g.id ? '▲ kapat' : '▼ öde'}</span>}
+                    </td>
                     <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{tarihFormat(g.donem)}</td>
                     <td style={{ padding: '10px 16px' }}>{paraFormat(g.tutar, g.para_birimi)}</td>
                     <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{g.para_birimi !== 'TRY' ? paraFormat(g.tutar_try) : '—'}</td>
@@ -4244,12 +4247,6 @@ function SabitGiderSekmesi() {
                         ) : (
                           <>
                             <button onClick={() => duzenlemeyeBasla(g)} style={eylemChipStili('lacivert')}>Düzenle</button>
-                            <button
-                              onClick={() => setOdemeAcikId((mevcut) => (mevcut === g.id ? null : g.id))}
-                              style={eylemChipStili('lacivert')}
-                            >
-                              {odemeAcikId === g.id ? 'Kapat' : 'Öde'}
-                            </button>
                             <button
                               onClick={() => setDagitimAcikId((mevcut) => (mevcut === g.id ? null : g.id))}
                               style={eylemChipStili('amber')}
@@ -4495,30 +4492,32 @@ function BorcSekmesi() {
             <tbody>
               {siralama.sirala(gosterilecekListe, (item, alan) => (alan === '_cari_unvan' ? (cariHaritasi[item.cari_id] || '') : item[alan])).map((b) => (
                 <Fragment key={b.id}>
-                  <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
-                    <td style={{ padding: '10px 16px' }}>{BORC_TIP_METIN[b.tip]}</td>
-                    <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{cariGoster(b.cari_id, cariHaritasi)}</td>
-                    <td style={{ padding: '10px 16px' }}>{paraFormat(b.tutar, b.para_birimi)}</td>
-                    <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>{tlKarsiligiGoster(b.tutar, b.para_birimi, kurlar)}</td>
+                  <tr style={{ borderTop: '1px solid var(--kenarlik)', background: odemeAcikId === b.id ? 'var(--zemin)' : 'transparent' }}>
+                    {(() => {
+                      const acKapat = () => { setOdemeAcikId((mevcut) => (mevcut === b.id ? null : b.id)); setOdemeTutari(''); };
+                      return (
+                        <>
+                          <td onClick={acKapat} style={{ padding: '10px 16px', cursor: 'pointer' }}>
+                            {BORC_TIP_METIN[b.tip]}
+                            <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--lacivert)' }}>{odemeAcikId === b.id ? '▲ kapat' : '▼ ödeme ekle'}</span>
+                          </td>
+                          <td onClick={acKapat} style={{ padding: '10px 16px', color: 'var(--metin-ikincil)', cursor: 'pointer' }}>{cariGoster(b.cari_id, cariHaritasi)}</td>
+                          <td onClick={acKapat} style={{ padding: '10px 16px', cursor: 'pointer' }}>{paraFormat(b.tutar, b.para_birimi)}</td>
+                          <td onClick={acKapat} style={{ padding: '10px 16px', color: 'var(--metin-ikincil)', cursor: 'pointer' }}>{tlKarsiligiGoster(b.tutar, b.para_birimi, kurlar)}</td>
+                        </>
+                      );
+                    })()}
                     <td style={{ padding: '10px 16px', fontWeight: 500 }}>
                       {bakiyeler[b.id] ? paraFormat(bakiyeler[b.id].kalan_bakiye, b.para_birimi)
                         : <button onClick={() => bakiyeyiGetir(b.id)} style={eylemChipStili('lacivert')}>Göster</button>}
                     </td>
                     <td style={{ padding: '10px 16px' }}>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <button
-                          onClick={() => setDuzenlenenBorcId((mevcut) => (mevcut === b.id ? null : b.id))}
-                          style={eylemChipStili('notr')}
-                        >
-                          {duzenlenenBorcId === b.id ? 'Kapat' : 'Düzenle'}
-                        </button>
-                        <button
-                          onClick={() => { setOdemeAcikId((mevcut) => (mevcut === b.id ? null : b.id)); setOdemeTutari(''); }}
-                          style={eylemChipStili('lacivert')}
-                        >
-                          {odemeAcikId === b.id ? 'Kapat' : 'Ödeme ekle'}
-                        </button>
-                      </div>
+                      <button
+                        onClick={() => setDuzenlenenBorcId((mevcut) => (mevcut === b.id ? null : b.id))}
+                        style={eylemChipStili('notr')}
+                      >
+                        {duzenlenenBorcId === b.id ? 'Kapat' : 'Düzenle'}
+                      </button>
                     </td>
                   </tr>
                   {duzenlenenBorcId === b.id && (
