@@ -76,6 +76,54 @@ export function Buton({ children, variant = 'birincil', ...props }) {
   );
 }
 
+// Programi hic bilmeyen biri "Akreditif ile Leasing farki ne" gibi
+// SEKTOR terimlerini bilmeyebilir - kucuk bir (?) ikonu, TIKLANINCA kisa
+// bir aciklama gosterir. Hover DEGIL tiklama kullanilir (mobil/dokunmatik
+// ekranlarda da calissin diye).
+export function BilgiIpucu({ metin }) {
+  const [acik, setAcik] = useState(false);
+  const kutuRef = useRef(null);
+
+  useEffect(() => {
+    if (!acik) return;
+    function disaTikla(e) {
+      if (kutuRef.current && !kutuRef.current.contains(e.target)) setAcik(false);
+    }
+    document.addEventListener('mousedown', disaTikla);
+    return () => document.removeEventListener('mousedown', disaTikla);
+  }, [acik]);
+
+  return (
+    <span ref={kutuRef} style={{ position: 'relative', display: 'inline-block', marginLeft: 5 }}>
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); setAcik((a) => !a); }}
+        title="Bilgi"
+        style={{
+          width: 15, height: 15, borderRadius: '50%', border: '1px solid var(--metin-soluk)',
+          background: 'transparent', color: 'var(--metin-soluk)', fontSize: 10, fontWeight: 700,
+          cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          padding: 0, lineHeight: 1, verticalAlign: 'middle',
+        }}
+      >
+        ?
+      </button>
+      {acik && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            position: 'absolute', top: '130%', left: 0, zIndex: 80, width: 240,
+            background: 'var(--lacivert-koyu, #16233f)', color: 'white', fontSize: 12, fontWeight: 400,
+            lineHeight: 1.5, padding: '10px 12px', borderRadius: 8, boxShadow: '0 6px 18px rgba(0,0,0,0.25)',
+          }}
+        >
+          {metin}
+        </div>
+      )}
+    </span>
+  );
+}
+
 export function Etiket({ children, ton = 'notr' }) {
   const tonlar = {
     notr: { background: '#F1F2F4', color: 'var(--metin-ikincil)' },
