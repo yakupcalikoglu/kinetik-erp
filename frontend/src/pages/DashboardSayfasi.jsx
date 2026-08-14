@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Wallet2, Landmark, Boxes, KeyRound, CalendarClock, Briefcase, Wrench } from 'lucide-react';
 import { api, hataMesajiCikar } from '../api/client';
-import { Kart, SayfaBasligi, HataMesaji, BosDurum, paraFormat, Etiket } from '../components/Ortak';
+import { Kart, SayfaBasligi, HataMesaji, BosDurum, paraFormat, Etiket, Buton } from '../components/Ortak';
 
 function TiklanabilirKart({ baslik, Simge, onClick, children, vurgu }) {
   const [uzerinde, setUzerinde] = useState(false);
@@ -484,12 +484,92 @@ function HizliIslemlerKutusu({ navigate }) {
   );
 }
 
+// Programi ILK KEZ acan biri, "burada ne yapacagim" sorusuna hemen cevap
+// bulsun diye - sistemin TEMEL AKISINI (Siparis -> Teslim Al -> Satis ->
+// Tahsilat) 4 kisa adimda ozetleyen bir karsilama ekrani. localStorage'da
+// bir bayrakla SADECE ilk girişte gösterilir, "Anladım" ile kapatılınca
+// bir daha çıkmaz (kullanıcı isterse Dashboard'daki (?) ile tekrar açabilir).
+const KARSILAMA_ANAHTARI = 'kinetik_erp_karsilama_gosterildi';
+
+const AKIS_ADIMLARI = [
+  { no: 1, baslik: 'Sipariş Ver', aciklama: 'Tedarikçiden mal alımı için Siparişler sayfasından yeni sipariş oluştur.' },
+  { no: 2, baslik: 'Teslim Al', aciklama: 'Mal geldiğinde, seri numaralarını girerek envantere (Stok) ekle.' },
+  { no: 3, baslik: 'Maliyetleri Tamamla', aciklama: 'Navlun, gümrük, sigorta gibi ek masrafları siparişe işle.' },
+  { no: 4, baslik: 'Sat ve Tahsil Et', aciklama: 'Müşteriye peşin/taksitli/leasingli satış yap, ödemeleri Finansal Takip\'ten izle.' },
+];
+
+function KarsilamaModali({ onKapat }) {
+  return (
+    <div
+      onClick={onKapat}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(20,25,40,0.55)', zIndex: 500,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: 'white', borderRadius: 14, padding: 28, maxWidth: 520, width: '100%',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+        }}
+      >
+        <div style={{ fontSize: 19, fontWeight: 700, marginBottom: 6 }}>Kinetik ERP'ye Hoş Geldiniz 👋</div>
+        <div style={{ fontSize: 13, color: 'var(--metin-ikincil)', marginBottom: 20, lineHeight: 1.5 }}>
+          Bu sistem, forklift ithalat ve satış sürecinizin tamamını (sipariş, envanter, ödeme, kiralama)
+          tek bir yerden yönetmeniz için tasarlandı. İşte tipik bir akış:
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 22 }}>
+          {AKIS_ADIMLARI.map((a) => (
+            <div key={a.no} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+              <div style={{
+                width: 26, height: 26, borderRadius: '50%', background: 'var(--lacivert)', color: 'white',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700,
+                flexShrink: 0,
+              }}>
+                {a.no}
+              </div>
+              <div>
+                <div style={{ fontSize: 13.5, fontWeight: 600 }}>{a.baslik}</div>
+                <div style={{ fontSize: 12, color: 'var(--metin-ikincil)' }}>{a.aciklama}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--metin-soluk)', marginBottom: 16 }}>
+          İpucu: Üstteki arama kutusuna "/" ile odaklanıp "sipariş", "satış" gibi kelimeler yazarak
+          da ilgili sayfaya hızlıca gidebilirsiniz.
+        </div>
+        <Buton onClick={onKapat}>Anladım, Başlayalım</Buton>
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardSayfasi() {
   const navigate = useNavigate();
+  const [karsilamaAcik, setKarsilamaAcik] = useState(() => !localStorage.getItem(KARSILAMA_ANAHTARI));
+
+  function karsilamayiKapat() {
+    localStorage.setItem(KARSILAMA_ANAHTARI, '1');
+    setKarsilamaAcik(false);
+  }
 
   return (
     <div>
-      <SayfaBasligi baslik="Dashboard" aciklama="Genel durumunuza hızlı bakış — herhangi bir kutuya tıklayarak ilgili ekrana gidebilirsiniz" />
+      {karsilamaAcik && <KarsilamaModali onKapat={karsilamayiKapat} />}
+      <SayfaBasligi
+        baslik="Dashboard"
+        aciklama="Genel durumunuza hızlı bakış — herhangi bir kutuya tıklayarak ilgili ekrana gidebilirsiniz"
+        eylem={
+          <button
+            onClick={() => setKarsilamaAcik(true)}
+            style={{ fontSize: 12.5, color: 'var(--lacivert)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+          >
+            Hızlı tanıtımı tekrar göster
+          </button>
+        }
+      />
       <HizliIslemlerKutusu navigate={navigate} />
       <NetDurumKutusu />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
