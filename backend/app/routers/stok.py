@@ -861,6 +861,11 @@ def stok_satisini_geri_al(
     kayit.satis_tarihi = None
     kayit.satis_cek_id = None
     kayit.satis_kayit_zamani = None
+    # Eski satis bilgisi tamamen temizlensin - aksi halde urun DEPODA'ya
+    # dondugu halde "satis_odeme_tipi"/"satis_yontemi" eski (yanlis) degeri
+    # tasimaya devam edebilirdi (temiz veri icin, dusuk risk ama dogru olan).
+    kayit.satis_odeme_tipi = None
+    kayit.satis_yontemi = None
 
     db.commit()
     db.refresh(kayit)
