@@ -303,6 +303,7 @@ def test_verilerini_temizle(istek: TemizlikOnayIstegi, db: Session = Depends(get
     from app.models.finansal import (
         Cek, CekGecmis, LeasingSozlesme, LeasingOdeme, LeasingSozlesmeKalemi, LeasingKalemUrunu,
         TaksitliSatisPlani, TaksitDetay, TaksitliSatisKalemi, TaksitliSatisKalemUrunu,
+        PosTaksitPlani, PosTaksitDetay,
         KiralamaSozlesme, KiralamaOdeme, KiralamaSozlesmeKalemi, KiralamaKalemUrunu, BakimKaydi,
     )
     from app.models.akreditif import Akreditif, AkreditifKalemi
@@ -349,6 +350,10 @@ def test_verilerini_temizle(istek: TemizlikOnayIstegi, db: Session = Depends(get
         TaksitliSatisKalemUrunu,
         TaksitliSatisKalemi,
         TaksitliSatisPlani,
+
+        # PosTaksitDetay, PosTaksitPlani'ye FK ile bagli - ONDAN ONCE silinmeli.
+        PosTaksitDetay,
+        PosTaksitPlani,
 
         KiralamaOdeme,
         # Ayni sekilde KiralamaKalemUrunu da KiralamaSozlesmeKalemi'nden
