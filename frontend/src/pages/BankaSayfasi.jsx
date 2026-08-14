@@ -890,6 +890,34 @@ function HareketlerSekmesi() {
   });
   const tarihGrup = useTarihGruplama(siraliHareketler, 'tarih');
 
+  // TEK bir hesap secildiginde, gercek banka ekstresi gibi HER hareketin
+  // "onceki bakiye -> islem -> sonraki bakiye" gostermek icin - GUNCEL
+  // bakiyeden GERIYE DOGRU (en yeniden en eskiye) kumulatif hesaplama.
+  // Birden fazla hesap/para birimi karisikken bu hesaplama ANLAMSIZ
+  // olacagi icin SADECE tek hesap secili oldugunda calisir.
+  const bakiyeIzHaritasi = {};
+  if (hesapFiltre) {
+    const seciliHesap = hesaplar.find((h) => String(h.banka_hesap_id) === hesapFiltre);
+    if (seciliHesap) {
+      // Tarih + id'ye gore ESKIDEN YENIYE sirala - id, ayni gun icindeki
+      // olusturma sirasini GUVENILIR sekilde yansitir.
+      const kronolojik = [...gosterilecekHareketler].sort((a, b) => {
+        if (a.tarih !== b.tarih) return a.tarih.localeCompare(b.tarih);
+        return a.id - b.id;
+      });
+      let kosuBakiye = Number(seciliHesap.bakiye);
+      // EN YENIDEN (guncel bakiyeden) EN ESKIYE dogru geriye giderek,
+      // her hareketin oncesi/sonrasi bakiyesini hesapla.
+      for (let i = kronolojik.length - 1; i >= 0; i--) {
+        const h = kronolojik[i];
+        const sonrakiBakiye = kosuBakiye;
+        const oncekiBakiye = kosuBakiye - Number(h.tutar);
+        bakiyeIzHaritasi[h.id] = { onceki: oncekiBakiye, sonraki: sonrakiBakiye };
+        kosuBakiye = oncekiBakiye;
+      }
+    }
+  }
+
   return (
     <div>
       {hesaplar.length > 0 && (
@@ -1010,6 +1038,11 @@ function HareketlerSekmesi() {
                         {tlKarsiligiGoster && (
                           <div style={{ fontSize: 11, color: 'var(--metin-soluk)', fontWeight: 400 }}>
                             ≈ {paraFormat(Number(h.tutar) * Number(h.kullanilan_kur))}
+                          </div>
+                        )}
+                        {bakiyeIzHaritasi[h.id] && (
+                          <div style={{ fontSize: 10.5, color: 'var(--metin-soluk)', fontWeight: 400, whiteSpace: 'nowrap' }}>
+                            {paraFormat(bakiyeIzHaritasi[h.id].onceki, hesapPB)} → {paraFormat(bakiyeIzHaritasi[h.id].sonraki, hesapPB)}
                           </div>
                         )}
                       </td>
