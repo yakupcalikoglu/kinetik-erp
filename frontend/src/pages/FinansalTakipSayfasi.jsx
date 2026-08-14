@@ -4232,19 +4232,16 @@ function SabitGiderSekmesi() {
                     <td style={{ padding: '10px 16px' }}>{g.aciklama || '—'}</td>
                     <td style={{ padding: '10px 16px' }}><Etiket ton={g.odendi_mi ? 'yesil' : 'amber'}>{g.odendi_mi ? 'Ödendi' : 'Bekliyor'}</Etiket></td>
                     <td style={{ padding: '10px 16px' }}>
-                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                         {g.odendi_mi ? (
                           <button onClick={() => odemeyiGeriAl(g.id)} style={eylemChipStili('kirmizi')}>Geri Al</button>
                         ) : (
                           <>
                             <button onClick={() => duzenlemeyeBasla(g)} style={eylemChipStili('lacivert')}>Düzenle</button>
-                            <button
-                              onClick={() => setDagitimAcikId((mevcut) => (mevcut === g.id ? null : g.id))}
-                              style={eylemChipStili('amber')}
-                            >
-                              {dagitimAcikId === g.id ? 'Kapat' : 'Siparişe Dağıt'}
-                            </button>
-                            <button onClick={() => sil(g.id)} style={eylemChipStili('kirmizi')}>Sil</button>
+                            <DahaFazlaMenu kompakt ogeler={[
+                              { etiket: 'Siparişe Dağıt', onClick: () => setDagitimAcikId((mevcut) => (mevcut === g.id ? null : g.id)) },
+                              { etiket: 'Sil', onClick: () => sil(g.id) },
+                            ]} />
                           </>
                         )}
                       </div>
