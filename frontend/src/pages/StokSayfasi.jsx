@@ -880,6 +880,10 @@ export default function StokSayfasi() {
   const [stokKartlari, setStokKartlari] = useState([]);
   const [siparisler, setSiparisler] = useState([]);
   const [cariler, setCariler] = useState([]);
+  // stok_seri_no_id -> {kiraci_unvan, sozlesme_id} - "Kirada" durumundaki bir
+  // urunun KIME kiralandigini gostermek icin (bu bilgi StokSeriNo'nun
+  // KENDISINDE degil, KiralamaSozlesme/KiralamaKalemUrunu'nde tutulur).
+  const [kiraciHaritasi, setKiraciHaritasi] = useState({});
   const [durumFiltre, setDurumFiltre] = useState('');
   const [satilanlariGoster, setSatilanlariGoster] = useState(false);
   const [dovizMaliyetHaritasi, setDovizMaliyetHaritasi] = useState({});
@@ -1044,6 +1048,17 @@ export default function StokSayfasi() {
     api.get('/cariler').then((r) => setCariler(r.data)).catch(() => {});
     api.get('/kur/USD').then((r) => setUsdKur(Number(r.data.kur))).catch(() => {});
     api.get('/stok-seri-no/toplam-doviz-maliyet-haritasi').then((r) => setDovizMaliyetHaritasi(r.data)).catch(() => {});
+    api.get('/kiralama-sozlesmeleri').then((r) => {
+      const harita = {};
+      (r.data || []).forEach((sozlesme) => {
+        (sozlesme.kalemler || []).forEach((kalem) => {
+          (kalem.stok_seri_no_idleri || []).forEach((seriId) => {
+            harita[seriId] = { kiraci_unvan: sozlesme.kiraci_unvan, sozlesme_id: sozlesme.id };
+          });
+        });
+      });
+      setKiraciHaritasi(harita);
+    }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -1515,7 +1530,11 @@ export default function StokSayfasi() {
                         <Etiket ton={DURUM_ETIKET[u.durum]}>{DURUM_METIN[u.durum]}</Etiket>
                       </td>
                       <td style={{ padding: '8px 10px', color: 'var(--metin-ikincil)', fontSize: 12.5 }}>{u.satis_yontemi ? (SATIS_YONTEMI_METIN[u.satis_yontemi] || u.satis_yontemi) : '—'}</td>
-                      <td style={{ padding: '8px 10px', color: 'var(--metin-ikincil)', fontSize: 12.5 }}>{musteriAdiGoster(u.musteri_cari_id)}</td>
+                      <td style={{ padding: '8px 10px', color: 'var(--metin-ikincil)', fontSize: 12.5 }}>
+                        {u.durum === 'KIRADA'
+                          ? (kiraciHaritasi[u.id] ? `${kiraciHaritasi[u.id].kiraci_unvan} (kirada)` : '—')
+                          : musteriAdiGoster(u.musteri_cari_id)}
+                      </td>
                       <td style={{ padding: '8px 10px', fontSize: 12.5 }}>
                         {paraFormat(u.toplam_maliyet_try)}
                         <div style={{ fontSize: 10.5, color: 'var(--metin-soluk)' }}>
