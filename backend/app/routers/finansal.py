@@ -955,7 +955,14 @@ def taksitli_satis_plani_sil(plan_id: int, sirket_id: int = Depends(aktif_sirket
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Tahsil edilmiş taksiti olan bir plan silinemez.")
     for t in taksitler:
         db.delete(t)
-    for k in list(db.execute(select(TaksitliSatisKalemi).where(TaksitliSatisKalemi.plan_id == plan_id)).scalars()):
+    kalemler = list(db.execute(select(TaksitliSatisKalemi).where(TaksitliSatisKalemi.plan_id == plan_id)).scalars())
+    # TaksitliSatisKalemUrunu (seri no baglantisi), TaksitliSatisKalemi'ne FK
+    # ile bagli - ONDAN ONCE silinmeli (Leasing/Kiralama'daki KalemUrunu
+    # silme mantigiyla AYNI - bunu eklerken bu fonksiyonu guncellemeyi
+    # unutmustum, plan silinirken FK ihlali olusturuyordu).
+    for j in list(db.execute(select(TaksitliSatisKalemUrunu).where(TaksitliSatisKalemUrunu.kalem_id.in_([k.id for k in kalemler]))).scalars()):
+        db.delete(j)
+    for k in kalemler:
         db.delete(k)
 
     if plan.stok_seri_no_id:
