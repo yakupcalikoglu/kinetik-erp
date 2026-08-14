@@ -328,6 +328,16 @@ function HareketDuzenleFormu({ parca, hareket, cariler, urunSecenekleri, onTamam
 }
 
 function HareketlerPaneli({ parca, cariler, onKapat, onDegisti }) {
+  // Cari sistemde HENUZ KAYITLI degilse, Cariler sayfasina GITMEDEN,
+  // buradan HIZLICA bir cari olusturup devam edebilmek icin - parent'tan
+  // gelen listeyi YEREL bir kopyaya aliyoruz ki yeni eklenen cari HEMEN
+  // secenekler arasinda gorunsun (parent'in kendi listesini yenilemesini
+  // beklemeye gerek kalmadan).
+  const [yerelCariler, setYerelCariler] = useState(cariler);
+  useEffect(() => { setYerelCariler(cariler); }, [cariler]);
+  const [hizliCariAcik, setHizliCariAcik] = useState(false);
+  const [hizliCariAdi, setHizliCariAdi] = useState('');
+  const [hizliCariKaydediliyor, setHizliCariKaydediliyor] = useState(false);
   const [hareketler, setHareketler] = useState(null);
   const [formAcik, setFormAcik] = useState(false);
   const [form, setForm] = useState({
@@ -487,7 +497,51 @@ function HareketlerPaneli({ parca, cariler, onKapat, onDegisti }) {
               </>
             )}
             <Alan etiket="İlgili cari (opsiyonel)">
-              <AramaliSecici secenekler={cariler} deger={form.ilgili_cari_id} onDegistir={(v) => setForm((f) => ({ ...f, ilgili_cari_id: v, ilgili_stok_seri_no_id: '' }))} etiketFn={(c) => c.unvan} />
+              <AramaliSecici secenekler={yerelCariler} deger={form.ilgili_cari_id} onDegistir={(v) => setForm((f) => ({ ...f, ilgili_cari_id: v, ilgili_stok_seri_no_id: '' }))} etiketFn={(c) => c.unvan} />
+              {!hizliCariAcik ? (
+                <button
+                  type="button"
+                  onClick={() => setHizliCariAcik(true)}
+                  style={{ background: 'none', border: 'none', color: 'var(--lacivert)', textDecoration: 'underline', cursor: 'pointer', fontSize: 11.5, padding: 0, marginTop: 4 }}
+                >
+                  Cari listede yok mu? Hızlıca ekle
+                </button>
+              ) : (
+                <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                  <input
+                    autoFocus
+                    value={hizliCariAdi}
+                    onChange={(e) => setHizliCariAdi(e.target.value)}
+                    placeholder="Firma/kişi adı"
+                    style={{ ...girdiStili, flex: 1 }}
+                  />
+                  <button
+                    type="button"
+                    disabled={hizliCariKaydediliyor || !hizliCariAdi.trim()}
+                    onClick={async () => {
+                      setHizliCariKaydediliyor(true);
+                      try {
+                        // Yon'a gore makul bir varsayilan tip - GIRIS (satinalma)
+                        // genelde TEDARIKCI'dan, CIKIS (satis) genelde MUSTERI'ye.
+                        const varsayilanTip = form.yon === 'GIRIS' ? 'TEDARIKCI' : 'MUSTERI';
+                        const { data } = await api.post('/cariler', { tip: varsayilanTip, unvan: hizliCariAdi.trim() });
+                        setYerelCariler((c) => [...c, data]);
+                        setForm((f) => ({ ...f, ilgili_cari_id: String(data.id) }));
+                        setHizliCariAdi('');
+                        setHizliCariAcik(false);
+                      } catch (err) {
+                        setHata(hataMesajiCikar(err));
+                      } finally {
+                        setHizliCariKaydediliyor(false);
+                      }
+                    }}
+                    style={eylemChipStili('lacivert')}
+                  >
+                    {hizliCariKaydediliyor ? 'Kaydediliyor...' : 'Kaydet'}
+                  </button>
+                  <button type="button" onClick={() => { setHizliCariAcik(false); setHizliCariAdi(''); }} style={eylemChipStili('notr')}>Vazgeç</button>
+                </div>
+              )}
             </Alan>
             <Alan etiket={form.ilgili_cari_id ? "İlgili ürün — bu carinin elindeki ürünler (satılmış/kiralık)" : "İlgili ürün (opsiyonel — örn. garanti kapsamında hangi forklifte takıldı)"}>
               {(() => {
