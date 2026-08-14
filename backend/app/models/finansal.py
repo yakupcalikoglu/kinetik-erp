@@ -251,3 +251,40 @@ class BakimKaydi(Base):
     tutar = Column(Numeric(18, 2), nullable=False)
     para_birimi = Column(SAEnum(ParaBirimi, name="para_birimi_t"), default=ParaBirimi.TRY)
     odendi_tahsil_edildi_mi = Column(Boolean, default=False)
+
+
+# ---------------------------------------------------- Kredi Kartı (POS) Taksit Takibi
+class PosTaksitPlani(Base):
+    """
+    Musteri, satisi KREDI KARTI ile TAKSITLI odedigindeyse acilir. Taksitli
+    Satis'tan (musteriden biz tahsilat yaparız) TEMEL FARKI: burada satis
+    ANINDA TAMAMLANMIS sayilir (musteri bize BORCLU DEGIL, kart bankasi
+    odemeyi GARANTI etmistir) - ama paranin KENDISI bankaya HER AY parca
+    parca (POS bankasinin kendi anlasmasina gore) yatar. Yani biz, MUSTERIYE
+    DEGIL, BANKAYA/POS SAGLAYICISINA karsi "alacakliyiz" - her ay bir
+    taksidin hesaba GERCEKTEN yatip yatmadigini burada takip ederiz.
+    """
+    __tablename__ = "pos_taksit_planlari"
+
+    id = Column(BigInteger, primary_key=True)
+    sirket_id = Column(BigInteger, ForeignKey("sirketler.id"), nullable=False)
+    stok_seri_no_id = Column(BigInteger, ForeignKey("stok_seri_no.id"), nullable=False)
+    musteri_cari_id = Column(BigInteger, ForeignKey("cari_hesaplar.id"))
+    banka_hesap_id = Column(BigInteger, ForeignKey("banka_hesaplari.id"), nullable=False)
+    toplam_tutar = Column(Numeric(18, 2), nullable=False)
+    taksit_sayisi = Column(Integer, nullable=False)
+    baslangic_tarihi = Column(Date, nullable=False)
+    notlar = Column(String(300))
+    olusturma_tarihi = Column(DateTime, server_default=func.now())
+
+
+class PosTaksitDetay(Base):
+    __tablename__ = "pos_taksit_detay"
+
+    id = Column(BigInteger, primary_key=True)
+    plan_id = Column(BigInteger, ForeignKey("pos_taksit_planlari.id"), nullable=False)
+    taksit_no = Column(Integer, nullable=False)
+    vade_tarihi = Column(Date, nullable=False)
+    tutar = Column(Numeric(18, 2), nullable=False)
+    yatti_mi = Column(Boolean, default=False)
+    yatma_tarihi = Column(Date)
