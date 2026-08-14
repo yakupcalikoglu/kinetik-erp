@@ -90,6 +90,7 @@ export default function SatisYapSayfasi() {
   const [musteriCariId, setMusteriCariId] = useState('');
   const [odemeTipi, setOdemeTipi] = useState('PESIN_NAKIT');
   const [leasingAltTip, setLeasingAltTip] = useState('PESIN'); // 'PESIN' | 'TAKSITLI' - sadece odemeTipi === 'LEASINGLI' iken kullanilir
+  const [kartAltTip, setKartAltTip] = useState('TEK_CEKIM'); // 'TEK_CEKIM' | 'TAKSITLI' - sadece odemeTipi === 'PESIN_KART' iken kullanilir
   const [tutar, setTutar] = useState('');
   const [tarih, setTarih] = useState(new Date().toISOString().slice(0, 10));
   const [bankaHesapId, setBankaHesapId] = useState('');
@@ -132,8 +133,18 @@ export default function SatisYapSayfasi() {
   const seciliUrun = urunler.find((u) => String(u.id) === String(urunId));
   const tutarTRY = tutarParaBirimi === 'TRY' ? Number(tutar || 0) : Number(tutar || 0) * Number(tutarKur || 1);
   const leasingTaksitli = odemeTipi === 'LEASINGLI' && leasingAltTip === 'TAKSITLI';
+  // Kredi karti TAKSITLI - Taksitli Satis'tan TAMAMEN FARKLI bir akis
+  // (musteriden biz tahsilat YAPMIYORUZ, kart bankasi HER AY hesaba
+  // yatiriyor) - bu yuzden "taksitliBenzeri" (Taksitli Satis endpoint'i)
+  // GRUBUNA DAHIL EDILMIYOR, ayri bir degisken olarak ele aliniyor.
+  const kartTaksitli = odemeTipi === 'PESIN_KART' && kartAltTip === 'TAKSITLI';
   const taksitliBenzeri = odemeTipi === 'TAKSITLI' || leasingTaksitli;
-  const bankaGerekli = odemeTipi === 'PESIN_HAVALE' || odemeTipi === 'PESIN_KART' || (odemeTipi === 'LEASINGLI' && leasingAltTip === 'PESIN');
+  // NOT: kartTaksitli, bilerek bankaGerekli'ye DAHIL EDILMEDI - o, "/satis"
+  // (NORMAL, anlik banka yazma) endpoint'ini tetikler; kartTaksitli ise
+  // AYRI bir dal olarak (asagida) "/pos-taksit-planlari" endpoint'ini
+  // cagirir. UI'da banka hesabi SECIM ALANI icin ayrica "bankaGerekli ||
+  // kartTaksitli" kullanilir - o SADECE GORUNUM icindir.
+  const bankaGerekli = odemeTipi === 'PESIN_HAVALE' || (odemeTipi === 'PESIN_KART' && kartAltTip === 'TEK_CEKIM') || (odemeTipi === 'LEASINGLI' && leasingAltTip === 'PESIN');
 
   async function satisiTamamla(e) {
     e.preventDefault();
@@ -177,9 +188,24 @@ export default function SatisYapSayfasi() {
       }
     }
 
+    if (kartTaksitli && !bankaHesapId) {
+      setHata('Lütfen POS\'un bağlı olduğu banka hesabını seçin.');
+      return;
+    }
+
     setKaydediliyor(true);
     try {
-      if (odemeTipi === 'PESIN_NAKIT') {
+      if (kartTaksitli) {
+        // Kredi karti TAKSITLI - satis ANINDA tamamlanir (musteri BORCLU
+        // degildir), ama Kasa/Banka'ya HICBIR HAREKET simdi ACILMAZ - her
+        // taksit GERCEKTEN bankaya yattikca (Finansal Takip > Kredi Karti
+        // Taksitleri) ayri ayri isaretlenir.
+        await api.post('/pos-taksit-planlari', {
+          stok_seri_no_id: Number(urunId), musteri_cari_id: Number(musteriCariId),
+          banka_hesap_id: Number(bankaHesapId), toplam_tutar: tutarTRY,
+          taksit_sayisi: Number(taksitSayisi), baslangic_tarihi: tarih,
+        });
+      } else if (odemeTipi === 'PESIN_NAKIT') {
         await api.post(`/stok-seri-no/${urunId}/satis`, {
           musteri_cari_id: Number(musteriCariId), satis_fiyati_try: tutarTRY,
           satis_tarihi: tarih, odeme_yontemi: 'NAKIT', banka_hesap_id: null,
@@ -315,6 +341,27 @@ export default function SatisYapSayfasi() {
             </div>
           )}
 
+          {odemeTipi === 'PESIN_KART' && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" onClick={() => setKartAltTip('TEK_CEKIM')}
+                  style={eylemChipStili(kartAltTip === 'TEK_CEKIM' ? 'lacivert' : 'notr')}>
+                  Tek Çekim (tutar hemen hesaba yatar)
+                </button>
+                <button type="button" onClick={() => setKartAltTip('TAKSITLI')}
+                  style={eylemChipStili(kartAltTip === 'TAKSITLI' ? 'lacivert' : 'notr')}>
+                  Taksitli (banka her ay parça parça yatıracak)
+                </button>
+              </div>
+              {kartAltTip === 'TAKSITLI' && (
+                <div style={{ fontSize: 12, color: 'var(--metin-soluk)', marginTop: 6 }}>
+                  Satış hemen tamamlanmış sayılır (müşteri size borçlu değil) — ama kart bankası tutarı size
+                  her ay bir taksit olarak yatıracaktır. Bunu Finansal Takip → Kredi Kartı Taksitleri'nden takip edin.
+                </div>
+              )}
+            </div>
+          )}
+
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
             <Alan etiket={taksitliBenzeri ? 'Toplam Tutar' : 'Tutar'}>
               <div style={{ display: 'flex', gap: 6 }}>
@@ -338,8 +385,8 @@ export default function SatisYapSayfasi() {
               <input required type="date" value={tarih} onChange={(e) => setTarih(e.target.value)} style={girdiStili} />
             </Alan>
 
-            {bankaGerekli && (
-              <Alan etiket="Banka Hesabı">
+            {(bankaGerekli || kartTaksitli) && (
+              <Alan etiket={kartTaksitli ? "POS'un Bağlı Olduğu Banka Hesabı" : "Banka Hesabı"}>
                 <select required value={bankaHesapId} onChange={(e) => setBankaHesapId(e.target.value)} style={girdiStili}>
                   <option value="">Seçin...</option>
                   {bankaHesaplari.map((h) => (
@@ -361,14 +408,14 @@ export default function SatisYapSayfasi() {
             )}
 
             {taksitliBenzeri && (
-              <>
-                <Alan etiket="Peşinat (TL)">
-                  <input type="number" step="0.01" value={pesinat} onChange={(e) => setPesinat(e.target.value)} style={girdiStili} />
-                </Alan>
-                <Alan etiket="Taksit Sayısı">
-                  <input required type="number" min="2" value={taksitSayisi} onChange={(e) => setTaksitSayisi(e.target.value)} style={girdiStili} />
-                </Alan>
-              </>
+              <Alan etiket="Peşinat (TL)">
+                <input type="number" step="0.01" value={pesinat} onChange={(e) => setPesinat(e.target.value)} style={girdiStili} />
+              </Alan>
+            )}
+            {(taksitliBenzeri || kartTaksitli) && (
+              <Alan etiket="Taksit Sayısı">
+                <input required type="number" min="2" value={taksitSayisi} onChange={(e) => setTaksitSayisi(e.target.value)} style={girdiStili} />
+              </Alan>
             )}
 
             {odemeTipi === 'CEK' && (
