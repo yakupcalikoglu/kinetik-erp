@@ -370,3 +370,55 @@ class BakimYanit(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ---------------------------------------------------- Kredi Kartı (POS) Taksit Takibi
+class PosTaksitOlusturIstegi(BaseModel):
+    stok_seri_no_id: int
+    musteri_cari_id: int | None = None
+    banka_hesap_id: int
+    toplam_tutar: Decimal
+    taksit_sayisi: int
+    baslangic_tarihi: date
+    notlar: str | None = None
+
+
+class PosTaksitDetayYanit(BaseModel):
+    id: int
+    plan_id: int
+    taksit_no: int
+    vade_tarihi: date
+    tutar: Decimal
+    yatti_mi: bool
+    yatma_tarihi: date | None
+
+    class Config:
+        from_attributes = True
+
+    @computed_field
+    def kalan_bakiye(self) -> Decimal:
+        return Decimal("0") if self.yatti_mi else self.tutar
+
+
+class PosTaksitYanit(BaseModel):
+    id: int
+    stok_seri_no_id: int
+    urun_seri_no: str | None = None
+    urun_adi: str | None = None
+    musteri_cari_id: int | None = None
+    musteri_unvan: str | None = None
+    banka_hesap_id: int
+    banka_adi: str | None = None
+    toplam_tutar: Decimal
+    taksit_sayisi: int
+    baslangic_tarihi: date
+    notlar: str | None = None
+    yatan_tutar: Decimal = Decimal("0")
+    kalan_tutar: Decimal = Decimal("0")
+
+    class Config:
+        from_attributes = True
+
+
+class PosTaksitYatirIstegi(BaseModel):
+    yatma_tarihi: date
