@@ -877,7 +877,12 @@ export function ManuelMaliyetKalemiEkleFormu({ urun, onKaydedildi, onVazgec, var
 // tiklaninca o kategori (tip) ile cagrilir, cagiran taraf bunu kullanarak
 // "Maliyet Ekle" formunu o tur onceden secili acabilir (Siparisler
 // sayfasindaki Maliyet Kalemi Kontrolu ile AYNI davranis).
-export function SatisMaliyetKontrolListesi({ urun, odemeTipi, onMaliyetEkle }) {
+// kalemler (opsiyonel) verilirse - o urune ait GERCEK maliyet kalemleri
+// (StokMaliyetKalemi listesi, her biri kendi aciklamasiyla) - ozellikle
+// "Diger" turu icin, SADECE tutari degil, kullanicinin YAZDIGI aciklamayi
+// da (kucuk bir not olarak) gosterir. "Diger"in TEK anlami aciklamasidir,
+// bu yuzden aciklama gorunmezse kutunun degeri kalmaz.
+export function SatisMaliyetKontrolListesi({ urun, odemeTipi, onMaliyetEkle, kalemler = null }) {
   const beklenenTipler = odemeTipi === 'LEASINGLI' ? LEASING_SATIS_MALIYET_TIPLERI : FATURALI_SATIS_MALIYET_TIPLERI;
   const SUTUN_ESLEME = {
     ARDIYE: 'ardiye_maliyeti_try', GUMRUK: 'gumruk_maliyeti_try', ILAVE_GUMRUK_VERGISI: 'ilave_gumruk_vergisi_try',
@@ -885,6 +890,11 @@ export function SatisMaliyetKontrolListesi({ urun, odemeTipi, onMaliyetEkle }) {
     BANKA_MASRAFI: 'banka_masrafi_try', KDV: 'kdv_try', LEASING: 'leasing_maliyeti_try', DIGER: 'diger_maliyet_try',
   };
   const eksikSayisi = beklenenTipler.filter((tip) => !Number(urun[SUTUN_ESLEME[tip]] || 0)).length;
+
+  function aciklamalariGetir(tip) {
+    if (!kalemler) return [];
+    return kalemler.filter((k) => k.tip === tip && k.aciklama).map((k) => k.aciklama);
+  }
 
   return (
     <div style={{ padding: '10px 12px', background: eksikSayisi > 0 ? 'var(--amber-acik, #fdf0d5)' : 'var(--yesil-acik, #e3f5e9)', borderRadius: 8, marginBottom: 8 }}>
@@ -894,16 +904,24 @@ export function SatisMaliyetKontrolListesi({ urun, odemeTipi, onMaliyetEkle }) {
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 12 }}>
         {beklenenTipler.map((tip) => {
           const deger = Number(urun[SUTUN_ESLEME[tip]] || 0);
+          const aciklamalar = aciklamalariGetir(tip);
           return (
             <div
               key={tip}
               onClick={onMaliyetEkle ? () => onMaliyetEkle(tip) : undefined}
               title={onMaliyetEkle ? 'Bu kalemi eklemek için tıklayın' : undefined}
-              style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: onMaliyetEkle ? 'pointer' : 'default' }}
+              style={{ display: 'flex', flexDirection: 'column', gap: 1, cursor: onMaliyetEkle ? 'pointer' : 'default' }}
             >
-              <span>{deger > 0 ? '✅' : '⚠️'}</span>
-              <span style={{ color: 'var(--metin-ikincil)', textDecoration: onMaliyetEkle && deger === 0 ? 'underline' : 'none' }}>{MALIYET_TIP_METIN[tip]}</span>
-              {deger > 0 && <strong>({paraFormat(deger)})</strong>}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <span>{deger > 0 ? '✅' : '⚠️'}</span>
+                <span style={{ color: 'var(--metin-ikincil)', textDecoration: onMaliyetEkle && deger === 0 ? 'underline' : 'none' }}>{MALIYET_TIP_METIN[tip]}</span>
+                {deger > 0 && <strong>({paraFormat(deger)})</strong>}
+              </div>
+              {aciklamalar.length > 0 && (
+                <div style={{ fontSize: 10.5, color: 'var(--metin-soluk)', marginLeft: 20 }}>
+                  {aciklamalar.join(' · ')}
+                </div>
+              )}
             </div>
           );
         })}
