@@ -473,7 +473,7 @@ function SatisaCevirFormu({ proforma, kalem, onTamamlandi, onVazgec }) {
 }
 
 function bosKalem() {
-  return { stok_karti_id: '', aciklama: '', miktar: 1, birim_fiyat: '', kdv_orani: 20 };
+  return { stok_karti_id: '', stok_seri_no_id: '', aciklama: '', miktar: 1, birim_fiyat: '', kdv_orani: 20 };
 }
 
 function useCariler() {
@@ -561,7 +561,13 @@ function GecmisProformalar({ cariler, yenidenYukleTetik, onGoruntule }) {
                   <td style={{ padding: '10px 16px' }}><Etiket ton={DURUM_TON[p.durum]}>{DURUM_METIN[p.durum] || p.durum}</Etiket></td>
                   <td style={{ padding: '10px 16px' }}>
                     <div style={{ display: 'flex', gap: 6 }}>
-                      <button onClick={() => onGoruntule(p)} style={eylemChipStili('lacivert')}>Görüntüle</button>
+                      <button
+                        onClick={() => { onGoruntule(p); setBelgeAcikId(p.id); }}
+                        style={eylemChipStili('lacivert')}
+                        title="Müşterinin göreceği belge görünümünü açar"
+                      >
+                        Görüntüle
+                      </button>
                       <button onClick={() => setBelgeAcikId((mevcut) => (mevcut === p.id ? null : p.id))} style={eylemChipStili('lacivert')}>
                         {belgeAcikId === p.id ? 'Belgeyi Kapat' : 'Belge / Yazdır'}
                       </button>
@@ -586,7 +592,11 @@ function GecmisProformalar({ cariler, yenidenYukleTetik, onGoruntule }) {
                         karsiTarafAdiBaslangic={cariUnvani(p.cari_id)}
                         ekBilgiler={[['Durum', DURUM_METIN[p.durum] || p.durum]]}
                         kalemlerBaslangic={(p.kalemler || []).map((k) => ({
-                          aciklama: k.aciklama || '', miktar: k.miktar, birimFiyat: k.birim_fiyat, kdvOrani: k.kdv_orani,
+                          // Musteri belgeyi acinca TAM olarak hangi urunu
+                          // alacagini net gorsun diye - secilmisse seri no
+                          // aciklamanin icine ekleniyor.
+                          aciklama: (k.aciklama || '') + (k.seri_no ? ` (Seri No: ${k.seri_no})` : ''),
+                          miktar: k.miktar, birimFiyat: k.birim_fiyat, kdvOrani: k.kdv_orani,
                         }))}
                         paraBirimi={p.para_birimi}
                         notlar={belgeNotlari[p.id] ?? (p.notlar || '')}
@@ -742,6 +752,27 @@ export default function ProformaFaturaSayfasi() {
   const [kaydediliyor, setKaydediliyor] = useState(false);
   const [gecmisYenidenYukleTetik, setGecmisYenidenYukleTetik] = useState(0);
   const [satisaCevirAcikKalemId, setSatisaCevirAcikKalemId] = useState(null);
+  // kalem index -> o urun tanimina ait, HENUZ satilmamis (Depoda/Antrepoda/
+  // henuz teslim alinmamis-Yolda/Gumrukte) fiziksel urunlerin seri no
+  // listesi. Musteriye "TAM OLARAK hangi urunu satacagimizi" net
+  // gosterebilmek icin - proforma artik SADECE urun TANIMINA degil,
+  // spesifik bir SERI NUMARASINA da baglanabiliyor.
+  const [seriNoSecenekleriMap, setSeriNoSecenekleriMap] = useState({});
+
+  function seriNoSecenekleriniGetir(kalemIndex, stokKartiId) {
+    if (!stokKartiId) {
+      setSeriNoSecenekleriMap((f) => ({ ...f, [kalemIndex]: [] }));
+      return;
+    }
+    Promise.all(
+      ['DEPODA', 'ANTREPODA', 'YOLDA', 'GUMRUKTE'].map((durum) =>
+        api.get('/stok-seri-no', { params: { durum, stok_karti_id: stokKartiId } })
+      )
+    ).then((sonuclar) => {
+      const liste = sonuclar.flatMap((r) => r.data);
+      setSeriNoSecenekleriMap((f) => ({ ...f, [kalemIndex]: liste }));
+    }).catch(() => {});
+  }
 
   function kalemGuncelle(i, alan, deger) {
     if (alan === 'stok_karti_id' && deger) {
@@ -755,6 +786,7 @@ export default function ProformaFaturaSayfasi() {
           return { ...f, notlar: [...mevcutSatirlar, kart.standart_alt_metin].join('\n') };
         });
       }
+      seriNoSecenekleriniGetir(i, deger);
     }
     setKalemler((liste) => liste.map((k, idx) => {
       if (idx !== i) return k;
@@ -763,6 +795,7 @@ export default function ProformaFaturaSayfasi() {
         return {
           ...k,
           stok_karti_id: deger,
+          stok_seri_no_id: '', // urun tanimi degistiginde, eski seri no secimi gecersiz olur
           aciklama: kart ? `${kart.marka} ${kart.model}` : k.aciklama,
         };
       }
@@ -783,6 +816,7 @@ export default function ProformaFaturaSayfasi() {
         cari_id: Number(form.cari_id),
         kalemler: kalemler.map((k) => ({
           stok_karti_id: k.stok_karti_id ? Number(k.stok_karti_id) : null,
+          stok_seri_no_id: k.stok_seri_no_id ? Number(k.stok_seri_no_id) : null,
           aciklama: k.aciklama, miktar: Number(k.miktar), birim_fiyat: Number(k.birim_fiyat), kdv_orani: Number(k.kdv_orani),
         })),
       });
@@ -819,6 +853,7 @@ export default function ProformaFaturaSayfasi() {
     setFaturaNo('');
     setForm({ proforma_no: '', cari_id: '', tarih: new Date().toISOString().slice(0, 10), para_birimi: 'TRY', notlar: '' });
     setKalemler([bosKalem()]);
+    setSeriNoSecenekleriMap({});
     api.get('/proforma-faturalar/sonraki-no')
       .then((r) => setForm((f) => ({ ...f, proforma_no: r.data.proforma_no })))
       .catch(() => {});
@@ -867,7 +902,7 @@ export default function ProformaFaturaSayfasi() {
             <table>
               <thead>
                 <tr style={{ background: 'var(--zemin)' }}>
-                  {['Ürün (opsiyonel)', 'Açıklama', 'Miktar', 'Birim Fiyat', 'KDV %', ''].map((b) => (
+                  {['Ürün (opsiyonel)', 'Seri No (opsiyonel)', 'Açıklama', 'Miktar', 'Birim Fiyat', 'KDV %', ''].map((b) => (
                     <th key={b} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 12, color: 'var(--metin-ikincil)' }}>{b}</th>
                   ))}
                 </tr>
@@ -876,10 +911,27 @@ export default function ProformaFaturaSayfasi() {
                 {kalemler.map((k, i) => (
                   <tr key={i} style={{ borderTop: '1px solid var(--kenarlik)' }}>
                     <td style={{ padding: 8 }}>
-                      <select value={k.stok_karti_id} onChange={(e) => kalemGuncelle(i, 'stok_karti_id', e.target.value)} style={{ ...girdiStili, width: 320 }}>
+                      <select value={k.stok_karti_id} onChange={(e) => kalemGuncelle(i, 'stok_karti_id', e.target.value)} style={{ ...girdiStili, width: 260 }}>
                         <option value="">Seçin (ya da elle yazın)...</option>
                         {stokKartlari.map((s) => <option key={s.id} value={s.id}>{s.marka} {s.model}</option>)}
                       </select>
+                    </td>
+                    <td style={{ padding: 8 }}>
+                      {k.stok_karti_id ? (
+                        <>
+                          <select value={k.stok_seri_no_id} onChange={(e) => kalemGuncelle(i, 'stok_seri_no_id', e.target.value)} style={{ ...girdiStili, width: 170 }}>
+                            <option value="">Belirtilmesin</option>
+                            {(seriNoSecenekleriMap[i] || []).map((u) => (
+                              <option key={u.id} value={u.id}>{u.seri_no} ({u.durum === 'DEPODA' ? 'Depoda' : u.durum === 'ANTREPODA' ? 'Antrepoda' : 'Siparişte'})</option>
+                            ))}
+                          </select>
+                          {seriNoSecenekleriMap[i] && seriNoSecenekleriMap[i].length === 0 && (
+                            <div style={{ fontSize: 10.5, color: 'var(--kirmizi)', marginTop: 2 }}>Hazır ürün yok</div>
+                          )}
+                        </>
+                      ) : (
+                        <span style={{ fontSize: 11.5, color: 'var(--metin-soluk)' }}>—</span>
+                      )}
                     </td>
                     <td style={{ padding: 8 }}>
                       <input required value={k.aciklama} onChange={(e) => kalemGuncelle(i, 'aciklama', e.target.value)} style={{ ...girdiStili, width: 220 }} />
