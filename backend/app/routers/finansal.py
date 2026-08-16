@@ -19,6 +19,7 @@ from app.models.finansal import (
 import json
 from app.models.denetim import DuzenlemeKaydi
 from app.core.security import sifre_dogrula
+from app.db.soft_delete import yumusak_sil, yumusak_geri_getir, aktif_filtre
 from app.schemas.finansal import (
     CekOlusturIstegi, CekDuzenleIstegi, CekYanit, CekDurumGuncelleIstegi, CekGecmisYanit,
     LeasingOlusturIstegi, LeasingYanit, LeasingOdemeYanit, OdemeTahsilIstegi,
@@ -182,7 +183,7 @@ def cekleri_listele(
     tip: str | None = None, durum: str | None = None,
     sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
 ):
-    sorgu = select(Cek).where(Cek.sirket_id == sirket_id)
+    sorgu = select(Cek).where(Cek.sirket_id == sirket_id, aktif_filtre(Cek))
     if tip:
         sorgu = sorgu.where(Cek.tip == tip)
     if durum:
@@ -308,7 +309,7 @@ def leasing_olustur(
 @router.get("/leasing-sozlesmeleri", response_model=list[LeasingYanit],
             dependencies=[Depends(izin_gerektir("LEASING_GORUNTULE"))])
 def leasing_listele(sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
-    sorgu = select(LeasingSozlesme).where(LeasingSozlesme.sirket_id == sirket_id)
+    sorgu = select(LeasingSozlesme).where(LeasingSozlesme.sirket_id == sirket_id, aktif_filtre(LeasingSozlesme))
     sonuclar = list(db.execute(sorgu).scalars())
     cari_h = _cari_haritasi(db, sirket_id)
     urun_tanimi_h = _urun_tanimi_haritasi(db, sirket_id)
@@ -376,7 +377,7 @@ def taksitli_satis_planlarini_listele(
     musteri_cari_id: int | None = None,
     sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
 ):
-    sorgu = select(TaksitliSatisPlani).where(TaksitliSatisPlani.sirket_id == sirket_id)
+    sorgu = select(TaksitliSatisPlani).where(TaksitliSatisPlani.sirket_id == sirket_id, aktif_filtre(TaksitliSatisPlani))
     if musteri_cari_id:
         sorgu = sorgu.where(TaksitliSatisPlani.musteri_cari_id == musteri_cari_id)
     planlar = list(db.execute(sorgu).scalars())
@@ -751,7 +752,7 @@ def kiralama_sozlesmesi_duzenle(
 def kiralamalari_listele(
     durum: str | None = None, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
 ):
-    sorgu = select(KiralamaSozlesme).where(KiralamaSozlesme.sirket_id == sirket_id)
+    sorgu = select(KiralamaSozlesme).where(KiralamaSozlesme.sirket_id == sirket_id, aktif_filtre(KiralamaSozlesme))
     if durum:
         sorgu = sorgu.where(KiralamaSozlesme.durum == durum)
     sonuclar = list(db.execute(sorgu).scalars())
@@ -869,7 +870,7 @@ def bakim_kayitlarini_listele(
     stok_seri_no_id: int | None = None, tip: str | None = None,
     sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
 ):
-    sorgu = select(BakimKaydi).where(BakimKaydi.sirket_id == sirket_id)
+    sorgu = select(BakimKaydi).where(BakimKaydi.sirket_id == sirket_id, aktif_filtre(BakimKaydi))
     if stok_seri_no_id:
         sorgu = sorgu.where(BakimKaydi.stok_seri_no_id == stok_seri_no_id)
     if tip:
@@ -914,9 +915,18 @@ def cek_sil(cek_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Se
             urun.satis_tarihi = None
         urun.satis_cek_id = None
 
-    db.delete(cek)
-    db.commit()
+    yumusak_sil(db, cek)
     return {"silindi": True}
+
+
+@router.put("/cekler/{cek_id}/geri-getir", response_model=CekYanit,
+            dependencies=[Depends(izin_gerektir("CEK_DUZENLE"))])
+def cek_geri_getir(cek_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
+    cek = db.get(Cek, cek_id)
+    if cek is None or cek.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Çek bulunamadı.")
+    yumusak_geri_getir(db, cek)
+    return cek
 
 
 # ========================================================================= LEASING - SİL
@@ -935,9 +945,18 @@ def leasing_sil(leasing_id: int, sirket_id: int = Depends(aktif_sirket_id_getir)
         db.delete(j)
     for k in kalemler:
         db.delete(k)
-    db.delete(sozlesme)
-    db.commit()
+    yumusak_sil(db, sozlesme)
     return {"silindi": True}
+
+
+@router.put("/leasing-sozlesmeleri/{leasing_id}/geri-getir", response_model=LeasingYanit,
+            dependencies=[Depends(izin_gerektir("LEASING_DUZENLE"))])
+def leasing_geri_getir(leasing_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
+    sozlesme = db.get(LeasingSozlesme, leasing_id)
+    if sozlesme is None or sozlesme.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Leasing sözleşmesi bulunamadı.")
+    yumusak_geri_getir(db, sozlesme)
+    return sozlesme
 
 
 # =================================================================== TAKSİTLİ SATIŞ - SİL
@@ -975,9 +994,32 @@ def taksitli_satis_plani_sil(plan_id: int, sirket_id: int = Depends(aktif_sirket
             urun.satis_fiyati_try = None
             urun.satis_tarihi = None
 
-    db.delete(plan)
-    db.commit()
+    yumusak_sil(db, plan)
     return {"silindi": True}
+
+
+@router.put("/taksitli-satis-planlari/{plan_id}/geri-getir", response_model=TaksitliSatisYanit,
+            dependencies=[Depends(izin_gerektir("TAKSIT_DUZENLE"))])
+def taksitli_satis_plani_geri_getir(plan_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
+    """
+    Plani geri getirir. Silinirken, eger plana bagli bir urun SATILDI'dan
+    DEPODA'ya dondurulmusse, burada bunu da TERSINE cevirip urunu tekrar
+    SATILDI yapariz (plan uzerindeki bilgilerden) - aksi halde plan geri
+    gelir ama urun hala "satilmamis" gorunmeye devam ederdi.
+    """
+    plan = db.get(TaksitliSatisPlani, plan_id)
+    if plan is None or plan.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Taksit planı bulunamadı.")
+    yumusak_geri_getir(db, plan)
+    if plan.stok_seri_no_id:
+        urun = db.get(StokSeriNo, plan.stok_seri_no_id)
+        if urun is not None and urun.durum == StokDurum.DEPODA:
+            urun.durum = StokDurum.SATILDI
+            urun.musteri_cari_id = plan.musteri_cari_id
+            urun.satis_tarihi = plan.baslangic_tarihi
+            db.commit()
+    plan.kalemler = list(db.execute(select(TaksitliSatisKalemi).where(TaksitliSatisKalemi.plan_id == plan.id)).scalars())
+    return plan
 
 
 # ===================================================================== KİRALAMA - SONLANDIR
@@ -1068,9 +1110,18 @@ def kiralama_sil(sozlesme_id: int, sirket_id: int = Depends(aktif_sirket_id_geti
         db.delete(j)
     for k in kalemler:
         db.delete(k)
-    db.delete(sozlesme)
-    db.commit()
+    yumusak_sil(db, sozlesme)
     return {"silindi": True}
+
+
+@router.put("/kiralama-sozlesmeleri/{sozlesme_id}/geri-getir", response_model=KiralamaYanit,
+            dependencies=[Depends(izin_gerektir("KIRALAMA_DUZENLE"))])
+def kiralama_geri_getir(sozlesme_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
+    sozlesme = db.get(KiralamaSozlesme, sozlesme_id)
+    if sozlesme is None or sozlesme.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Kiralama sözleşmesi bulunamadı.")
+    yumusak_geri_getir(db, sozlesme)
+    return sozlesme
 
 
 # ========================================================================= BAKIM - SİL
@@ -1084,9 +1135,18 @@ def bakim_kaydi_sil(bakim_id: int, sirket_id: int = Depends(aktif_sirket_id_geti
     kayit = db.get(BakimKaydi, bakim_id)
     if kayit is None or kayit.sirket_id != sirket_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Bakım kaydı bulunamadı.")
-    db.delete(kayit)
-    db.commit()
+    yumusak_sil(db, kayit)
     return {"silindi": True}
+
+
+@router.put("/bakim-kayitlari/{bakim_id}/geri-getir", response_model=BakimYanit,
+            dependencies=[Depends(izin_gerektir("BAKIM_DUZENLE"))])
+def bakim_kaydi_geri_getir(bakim_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
+    kayit = db.get(BakimKaydi, bakim_id)
+    if kayit is None or kayit.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Bakım kaydı bulunamadı.")
+    yumusak_geri_getir(db, kayit)
+    return kayit
 
 
 # ============================================================================ ÇEK - DURUM GERİ AL
@@ -1339,7 +1399,7 @@ def pos_taksit_plani_olustur(
 def pos_taksit_planlarini_listele(
     sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
 ):
-    planlar = list(db.execute(select(PosTaksitPlani).where(PosTaksitPlani.sirket_id == sirket_id)).scalars())
+    planlar = list(db.execute(select(PosTaksitPlani).where(PosTaksitPlani.sirket_id == sirket_id, aktif_filtre(PosTaksitPlani))).scalars())
     return [_pos_taksit_zenginlestir(db, p) for p in planlar]
 
 
@@ -1444,9 +1504,30 @@ def pos_taksit_plani_sil(plan_id: int, sirket_id: int = Depends(aktif_sirket_id_
         urun.satis_yontemi = None
         urun.satis_kayit_zamani = None
 
-    db.delete(plan)
-    db.commit()
+    yumusak_sil(db, plan)
     return {"silindi": True}
+
+
+@router.put("/pos-taksit-planlari/{plan_id}/geri-getir", response_model=PosTaksitYanit,
+            dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
+def pos_taksit_plani_geri_getir(plan_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
+    """Plani geri getirir ve iliskili urunu (silinirken DEPODA'ya dondurulmusse) tekrar SATILDI yapar."""
+    plan = db.get(PosTaksitPlani, plan_id)
+    if plan is None or plan.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Plan bulunamadı.")
+    yumusak_geri_getir(db, plan)
+    urun = db.get(StokSeriNo, plan.stok_seri_no_id)
+    if urun is not None and urun.durum == StokDurum.DEPODA:
+        urun.durum = StokDurum.SATILDI
+        urun.musteri_cari_id = plan.musteri_cari_id
+        urun.satis_fiyati_try = plan.toplam_tutar
+        urun.satis_tarihi = plan.baslangic_tarihi
+        urun.satis_odeme_tipi = "FATURALI"
+        urun.satis_yontemi = "KART_TAKSITLI"
+        from datetime import datetime as _datetime
+        urun.satis_kayit_zamani = _datetime.now()
+    db.commit()
+    return _pos_taksit_zenginlestir(db, plan)
 
 @router.get("/pos-taksitleri/vadesi-gecenler", response_model=list[PosTaksitDetayYanit],
             dependencies=[Depends(izin_gerektir("STOK_GORUNTULE"))])
