@@ -546,6 +546,72 @@ function KarsilamaModali({ onKapat }) {
   );
 }
 
+// "Bugun ne yapmam lazim" sorusuna dogrudan cevap veren ozet - vadesi
+// GECMIS (henuz odenmemis/tahsil edilmemis) VE bugun vadesi gelen TUM
+// odeme/tahsilatlari (kaynagi ne olursa olsun - cek/leasing/akreditif/
+// taksit/kira) tek bir kutuda toplar. Backend'deki /yaklasan-vadeler
+// endpoint'i ZATEN bu birlestirmeyi yapiyor - burada sadece "gun=0"
+// (bugune kadar) ve "baslangic_gun=-60" (son 60 gundeki vadesi gecmisler
+// de dahil olsun) ile cagriliyor.
+function BugunYapilacaklarKutusu({ navigate }) {
+  const [veri, setVeri] = useState(null);
+  const [hata, setHata] = useState(null);
+
+  useEffect(() => {
+    api.get('/raporlar/yaklasan-vadeler', { params: { gun: 0, baslangic_gun: -60 } })
+      .then((r) => setVeri(r.data))
+      .catch((e) => setHata(hataMesajiCikar(e)));
+  }, []);
+
+  if (hata) return null; // sessizce gizle - dashboard'un geri kalanini bozmasin
+  if (!veri) return null;
+
+  const tumKalemler = [
+    ...veri.odemeler.map((o) => ({ ...o, yon: 'ODEME' })),
+    ...veri.tahsilatlar.map((t) => ({ ...t, yon: 'TAHSILAT' })),
+  ].sort((a, b) => a.tarih.localeCompare(b.tarih));
+
+  if (tumKalemler.length === 0) return null;
+
+  const bugun = new Date().toISOString().slice(0, 10);
+
+  return (
+    <Kart style={{ marginBottom: 20, border: '1.5px solid var(--amber, #d97706)' }}>
+      <div style={{ fontWeight: 700, fontSize: 14.5, marginBottom: 10 }}>
+        📌 Bugün Yapılacaklar — {tumKalemler.length} kalem
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {tumKalemler.map((k, i) => {
+          const gecmis = k.tarih < bugun;
+          return (
+            <div
+              key={i}
+              onClick={() => k.kaynak_tablo && navigate(SON_ISLEM_YOL_HARITASI[k.kaynak_tablo] || '/finansal')}
+              style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                padding: '8px 10px', borderRadius: 7, fontSize: 13, cursor: 'pointer',
+                background: gecmis ? 'var(--kirmizi-acik, #fde2e2)' : 'var(--zemin)',
+              }}
+            >
+              <div>
+                <span style={{ fontWeight: 600, color: k.yon === 'ODEME' ? 'var(--kirmizi)' : 'var(--yesil)' }}>
+                  {k.yon === 'ODEME' ? 'Ödeme' : 'Tahsilat'}
+                </span>
+                {' — '}{k.aciklama}
+                {k.cari_unvan && ` (${k.cari_unvan})`}
+                {gecmis && <span style={{ color: 'var(--kirmizi)', fontWeight: 600, marginLeft: 6 }}>⚠ vadesi geçti ({k.tarih})</span>}
+              </div>
+              <div style={{ fontWeight: 600, whiteSpace: 'nowrap', marginLeft: 10 }}>
+                {paraFormat(k.tutar, k.para_birimi)}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Kart>
+  );
+}
+
 export default function DashboardSayfasi() {
   const navigate = useNavigate();
   const [karsilamaAcik, setKarsilamaAcik] = useState(() => !localStorage.getItem(KARSILAMA_ANAHTARI));
@@ -571,6 +637,7 @@ export default function DashboardSayfasi() {
         }
       />
       <HizliIslemlerKutusu navigate={navigate} />
+      <BugunYapilacaklarKutusu navigate={navigate} />
       <NetDurumKutusu />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
         <AnaKasaKutusu navigate={navigate} />
