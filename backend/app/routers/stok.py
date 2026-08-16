@@ -24,6 +24,7 @@ from app.schemas.stok import (StokKartiOlusturIstegi, StokKartiYanit,
 from app.services.para_hareketi import para_hareketi_olustur
 from app.models.denetim import DuzenlemeKaydi
 from app.core.security import sifre_dogrula
+from app.db.soft_delete import yumusak_sil, yumusak_geri_getir, aktif_filtre
 from pydantic import BaseModel
 
 router = APIRouter(tags=["Stok"])
@@ -93,19 +94,24 @@ def stok_karti_sil(
     sirket_id: int = Depends(aktif_sirket_id_getir),
     db: Session = Depends(get_db),
 ):
+    """Karti GERCEKTEN silmez - soft-delete yapar, boylece her zaman geri getirilebilir."""
     kart = db.get(StokKarti, stok_karti_id)
     if kart is None or kart.sirket_id != sirket_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Stok kartı bulunamadı.")
-    try:
-        db.delete(kart)
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            "Bu stok kartı sipariş veya stok kayıtlarında kullanıldığı için silinemiyor."
-        )
+    yumusak_sil(db, kart)
     return {"silindi": True}
+
+
+@router.put("/stok-kartlari/{stok_karti_id}/geri-getir", response_model=StokKartiYanit,
+            dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
+def stok_karti_geri_getir(
+    stok_karti_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
+):
+    kart = db.get(StokKarti, stok_karti_id)
+    if kart is None or kart.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Stok kartı bulunamadı.")
+    yumusak_geri_getir(db, kart)
+    return kart
 
 
 @router.post("/stok-kartlari/toplu-ice-aktar", response_model=StokKartiTopluIceAktarSonucu,
@@ -220,7 +226,7 @@ def stok_kartlarini_listele(
     sirket_id: int = Depends(aktif_sirket_id_getir),
     db: Session = Depends(get_db),
 ):
-    sorgu = select(StokKarti).where(StokKarti.sirket_id == sirket_id)
+    sorgu = select(StokKarti).where(StokKarti.sirket_id == sirket_id, aktif_filtre(StokKarti))
     return list(db.execute(sorgu).scalars())
 
 
@@ -303,7 +309,7 @@ def stok_seri_no_listele(
     sirket_id: int = Depends(aktif_sirket_id_getir),
     db: Session = Depends(get_db),
 ):
-    sorgu = select(StokSeriNo).where(StokSeriNo.sirket_id == sirket_id)
+    sorgu = select(StokSeriNo).where(StokSeriNo.sirket_id == sirket_id, aktif_filtre(StokSeriNo))
     if durum:
         sorgu = sorgu.where(StokSeriNo.durum == durum)
     if stok_karti_id:
@@ -534,14 +540,28 @@ def stok_seri_no_sil(
             "Önce ürünün 'Satışı/Hurdayı Geri Al' işlemini yapın."
         )
 
+    # Maliyet kalemleri (alt kayitlar) GERCEKTEN silinir - bunlar bagimsiz
+    # bir "kayit" degil, urunun BIR PARCASI; ana urun soft-delete ile
+    # geri getirilince, maliyet kalemleri de zaten SIFIRDAN girilebilir.
     for kalem in list(db.execute(
         select(StokMaliyetKalemi).where(StokMaliyetKalemi.stok_seri_no_id == seri_id)
     ).scalars()):
         db.delete(kalem)
 
-    db.delete(kayit)
-    db.commit()
+    yumusak_sil(db, kayit)
     return {"silindi": True}
+
+
+@router.put("/stok-seri-no/{seri_id}/geri-getir", response_model=StokSeriNoYanit,
+            dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
+def stok_seri_no_geri_getir(
+    seri_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
+):
+    kayit = db.get(StokSeriNo, seri_id)
+    if kayit is None or kayit.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ürün bulunamadı.")
+    yumusak_geri_getir(db, kayit)
+    return kayit
 
 
 @router.put("/stok-seri-no/{seri_id}/durum", response_model=StokSeriNoYanit,
