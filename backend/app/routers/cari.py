@@ -157,6 +157,15 @@ async def tum_carilerin_ozeti(
     ).all():
         ekle(cari_id, tutar)
 
+    # Kredi karti (POS) bekleyen alacagi - henuz bankaya yatmamis taksitler
+    from app.models.finansal import PosTaksitPlani, PosTaksitDetay
+    for cari_id, tutar in db.execute(
+        select(PosTaksitPlani.musteri_cari_id, PosTaksitDetay.tutar)
+        .join(PosTaksitDetay, PosTaksitDetay.plan_id == PosTaksitPlani.id)
+        .where(PosTaksitPlani.sirket_id == sirket_id, PosTaksitDetay.yatti_mi.is_(False))
+    ).all():
+        ekle(cari_id, tutar)
+
     # Kira alacagi
     kira_sozlesmeler = {
         s.id: s for s in db.execute(select(KiralamaSozlesme).where(KiralamaSozlesme.sirket_id == sirket_id)).scalars()
@@ -425,6 +434,19 @@ async def cari_ozet(
     ).scalars())
     taksit_alacak_try = sum((t.tutar for t in taksitler), _Decimal("0"))
 
+    # 1b) Kredi karti (POS) bekleyen alacagi (bu cari MUSTERI ise) - henuz
+    # bankaya yatmamis taksitler, satis aninda ZATEN Stok'tan dustugu icin
+    # bu kalem eklenmezse tutar hicbir yerde gorunmeden kaybolurdu.
+    from app.models.finansal import PosTaksitPlani, PosTaksitDetay
+    pos_taksit_alacak_try = _Decimal("0")
+    pos_taksitler = list(db.execute(
+        select(PosTaksitDetay)
+        .join(PosTaksitPlani, PosTaksitPlani.id == PosTaksitDetay.plan_id)
+        .where(PosTaksitPlani.sirket_id == sirket_id, PosTaksitPlani.musteri_cari_id == cari_id,
+               PosTaksitDetay.yatti_mi.is_(False))
+    ).scalars())
+    pos_taksit_alacak_try = sum((t.tutar for t in pos_taksitler), _Decimal("0"))
+
     # 2) Kiralama tahsilat alacagi (bu cari KIRACI ise)
     kira_alacak_try = _Decimal("0")
     kira_sozlesmeler = {
@@ -535,6 +557,7 @@ async def cari_ozet(
 
     alacaklar = [
         CariOzetKalemi(kategori="Taksitli Satış Alacağı", tutar_try=taksit_alacak_try),
+        CariOzetKalemi(kategori="Kredi Kartı (POS) Bekleyen Alacağı", tutar_try=pos_taksit_alacak_try),
         CariOzetKalemi(kategori="Kiralama Tahsilat Alacağı", tutar_try=kira_alacak_try),
         CariOzetKalemi(kategori="Alınan Çekler (Portföyde)", tutar_try=cek_alacak_try),
         CariOzetKalemi(kategori="Ortağa Verilen Borç (Alacak)", tutar_try=ortak_alacak_try),
