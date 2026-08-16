@@ -80,6 +80,26 @@ export function Buton({ children, variant = 'birincil', ...props }) {
 // SEKTOR terimlerini bilmeyebilir - kucuk bir (?) ikonu, TIKLANINCA kisa
 // bir aciklama gosterir. Hover DEGIL tiklama kullanilir (mobil/dokunmatik
 // ekranlarda da calissin diye).
+// Kullanici uzun bir formu doldururken YANLISLIKLA sekmeyi kapatirsa/
+// yenilerse, veriler kaybolmadan ONCE tarayicinin KENDI (native) "Bu
+// sayfadan ayrilmak istediginizden emin misiniz?" uyarisini gostermek
+// icin. Kullanimi: useKirliFormUyarisi(form degisti mi BOOLEAN'i).
+// NOT: Bu SADECE sekme kapama/yenileme/disarida bir URL'e gitme gibi
+// TARAYICI SEVIYESI navigasyonlari yakalar - uygulama ICI (React Router)
+// sayfa gecislerini KAPSAMAZ, cunku o GUVENILIR bicimde react-router-dom
+// surumune bagli bir API gerektirir.
+export function useKirliFormUyarisi(kirliMi) {
+  useEffect(() => {
+    function beforeUnload(e) {
+      if (!kirliMi) return;
+      e.preventDefault();
+      e.returnValue = '';
+    }
+    window.addEventListener('beforeunload', beforeUnload);
+    return () => window.removeEventListener('beforeunload', beforeUnload);
+  }, [kirliMi]);
+}
+
 export function BilgiIpucu({ metin }) {
   const [acik, setAcik] = useState(false);
   const kutuRef = useRef(null);
