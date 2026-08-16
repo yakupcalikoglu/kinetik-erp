@@ -46,6 +46,25 @@ api.interceptors.response.use((response) => {
   return response;
 });
 
+// ---------------------------------------------------------------- Geri Al Bildirimi (Toast)
+// Bir kayit "yumusak silindiginde" (soft-delete), birkac saniye boyunca
+// "Geri Al" secenegi sunan bir toast gostermek icin - ozelOnayIste ile
+// AYNI pub-sub deseni, ama PROMISE BEKLEMEZ: silme islemi zaten backend'de
+// TAMAMLANMIS durumda, "geri al" sadece opsiyonel bir kolayliktir. Sayfalar
+// bunu, sil() fonksiyonlarinin SONUNDA cagirir:
+//   await api.delete(`/cariler/${id}`);
+//   geriAlBildirimGoster(`"${unvan}" silindi.`, async () => {
+//     await api.put(`/cariler/${id}/geri-getir`); yukle();
+//   });
+const _geriAlDinleyicileri = new Set();
+export function geriAlBildirimDinle(fn) {
+  _geriAlDinleyicileri.add(fn);
+  return () => _geriAlDinleyicileri.delete(fn);
+}
+export function geriAlBildirimGoster(mesaj, geriAlFn) {
+  _geriAlDinleyicileri.forEach((fn) => fn({ mesaj, geriAlFn }));
+}
+
 // ---------------------------------------------------------------- Genel Yukleniyor Cubugu
 // Sayfanin en ustunde ince bir "yukleniyor" cubugu gostermek icin, o an
 // devam eden istek sayisini takip ediyoruz. Sayac > 0 iken cubuk gorunur.
