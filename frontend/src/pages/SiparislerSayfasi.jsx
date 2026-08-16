@@ -759,6 +759,20 @@ export default function SiparislerSayfasi() {
     );
   }
 
+  function tumunuExceleAktar() {
+    excelIndir(
+      siparisler.map((s) => {
+        const toplam = (s.urunler || []).reduce((acc, u) => acc + u.miktar * Number(u.birim_fiyat), 0);
+        return {
+          'Sipariş No': s.siparis_no, 'Tedarikçi': cariAdi(s.tedarikci_cari_id),
+          'Tarih': s.siparis_tarihi, 'Durum': DURUM_METIN[s.durum] || s.durum,
+          'Tutar': toplam, 'Para Birimi': s.para_birimi,
+        };
+      }),
+      'tum_siparisler', 'Siparişler',
+    );
+  }
+
   async function siparisiSil(siparisId, siparisNo) {
     if (!(await ozelOnayIste(`${siparisNo} numaralı siparişi silmek istediğinize emin misiniz?`))) return;
     try {
@@ -833,7 +847,14 @@ export default function SiparislerSayfasi() {
       <SayfaBasligi
         baslik="Siparişler"
         aciklama="İthalat ve yurtiçi alım siparişleri"
-        eylem={<Link to="/siparisler/yeni"><Buton>+ Yeni sipariş</Buton></Link>}
+        eylem={(
+          <div style={{ display: 'flex', gap: 8 }}>
+            <DahaFazlaMenu ogeler={[
+              { etiket: 'Excel İndir', onClick: tumunuExceleAktar },
+            ]} />
+            <Link to="/siparisler/yeni"><Buton>+ Yeni sipariş</Buton></Link>
+          </div>
+        )}
       />
       <HataMesaji>{hata}</HataMesaji>
       {bilgiMesaji && (
