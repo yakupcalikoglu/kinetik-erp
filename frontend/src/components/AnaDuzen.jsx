@@ -171,6 +171,78 @@ function Bildirimler() {
   );
 }
 
+// Mobilde HER islem icin hamburger menuyu acmak yerine - en sik kullanilan
+// 5 moduie (Instagram/WhatsApp tarzi) SABIT bir alt cubuktan HIZLI erisim.
+// SADECE dar ekranlarda (@media max-width: 860px, bkz. asagidaki <style>)
+// gorunur; genis ekranlarda hicbir etkisi yoktur.
+const MOBIL_ALT_NAV_OGELERI = [
+  { yol: '/', ad: 'Ana Sayfa', Simge: LayoutDashboard },
+  { yol: '/stok', ad: 'Stok', Simge: Boxes, gerekliIzin: 'STOK_GORUNTULE' },
+  { yol: '/siparisler', ad: 'Sipariş', Simge: ShoppingCart },
+  { yol: '/cariler', ad: 'Cari', Simge: Users, gerekliIzin: 'CARI_GORUNTULE' },
+  { yol: '/satis-yap', ad: 'Satış', Simge: HandCoins, gerekliIzin: 'STOK_DUZENLE' },
+];
+
+function MobilAltNavBar({ izinVarMi }) {
+  const location = useLocation();
+  const gorunurler = MOBIL_ALT_NAV_OGELERI.filter((m) => izinVarMi(m.gerekliIzin));
+
+  return (
+    <nav
+      className="kinetik-mobil-alt-nav"
+      style={{
+        display: 'none', position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 45,
+        background: 'white', borderTop: '1px solid var(--kenarlik)',
+        boxShadow: '0 -2px 10px rgba(0,0,0,0.06)',
+      }}
+    >
+      {gorunurler.map((m) => {
+        const aktif = m.yol === '/' ? location.pathname === '/' : location.pathname.startsWith(m.yol);
+        return (
+          <NavLink
+            key={m.yol}
+            to={m.yol}
+            style={{
+              flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+              padding: '8px 0 6px', fontSize: 10.5, textDecoration: 'none',
+              color: aktif ? 'var(--lacivert)' : 'var(--metin-soluk)',
+              fontWeight: aktif ? 600 : 400,
+            }}
+          >
+            <m.Simge size={19} />
+            {m.ad}
+          </NavLink>
+        );
+      })}
+    </nav>
+  );
+}
+
+const SON_ZIYARETLER_ANAHTARI = 'kinetik_erp_son_ziyaretler';
+
+function sonZiyaretleriOku() {
+  try {
+    const ham = localStorage.getItem(SON_ZIYARETLER_ANAHTARI);
+    return ham ? JSON.parse(ham) : [];
+  } catch {
+    return [];
+  }
+}
+
+// Kullanici bir arama SONUCUNA (KOMUT haric - komutlar "gecmis" degil,
+// islem kisayoludur) tikladiginda, bu kaydi "son ziyaret edilenler"
+// listesine ekler - EN BASTA, tekrarlari kaldirarak, en fazla 5 kayit.
+function sonZiyaretEkle(s) {
+  if (s.tur === 'KOMUT') return;
+  try {
+    const mevcut = sonZiyaretleriOku().filter((v) => !(v.tur === s.tur && v.id === s.id));
+    const yeni = [{ tur: s.tur, id: s.id, baslik: s.baslik, alt_baslik: s.alt_baslik, yol: s.yol }, ...mevcut].slice(0, 5);
+    localStorage.setItem(SON_ZIYARETLER_ANAHTARI, JSON.stringify(yeni));
+  } catch {
+    // localStorage kullanilamiyorsa (gizli sekme vb.) sessizce yoksay
+  }
+}
+
 function GenelArama() {
   const [sorgu, setSorgu] = useState('');
   const [sonuclar, setSonuclar] = useState(null);
@@ -181,6 +253,7 @@ function GenelArama() {
 
   const [aramaHata, setAramaHata] = useState(null);
   const girdiRef = useRef(null);
+  const [sonZiyaretler, setSonZiyaretler] = useState(() => sonZiyaretleriOku());
 
   useEffect(() => {
     if (sorgu.trim().length < 2) {
@@ -254,6 +327,8 @@ function GenelArama() {
   function sonucaGit(s) {
     setAcik(false);
     setSorgu('');
+    sonZiyaretEkle(s);
+    setSonZiyaretler(sonZiyaretleriOku());
     if (s.tur === 'KOMUT') {
       navigate(s.yol);
     } else if (ARANABILIR_TURLER.includes(s.tur)) {
@@ -279,6 +354,37 @@ function GenelArama() {
           }}
         />
       </div>
+      {acik && sorgu.trim().length < 2 && sonZiyaretler.length > 0 && (
+        <div style={{
+          position: 'absolute', top: '110%', left: 0, right: 0, background: 'white',
+          border: '1px solid var(--kenarlik)', borderRadius: 8, boxShadow: '0 6px 18px rgba(0,0,0,0.12)',
+          maxHeight: 320, overflowY: 'auto', zIndex: 50,
+        }}>
+          <div style={{ padding: '8px 12px', fontSize: 11, fontWeight: 600, color: 'var(--metin-soluk)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+            Son ziyaret edilenler
+          </div>
+          {sonZiyaretler.map((s, i) => (
+            <div
+              key={`${s.tur}-${s.id}`}
+              onClick={() => sonucaGit(s)}
+              style={{
+                padding: '8px 12px', cursor: 'pointer', borderTop: '1px solid var(--kenarlik)',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8,
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--zemin)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'white'; }}
+            >
+              <div style={{ overflow: 'hidden' }}>
+                <div style={{ fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{s.baslik}</div>
+                {s.alt_baslik && <div style={{ fontSize: 11.5, color: 'var(--metin-ikincil)' }}>{s.alt_baslik}</div>}
+              </div>
+              <span style={{ fontSize: 10.5, color: 'var(--lacivert)', background: 'var(--zemin)', padding: '2px 7px', borderRadius: 5, flexShrink: 0 }}>
+                {ARAMA_TUR_METIN[s.tur] || s.tur}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
       {acik && sorgu.trim().length >= 2 && (
         <div style={{
           position: 'absolute', top: '110%', left: 0, right: 0, background: 'white',
@@ -833,6 +939,12 @@ export default function AnaDuzen() {
         .kinetik-sidebar-orten { display: none; }
 
         @media (max-width: 860px) {
+          .kinetik-mobil-alt-nav {
+            display: flex !important;
+          }
+          .kinetik-ana-icerik {
+            padding-bottom: 76px !important;
+          }
           .kinetik-sidebar {
             position: fixed;
             top: 0; left: 0; bottom: 0;
@@ -1089,6 +1201,7 @@ export default function AnaDuzen() {
         <main className="kinetik-ana-icerik" style={{ flex: 1, padding: 28, overflow: 'auto' }}>
           <Outlet />
         </main>
+        <MobilAltNavBar izinVarMi={izinVarMi} />
       </div>
     </div>
   );
