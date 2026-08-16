@@ -4787,34 +4787,29 @@ export default function FinansalTakipSayfasi() {
   const [arananParametreler] = useSearchParams();
   const [sekme, setSekme] = useState(arananParametreler.get('sekme') || 'taksit');
 
+  // Navigasyon ARTIK sol ANA menudeki (AnaDuzen) akordeondan geliyor - o,
+  // URL'i ("/finansal?sekme=X") degistirerek calisiyor. Bu component ZATEN
+  // "/finansal" sayfasindaysa (yeniden MOUNT olmadan, SADECE query
+  // degisirse), useState'in ILK deger okumasi TEKRAR calismaz - bu yuzden
+  // URL degistiginde "sekme"yi burada AYRICA senkronize ediyoruz.
+  useEffect(() => {
+    const yeni = arananParametreler.get('sekme');
+    if (yeni) setSekme(yeni);
+  }, [arananParametreler]);
+
   return (
     <div>
       <SayfaBasligi baslik="Finansal takip" aciklama="Çek, leasing, taksitli satış, kiralama, bakım, personel, diğer giderler ve borçlar" />
-      <style>{`
-        @media (max-width: 860px) {
-          .finansal-govde { flex-direction: column; }
-          .finansal-sol-nav {
-            width: 100% !important; border-right: none !important; margin-right: 0 !important;
-            border-bottom: 1px solid var(--kenarlik); padding-right: 0 !important;
-            padding-bottom: 14px; margin-bottom: 18px; overflow-x: auto;
-          }
-        }
-      `}</style>
-      <div className="finansal-govde" style={{ display: 'flex', alignItems: 'flex-start' }}>
-        <SolNavigasyonPaneli aktif={sekme} onDegistir={setSekme} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          {sekme === 'cek' && <CekSekmesi />}
-          {sekme === 'postaksit' && <PosTaksitSekmesi />}
-          {sekme === 'akreditif' && <AkreditifSekmesi />}
-          {sekme === 'leasing' && <LeasingSekmesi />}
-          {sekme === 'taksit' && <TaksitSekmesi />}
-          {sekme === 'kiralama' && <KiralamaSekmesi />}
-          {sekme === 'bakim' && <BakimSekmesi />}
-          {sekme === 'personel' && <PersonelSekmesi />}
-          {sekme === 'gider' && <SabitGiderSekmesi />}
-          {sekme === 'borc' && <BorcSekmesi />}
-        </div>
-      </div>
+      {sekme === 'cek' && <CekSekmesi />}
+      {sekme === 'postaksit' && <PosTaksitSekmesi />}
+      {sekme === 'akreditif' && <AkreditifSekmesi />}
+      {sekme === 'leasing' && <LeasingSekmesi />}
+      {sekme === 'taksit' && <TaksitSekmesi />}
+      {sekme === 'kiralama' && <KiralamaSekmesi />}
+      {sekme === 'bakim' && <BakimSekmesi />}
+      {sekme === 'personel' && <PersonelSekmesi />}
+      {sekme === 'gider' && <SabitGiderSekmesi />}
+      {sekme === 'borc' && <BorcSekmesi />}
     </div>
   );
 }
