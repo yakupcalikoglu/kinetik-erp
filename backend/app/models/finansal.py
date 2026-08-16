@@ -6,6 +6,7 @@ from sqlalchemy import (Column, BigInteger, String, Numeric, Boolean, Integer,
                          DateTime, Date, ForeignKey, Text, Enum as SAEnum)
 from sqlalchemy.sql import func
 from app.db.session import Base
+from app.db.soft_delete import SoftDeleteMixin
 
 
 class ParaBirimi(str, enum.Enum):
@@ -30,7 +31,7 @@ class CekDurum(str, enum.Enum):
     IPTAL = "IPTAL"
 
 
-class Cek(Base):
+class Cek(Base, SoftDeleteMixin):
     __tablename__ = "cekler"
 
     id = Column(BigInteger, primary_key=True)
@@ -63,7 +64,7 @@ class CekGecmis(Base):
 
 
 # ----------------------------------------------------------------- Leasing
-class LeasingSozlesme(Base):
+class LeasingSozlesme(Base, SoftDeleteMixin):
     __tablename__ = "leasing_sozlesmeleri"
 
     id = Column(BigInteger, primary_key=True)
@@ -118,7 +119,7 @@ class LeasingOdeme(Base):
 
 
 # ------------------------------------------------------------ Taksitli Satış
-class TaksitliSatisPlani(Base):
+class TaksitliSatisPlani(Base, SoftDeleteMixin):
     __tablename__ = "taksitli_satis_planlari"
 
     id = Column(BigInteger, primary_key=True)
@@ -176,7 +177,7 @@ class TaksitDetay(Base):
 
 
 # --------------------------------------------------------------- Kiralama
-class KiralamaSozlesme(Base):
+class KiralamaSozlesme(Base, SoftDeleteMixin):
     __tablename__ = "kiralama_sozlesmeleri"
 
     id = Column(BigInteger, primary_key=True)
@@ -238,7 +239,7 @@ class BakimTip(str, enum.Enum):
     GIDER = "GIDER"
 
 
-class BakimKaydi(Base):
+class BakimKaydi(Base, SoftDeleteMixin):
     __tablename__ = "bakim_kayitlari"
 
     id = Column(BigInteger, primary_key=True)
@@ -254,7 +255,7 @@ class BakimKaydi(Base):
 
 
 # ---------------------------------------------------- Kredi Kartı (POS) Taksit Takibi
-class PosTaksitPlani(Base):
+class PosTaksitPlani(Base, SoftDeleteMixin):
     """
     Musteri, satisi KREDI KARTI ile TAKSITLI odedigindeyse acilir. Taksitli
     Satis'tan (musteriden biz tahsilat yaparız) TEMEL FARKI: burada satis
