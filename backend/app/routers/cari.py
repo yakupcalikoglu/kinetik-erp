@@ -591,7 +591,10 @@ def cari_tum_hareketler(
     "bu musteriyle simdiye kadar ne is yaptik" sorusuna cevap verir.
     """
     from app.models.stok import StokSeriNo, StokKarti, Siparis
-    from app.models.finansal import TaksitliSatisPlani, KiralamaSozlesme, Cek, CekTip, BakimKaydi, BakimTip, LeasingSozlesme
+    from app.models.finansal import (
+        TaksitliSatisPlani, KiralamaSozlesme, Cek, CekTip, BakimKaydi, BakimTip, LeasingSozlesme,
+        PosTaksitPlani,
+    )
 
     satirlar: list[CariHareketSatiri] = []
 
@@ -656,6 +659,20 @@ def cari_tum_hareketler(
             tarih=p.baslangic_tarihi, tur="TAKSITLI_SATIS",
             aciklama=f"Taksitli satış planı — {p.taksit_sayisi} taksit",
             tutar_try=0, kaynak_tablo="TAKSITLI_SATIS_PLANI", kaynak_id=p.id,
+        ))
+
+    # 4b) Kredi karti (POS) taksitli satislar
+    pos_planlar = list(db.execute(
+        select(PosTaksitPlani).where(PosTaksitPlani.sirket_id == sirket_id, PosTaksitPlani.musteri_cari_id == cari_id)
+    ).scalars())
+    for pp in pos_planlar:
+        urun = db.get(StokSeriNo, pp.stok_seri_no_id)
+        kart = db.get(StokKarti, urun.stok_karti_id) if urun else None
+        urun_bilgisi = f"{kart.marka} {kart.model} ({urun.seri_no})" if kart and urun else (urun.seri_no if urun else "")
+        satirlar.append(CariHareketSatiri(
+            tarih=pp.baslangic_tarihi, tur="POS_TAKSIT",
+            aciklama=f"Kredi kartı taksitli satış — {urun_bilgisi} ({pp.taksit_sayisi} taksit)",
+            tutar_try=pp.toplam_tutar, kaynak_tablo="POS_TAKSIT", kaynak_id=pp.id,
         ))
 
     # 5) Cekler
