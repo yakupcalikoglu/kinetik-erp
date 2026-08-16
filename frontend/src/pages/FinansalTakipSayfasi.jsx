@@ -1,6 +1,6 @@
 import { useEffect, useState, Fragment } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { api, hataMesajiCikar, ozelOnayIste, ozelAlert } from '../api/client';
+import { api, hataMesajiCikar, ozelOnayIste, ozelAlert, geriAlBildirimGoster } from '../api/client';
 import {
   Kart, SayfaBasligi, Buton, Etiket, Alan, girdiStili, BosDurum, HataMesaji, paraFormat, Sekmeler, eylemChipStili,
   OtomatikTamamlamaGirdisi, ParaGirdisi, useTarihGruplama, YilBasligi, AyBasligi, BilgiIpucu, DahaFazlaMenu,
@@ -728,6 +728,10 @@ function CekSekmesi() {
     try {
       await api.delete(`/cekler/${cekId}`);
       yukle();
+      geriAlBildirimGoster('Çek silindi.', async () => {
+        await api.put(`/cekler/${cekId}/geri-getir`);
+        yukle();
+      });
     } catch (err) { setHata(hataMesajiCikar(err)); }
   }
 
@@ -1091,6 +1095,10 @@ function PosTaksitSekmesi() {
     try {
       await api.delete(`/pos-taksit-planlari/${planId}`);
       yukle();
+      geriAlBildirimGoster('Kredi kartı taksit planı silindi.', async () => {
+        await api.put(`/pos-taksit-planlari/${planId}/geri-getir`);
+        yukle();
+      });
     } catch (err) {
       setHata(hataMesajiCikar(err));
     }
@@ -2650,6 +2658,10 @@ function BakimSekmesi() {
     try {
       await api.delete(`/bakim-kayitlari/${bakimId}`);
       yukle();
+      geriAlBildirimGoster('Bakım kaydı silindi.', async () => {
+        await api.put(`/bakim-kayitlari/${bakimId}/geri-getir`);
+        yukle();
+      });
     } catch (err) { setHata(hataMesajiCikar(err)); }
   }
 
@@ -2874,6 +2886,10 @@ function LeasingSekmesi() {
       await api.delete(`/leasing-sozlesmeleri/${id}`);
       if (seciliPlan?.id === id) setSeciliPlan(null);
       yukle();
+      geriAlBildirimGoster('Leasing sözleşmesi silindi.', async () => {
+        await api.put(`/leasing-sozlesmeleri/${id}/geri-getir`);
+        yukle();
+      });
     } catch (err) { setHata(hataMesajiCikar(err)); }
   }
 
@@ -4312,6 +4328,10 @@ function SabitGiderSekmesi() {
     try {
       await api.delete(`/sabit-giderler/${giderId}`);
       yukle();
+      geriAlBildirimGoster('Gider kaydı silindi.', async () => {
+        await api.put(`/sabit-giderler/${giderId}/geri-getir`);
+        yukle();
+      });
     } catch (err) { setHata(hataMesajiCikar(err)); }
   }
 
