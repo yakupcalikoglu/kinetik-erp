@@ -92,45 +92,51 @@ const SEKME_GRUPLARI = [
   },
 ];
 
-function GruplananSekmeler({ aktif, onDegistir }) {
+// Profesyonel ERP/muhasebe yazilimlarinda (SAP Business One, Logo, QuickBooks,
+// Xero) YAYGIN olan desen: SOL tarafta KOMPAKT bir navigasyon paneli, sagda
+// secili bolumun icerigi. Kinetik ERP'nin KENDISI de ana navigasyonda (sol
+// sidebar) AYNI deseni kullaniyor - Finansal Takip'in kendi icinde bunu
+// TEKRARLAMASI, kullanici icin TUTARLI ve TANIDIK bir deneyim saglar. Onceki
+// "ustte yatay grup kutulari" tasarimi (9-10 sekme buyudukce) sikisik
+// gorunmeye baslamisti.
+function SolNavigasyonPaneli({ aktif, onDegistir }) {
   return (
-    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 20 }}>
-      {SEKME_GRUPLARI.map((grup) => (
-        <div
-          key={grup.baslik}
-          style={{
-            flex: '1 1 200px', minWidth: 200, padding: '10px 12px', borderRadius: 10,
-            border: '1px solid var(--kenarlik)', background: 'var(--zemin)',
-          }}
-        >
-          <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--metin-ikincil)', marginBottom: 2 }}>
+    <nav
+      className="finansal-sol-nav"
+      style={{
+        width: 220, flexShrink: 0, borderRight: '1px solid var(--kenarlik)',
+        paddingRight: 16, marginRight: 20,
+      }}
+    >
+      {SEKME_GRUPLARI.map((grup, i) => (
+        <div key={grup.baslik} style={{ marginBottom: i === SEKME_GRUPLARI.length - 1 ? 0 : 18 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--metin-soluk)', letterSpacing: '0.03em', textTransform: 'uppercase', marginBottom: 6, padding: '0 4px' }}>
             {grup.baslik}
           </div>
-          <div style={{ fontSize: 10.5, color: 'var(--metin-soluk)', marginBottom: 8 }}>
-            {grup.aciklama}
-          </div>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {grup.sekmeler.map((s) => (
-              <span key={s.deger} style={{ display: 'inline-flex', alignItems: 'center' }}>
+              <div key={s.deger} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 <button
                   onClick={() => onDegistir(s.deger)}
                   style={{
-                    padding: '6px 10px', borderRadius: 7, fontSize: 12.5, cursor: 'pointer',
-                    border: aktif === s.deger ? '1.5px solid var(--lacivert)' : '1px solid var(--kenarlik)',
-                    background: aktif === s.deger ? 'var(--lacivert)' : 'white',
+                    flex: 1, textAlign: 'left', padding: '8px 10px', borderRadius: 7, fontSize: 13, cursor: 'pointer',
+                    border: 'none',
+                    background: aktif === s.deger ? 'var(--lacivert)' : 'transparent',
                     color: aktif === s.deger ? 'white' : 'var(--metin-birincil)',
                     fontWeight: aktif === s.deger ? 600 : 400,
                   }}
+                  onMouseEnter={(e) => { if (aktif !== s.deger) e.currentTarget.style.background = 'var(--zemin)'; }}
+                  onMouseLeave={(e) => { if (aktif !== s.deger) e.currentTarget.style.background = 'transparent'; }}
                 >
                   {s.etiket}
                 </button>
                 {s.bilgi && <BilgiIpucu metin={s.bilgi} />}
-              </span>
+              </div>
             ))}
           </div>
         </div>
       ))}
-    </div>
+    </nav>
   );
 }
 
@@ -4784,18 +4790,31 @@ export default function FinansalTakipSayfasi() {
   return (
     <div>
       <SayfaBasligi baslik="Finansal takip" aciklama="Çek, leasing, taksitli satış, kiralama, bakım, personel, diğer giderler ve borçlar" />
-      <GruplananSekmeler aktif={sekme} onDegistir={setSekme} />
-
-      {sekme === 'cek' && <CekSekmesi />}
-      {sekme === 'postaksit' && <PosTaksitSekmesi />}
-      {sekme === 'akreditif' && <AkreditifSekmesi />}
-      {sekme === 'leasing' && <LeasingSekmesi />}
-      {sekme === 'taksit' && <TaksitSekmesi />}
-      {sekme === 'kiralama' && <KiralamaSekmesi />}
-      {sekme === 'bakim' && <BakimSekmesi />}
-      {sekme === 'personel' && <PersonelSekmesi />}
-      {sekme === 'gider' && <SabitGiderSekmesi />}
-      {sekme === 'borc' && <BorcSekmesi />}
+      <style>{`
+        @media (max-width: 860px) {
+          .finansal-govde { flex-direction: column; }
+          .finansal-sol-nav {
+            width: 100% !important; border-right: none !important; margin-right: 0 !important;
+            border-bottom: 1px solid var(--kenarlik); padding-right: 0 !important;
+            padding-bottom: 14px; margin-bottom: 18px; overflow-x: auto;
+          }
+        }
+      `}</style>
+      <div className="finansal-govde" style={{ display: 'flex', alignItems: 'flex-start' }}>
+        <SolNavigasyonPaneli aktif={sekme} onDegistir={setSekme} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {sekme === 'cek' && <CekSekmesi />}
+          {sekme === 'postaksit' && <PosTaksitSekmesi />}
+          {sekme === 'akreditif' && <AkreditifSekmesi />}
+          {sekme === 'leasing' && <LeasingSekmesi />}
+          {sekme === 'taksit' && <TaksitSekmesi />}
+          {sekme === 'kiralama' && <KiralamaSekmesi />}
+          {sekme === 'bakim' && <BakimSekmesi />}
+          {sekme === 'personel' && <PersonelSekmesi />}
+          {sekme === 'gider' && <SabitGiderSekmesi />}
+          {sekme === 'borc' && <BorcSekmesi />}
+        </div>
+      </div>
     </div>
   );
 }
