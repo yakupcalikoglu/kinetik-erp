@@ -495,7 +495,7 @@ function useStokKartlari() {
 const DURUM_TON = { TASLAK: 'notr', ONAYLANDI: 'amber', FATURALASTI: 'yesil' };
 const DURUM_METIN = { TASLAK: 'Taslak', ONAYLANDI: 'Onaylandı', FATURALASTI: 'Faturalaştı' };
 
-function GecmisProformalar({ cariler, yenidenYukleTetik, onGoruntule }) {
+function GecmisProformalar({ cariler, stokKartlari, yenidenYukleTetik, onGoruntule }) {
   const { oturum } = useAuth();
   const [liste, setListe] = useState([]);
   const [hata, setHata] = useState(null);
@@ -599,6 +599,7 @@ function GecmisProformalar({ cariler, yenidenYukleTetik, onGoruntule }) {
                           miktar: k.miktar, birimFiyat: k.birim_fiyat, kdvOrani: k.kdv_orani,
                         }))}
                         paraBirimi={p.para_birimi}
+                        urunSecenekleri={stokKartlari}
                         notlar={belgeNotlari[p.id] ?? (p.notlar || '')}
                         notlarDegistir={(v) => setBelgeNotlari((f) => ({ ...f, [p.id]: v }))}
                         notKaydediliyor={false}
@@ -621,7 +622,7 @@ function GecmisProformalar({ cariler, yenidenYukleTetik, onGoruntule }) {
   );
 }
 
-function GecmisFaturalar({ cariler, yenidenYukleTetik }) {
+function GecmisFaturalar({ cariler, stokKartlari, yenidenYukleTetik }) {
   const { oturum } = useAuth();
   const [liste, setListe] = useState([]);
   const [hata, setHata] = useState(null);
@@ -710,6 +711,7 @@ function GecmisFaturalar({ cariler, yenidenYukleTetik }) {
                           aciklama: k.aciklama || '', miktar: k.miktar, birimFiyat: k.birim_fiyat, kdvOrani: k.kdv_orani,
                         }))}
                         paraBirimi={f.para_birimi}
+                        urunSecenekleri={stokKartlari}
                         notlar={belgeNotlari[f.id] ?? (f.notlar || '')}
                         notlarDegistir={(v) => setBelgeNotlari((s) => ({ ...s, [f.id]: v }))}
                         notKaydediliyor={false}
@@ -1061,8 +1063,8 @@ export default function ProformaFaturaSayfasi() {
         </Kart>
       )}
 
-      <GecmisProformalar cariler={cariler} yenidenYukleTetik={gecmisYenidenYukleTetik} onGoruntule={gecmistenGoruntule} />
-      <GecmisFaturalar cariler={cariler} yenidenYukleTetik={gecmisYenidenYukleTetik} />
+      <GecmisProformalar cariler={cariler} stokKartlari={stokKartlari} yenidenYukleTetik={gecmisYenidenYukleTetik} onGoruntule={gecmistenGoruntule} />
+      <GecmisFaturalar cariler={cariler} stokKartlari={stokKartlari} yenidenYukleTetik={gecmisYenidenYukleTetik} />
     </div>
   );
 }
