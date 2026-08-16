@@ -6,6 +6,7 @@ from sqlalchemy import (Column, BigInteger, String, Numeric, Boolean, Integer,
                          DateTime, Date, ForeignKey, Text, Enum as SAEnum)
 from sqlalchemy.sql import func
 from app.db.session import Base
+from app.db.soft_delete import SoftDeleteMixin
 
 
 class ParaBirimi(str, enum.Enum):
@@ -16,6 +17,8 @@ class ParaBirimi(str, enum.Enum):
 
 
 # ----------------------------------------------------------------- Personel
+# Personel'in KENDI "soft delete" mekanizmasi zaten var ("aktif" alani) -
+# ayrica SoftDeleteMixin EKLENMEDI, karisikliga yol acmasin diye.
 class Personel(Base):
     __tablename__ = "personel"
 
@@ -63,7 +66,7 @@ class SabitGiderKategori(Base):
     ad = Column(String(100), nullable=False)
 
 
-class SabitGider(Base):
+class SabitGider(Base, SoftDeleteMixin):
     __tablename__ = "sabit_giderler"
 
     id = Column(BigInteger, primary_key=True)
@@ -87,7 +90,7 @@ class BorcTip(str, enum.Enum):
     ORTAGA_VERILEN = "ORTAGA_VERILEN"
 
 
-class Borc(Base):
+class Borc(Base, SoftDeleteMixin):
     __tablename__ = "borclar"
 
     id = Column(BigInteger, primary_key=True)
