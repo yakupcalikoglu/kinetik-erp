@@ -9,6 +9,7 @@ import enum
 from sqlalchemy import Column, BigInteger, String, Numeric, Date, DateTime, ForeignKey
 from sqlalchemy.sql import func
 from app.db.session import Base
+from app.db.soft_delete import SoftDeleteMixin
 
 
 class DemirbasKategori(str, enum.Enum):
@@ -26,7 +27,7 @@ class DemirbasDurum(str, enum.Enum):
     HURDA = "HURDA"
 
 
-class Demirbas(Base):
+class Demirbas(Base, SoftDeleteMixin):
     __tablename__ = "demirbaslar"
 
     id = Column(BigInteger, primary_key=True)
