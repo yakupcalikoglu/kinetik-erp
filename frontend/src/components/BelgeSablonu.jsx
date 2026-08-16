@@ -31,15 +31,40 @@ export default function BelgeSablonu({
   const [logoYukleniyor, setLogoYukleniyor] = useState(false);
   const [karsiTarafAdi, setKarsiTarafAdi] = useState(karsiTarafAdiBaslangic);
   const [tarih, setTarih] = useState(tarihBaslangic);
+  // satir index -> secilen urune ait, HENUZ satilmamis (Depoda/Antrepoda/
+  // henuz teslim alinmamis-Yolda/Gumrukte) fiziksel urunlerin seri no
+  // listesi - "listeden urun sec" ile ayni satirda, seri no da secilebilsin.
+  const [seriNoSecenekleriMap, setSeriNoSecenekleriMap] = useState({});
 
   function kalemGuncelle(i, alan, deger) {
     setKalemler((liste) => liste.map((k, idx) => (idx === i ? { ...k, [alan]: deger } : k)));
   }
   function kalemUrundenDoldur(i, stokKartiId) {
-    if (!stokKartiId) return;
+    if (!stokKartiId) {
+      setSeriNoSecenekleriMap((f) => ({ ...f, [i]: [] }));
+      return;
+    }
     const urun = urunSecenekleri.find((u) => String(u.id) === String(stokKartiId));
     if (!urun) return;
     setKalemler((liste) => liste.map((k, idx) => (idx === i ? { ...k, aciklama: `${urun.marka} ${urun.model}` } : k)));
+    Promise.all(
+      ['DEPODA', 'ANTREPODA', 'YOLDA', 'GUMRUKTE'].map((durum) =>
+        api.get('/stok-seri-no', { params: { durum, stok_karti_id: stokKartiId } })
+      )
+    ).then((sonuclar) => {
+      const liste = sonuclar.flatMap((r) => r.data);
+      setSeriNoSecenekleriMap((f) => ({ ...f, [i]: liste }));
+    }).catch(() => {});
+  }
+  function kalemSeriNoSec(i, seriNoId) {
+    const seciliListe = seriNoSecenekleriMap[i] || [];
+    const urun = seciliListe.find((u) => String(u.id) === String(seriNoId));
+    setKalemler((liste) => liste.map((k, idx) => {
+      if (idx !== i) return k;
+      // Aciklamadaki ONCEKI "(Seri No: ...)" varsa temizleyip YENISINI ekle.
+      const temizAciklama = (k.aciklama || '').replace(/\s*\(Seri No:[^)]*\)\s*$/, '');
+      return { ...k, aciklama: urun ? `${temizAciklama} (Seri No: ${urun.seri_no})` : temizAciklama };
+    }));
   }
   function kalemEkle() {
     setKalemler((liste) => [...liste, bosKalem()]);
@@ -218,6 +243,19 @@ export default function BelgeSablonu({
                     >
                       <option value="">+ Listeden ürün seç...</option>
                       {urunSecenekleri.map((u) => <option key={u.id} value={u.id}>{u.marka} {u.model}</option>)}
+                    </select>
+                  )}
+                  {seriNoSecenekleriMap[i] && seriNoSecenekleriMap[i].length > 0 && (
+                    <select
+                      className="belge-girdi no-print"
+                      value=""
+                      onChange={(e) => kalemSeriNoSec(i, e.target.value)}
+                      style={{ marginBottom: 3, fontSize: 11.5, color: '#1c3d6e' }}
+                    >
+                      <option value="">+ Seri no seç (opsiyonel)...</option>
+                      {seriNoSecenekleriMap[i].map((u) => (
+                        <option key={u.id} value={u.id}>{u.seri_no} ({u.durum === 'DEPODA' ? 'Depoda' : u.durum === 'ANTREPODA' ? 'Antrepoda' : 'Siparişte'})</option>
+                      ))}
                     </select>
                   )}
                   <input className="belge-girdi" value={s.aciklama} onChange={(e) => kalemGuncelle(i, 'aciklama', e.target.value)} placeholder="Açıklama, şasi no vb." />
