@@ -176,6 +176,7 @@ class BorcBakiyeYanit(BaseModel):
 # ------------------------------------------------------------ Proforma/Fatura
 class KalemIstegi(BaseModel):
     stok_karti_id: int | None = None
+    stok_seri_no_id: int | None = None
     aciklama: str | None = None
     miktar: Decimal = Decimal("1")
     birim_fiyat: Decimal
@@ -195,6 +196,8 @@ class ProformaOlusturIstegi(BaseModel):
 class ProformaKalemYanit(BaseModel):
     id: int
     stok_karti_id: int | None
+    stok_seri_no_id: int | None = None
+    seri_no: str | None = None
     aciklama: str | None
     miktar: Decimal
     birim_fiyat: Decimal
