@@ -140,6 +140,10 @@ class ProformaDetay(Base):
     id = Column(BigInteger, primary_key=True)
     proforma_id = Column(BigInteger, ForeignKey("proforma_faturalar.id"), nullable=False)
     stok_karti_id = Column(BigInteger, ForeignKey("stok_kartlari.id"))
+    # Musteriye "TAM OLARAK hangi urunu satacagimizi" net gostermek icin -
+    # stok_karti_id sadece URUN TANIMINI (orn. "3 Ton Forklift") belirtir,
+    # bu ise FIZIKSEL urunun (Depoda/Antrepoda/Siparişte) KENDISIDIR.
+    stok_seri_no_id = Column(BigInteger, ForeignKey("stok_seri_no.id"))
     aciklama = Column(String(300))
     miktar = Column(Numeric(18, 2), nullable=False, default=1)
     birim_fiyat = Column(Numeric(18, 2), nullable=False)
