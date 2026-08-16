@@ -42,7 +42,7 @@ function SiraliBaslik({ children, alanAdi, siralama, style }) {
 }
 import {
   Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji,
-  eylemChipStili, BIRIM_SECENEKLERI, paraFormat, DahaFazlaMenu,
+  eylemChipStili, BIRIM_SECENEKLERI, paraFormat, DahaFazlaMenu, useKirliFormUyarisi,
 } from '../components/Ortak';
 
 function bosForm() {
@@ -424,6 +424,7 @@ export default function UrunTanimlariSayfasi() {
   const [yukleniyor, setYukleniyor] = useState(true);
   const [hata, setHata] = useState(null);
   const [formAcik, setFormAcik] = useState(false);
+  useKirliFormUyarisi(formAcik);
   const [duzenlenenKart, setDuzenlenenKart] = useState(null);
   const [detayAcikId, setDetayAcikId] = useState(null);
   const location = useLocation();
