@@ -19,6 +19,11 @@ export default function BelgeSablonu({
   kalemlerBaslangic, paraBirimi, fiyatGoster = true,
   notlar, notlarDegistir, notKaydediliyor, notuKaydet,
   altYazi,
+  // Opsiyonel: verilirse, her satirin ustunde "listeden urun sec" acilir
+  // menusu cikar - secilince Aciklama alanini otomatik doldurur. Boylece
+  // yeni eklenen satirlarda da elle yazmak yerine mevcut urun tanimlarindan
+  // secim yapilabilir (Proforma/Fatura'daki kalem formuyla AYNI mantik).
+  urunSecenekleri = [],
 }) {
   const [kalemler, setKalemler] = useState(kalemlerBaslangic);
   const [logoHata, setLogoHata] = useState(false);
@@ -29,6 +34,12 @@ export default function BelgeSablonu({
 
   function kalemGuncelle(i, alan, deger) {
     setKalemler((liste) => liste.map((k, idx) => (idx === i ? { ...k, [alan]: deger } : k)));
+  }
+  function kalemUrundenDoldur(i, stokKartiId) {
+    if (!stokKartiId) return;
+    const urun = urunSecenekleri.find((u) => String(u.id) === String(stokKartiId));
+    if (!urun) return;
+    setKalemler((liste) => liste.map((k, idx) => (idx === i ? { ...k, aciklama: `${urun.marka} ${urun.model}` } : k)));
   }
   function kalemEkle() {
     setKalemler((liste) => [...liste, bosKalem()]);
@@ -198,6 +209,17 @@ export default function BelgeSablonu({
             {satirlar.map((s, i) => (
               <tr key={i}>
                 <td>
+                  {urunSecenekleri.length > 0 && (
+                    <select
+                      className="belge-girdi no-print"
+                      value=""
+                      onChange={(e) => kalemUrundenDoldur(i, e.target.value)}
+                      style={{ marginBottom: 3, fontSize: 11.5, color: '#1c3d6e' }}
+                    >
+                      <option value="">+ Listeden ürün seç...</option>
+                      {urunSecenekleri.map((u) => <option key={u.id} value={u.id}>{u.marka} {u.model}</option>)}
+                    </select>
+                  )}
                   <input className="belge-girdi" value={s.aciklama} onChange={(e) => kalemGuncelle(i, 'aciklama', e.target.value)} placeholder="Açıklama, şasi no vb." />
                 </td>
                 <td>
