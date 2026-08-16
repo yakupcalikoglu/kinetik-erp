@@ -7,6 +7,7 @@ import enum
 from sqlalchemy import Column, BigInteger, String, Numeric, Date, DateTime, ForeignKey, Enum as SAEnum
 from sqlalchemy.sql import func
 from app.db.session import Base
+from app.db.soft_delete import SoftDeleteMixin
 
 
 class YedekParcaHareketYon(str, enum.Enum):
@@ -14,7 +15,7 @@ class YedekParcaHareketYon(str, enum.Enum):
     CIKIS = "CIKIS"
 
 
-class YedekParca(Base):
+class YedekParca(Base, SoftDeleteMixin):
     __tablename__ = "yedek_parcalar"
 
     id = Column(BigInteger, primary_key=True)
