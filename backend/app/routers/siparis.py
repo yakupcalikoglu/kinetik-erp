@@ -11,6 +11,7 @@ from app.core.deps import aktif_sirket_id_getir, izin_gerektir, aktif_kullanici_
 from app.models.auth import Sirket, Kullanici
 from app.models.denetim import DuzenlemeKaydi
 from app.core.security import sifre_dogrula
+from app.db.soft_delete import yumusak_sil, yumusak_geri_getir, aktif_filtre
 from app.models.stok import (Siparis, SiparisDetay, StokSeriNo, StokDurum,
                               SiparisDurum, StokKarti, StokMaliyetKalemi, MaliyetTip, SiparisOdeme,
                               GumrukBeyannamesi)
@@ -129,7 +130,7 @@ def siparisleri_listele(
     sirket_id: int = Depends(aktif_sirket_id_getir),
     db: Session = Depends(get_db),
 ):
-    sorgu = select(Siparis).where(Siparis.sirket_id == sirket_id)
+    sorgu = select(Siparis).where(Siparis.sirket_id == sirket_id, aktif_filtre(Siparis))
     if durum:
         sorgu = sorgu.where(Siparis.durum == durum)
     siparisler = list(db.execute(sorgu).scalars())
@@ -269,15 +270,30 @@ def siparis_sil(
             "Önce durumu 'İptal' olarak güncelleyin, sonra silin."
         )
 
+    # NOT: SiparisDetay (kalemler) kaydin BIR PARCASI - siparis geri
+    # getirilirse zaten yeniden duzenlenebilir, bu yuzden BUNLAR GERCEKTEN
+    # silinir. Siparisin KENDISI ise soft-delete ile geri getirilebilir.
     eski_detaylar = db.execute(
         select(SiparisDetay).where(SiparisDetay.siparis_id == siparis.id)
     ).scalars()
     for eski in eski_detaylar:
         db.delete(eski)
 
-    db.delete(siparis)
-    db.commit()
+    yumusak_sil(db, siparis)
     return {"silindi": True}
+
+
+@router.put("/{siparis_id}/geri-getir", response_model=SiparisYanit,
+            dependencies=[Depends(izin_gerektir("SIPARIS_DUZENLE"))])
+def siparis_geri_getir(
+    siparis_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
+):
+    siparis = db.get(Siparis, siparis_id)
+    if siparis is None or siparis.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Sipariş bulunamadı.")
+    yumusak_geri_getir(db, siparis)
+    siparis.urunler = list(db.execute(select(SiparisDetay).where(SiparisDetay.siparis_id == siparis.id)).scalars())
+    return siparis
 
 
 @router.put("/{siparis_id}/durum", response_model=SiparisYanit,
