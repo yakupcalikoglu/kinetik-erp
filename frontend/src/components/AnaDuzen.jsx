@@ -183,15 +183,17 @@ const MOBIL_ALT_NAV_OGELERI = [
   { yol: '/satis-yap', ad: 'Satış', Simge: HandCoins, gerekliIzin: 'STOK_DUZENLE' },
 ];
 
-function MobilAltNavBar({ izinVarMi }) {
+function MobilAltNavBar({ izinVarMi, gizli }) {
   const location = useLocation();
   const gorunurler = MOBIL_ALT_NAV_OGELERI.filter((m) => izinVarMi(m.gerekliIzin));
+
+  if (gizli) return null;
 
   return (
     <nav
       className="kinetik-mobil-alt-nav"
       style={{
-        display: 'none', position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 45,
+        display: 'none', position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 30,
         background: 'white', borderTop: '1px solid var(--kenarlik)',
         boxShadow: '0 -2px 10px rgba(0,0,0,0.06)',
       }}
@@ -1201,7 +1203,7 @@ export default function AnaDuzen() {
         <main className="kinetik-ana-icerik" style={{ flex: 1, padding: 28, overflow: 'auto' }}>
           <Outlet />
         </main>
-        <MobilAltNavBar izinVarMi={izinVarMi} />
+        <MobilAltNavBar izinVarMi={izinVarMi} gizli={mobilMenuAcik} />
       </div>
     </div>
   );
