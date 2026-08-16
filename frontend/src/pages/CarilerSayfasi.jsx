@@ -1,6 +1,6 @@
 import { useEffect, useState, Fragment } from 'react';
 import * as XLSX from 'xlsx';
-import { api, hataMesajiCikar, ozelOnayIste } from '../api/client';
+import { api, hataMesajiCikar, ozelOnayIste, geriAlBildirimGoster } from '../api/client';
 import { excelIndir } from '../utils/disaAktarma';
 import {
   Kart, SayfaBasligi, Buton, Etiket, Alan, girdiStili, BosDurum, HataMesaji, paraFormat, eylemChipStili, ParaGirdisi,
@@ -1062,6 +1062,10 @@ export default function CarilerSayfasi() {
     try {
       await api.delete(`/cariler/${cari.id}`);
       listeyiYukle();
+      geriAlBildirimGoster(`"${cari.unvan}" silindi.`, async () => {
+        await api.put(`/cariler/${cari.id}/geri-getir`);
+        listeyiYukle();
+      });
     } catch (err) {
       setHata(hataMesajiCikar(err));
     }
@@ -1076,10 +1080,11 @@ export default function CarilerSayfasi() {
   }
 
   async function topluSil() {
-    if (!(await ozelOnayIste(`${secilenIdler.size} cariyi silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`))) return;
+    if (!(await ozelOnayIste(`${secilenIdler.size} cariyi silmek istediğinize emin misiniz?`))) return;
     setHata(null);
+    const silinenIdler = [...secilenIdler];
     const basarisizlar = [];
-    for (const id of secilenIdler) {
+    for (const id of silinenIdler) {
       try {
         await api.delete(`/cariler/${id}`);
       } catch (err) {
@@ -1089,7 +1094,14 @@ export default function CarilerSayfasi() {
     setSecilenIdler(new Set());
     listeyiYukle();
     if (basarisizlar.length > 0) {
-      setHata(`${basarisizlar.length} kayıt silinemedi (muhtemelen ilişkili hareketleri var).`);
+      setHata(`${basarisizlar.length} kayıt silinemedi.`);
+    }
+    const basarili = silinenIdler.filter((id) => !basarisizlar.includes(id));
+    if (basarili.length > 0) {
+      geriAlBildirimGoster(`${basarili.length} cari silindi.`, async () => {
+        await Promise.all(basarili.map((id) => api.put(`/cariler/${id}/geri-getir`)));
+        listeyiYukle();
+      });
     }
   }
 
