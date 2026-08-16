@@ -6,31 +6,23 @@ from sqlalchemy import (Column, BigInteger, String, Numeric, Boolean,
 from sqlalchemy.sql import func
 import enum
 from app.db.session import Base
-
-
+from app.db.soft_delete import SoftDeleteMixin
 class CariTip(str, enum.Enum):
     MUSTERI = "MUSTERI"
     TEDARIKCI = "TEDARIKCI"
     PERSONEL = "PERSONEL"
     ORTAK = "ORTAK"
     DIGER = "DIGER"
-
-
 class ParaBirimi(str, enum.Enum):
     TRY = "TRY"
     USD = "USD"
     EUR = "EUR"
     ALTIN = "ALTIN"
-
-
 class HareketYon(str, enum.Enum):
     GIRIS = "GIRIS"
     CIKIS = "CIKIS"
-
-
-class CariHesap(Base):
+class CariHesap(Base, SoftDeleteMixin):
     __tablename__ = "cari_hesaplar"
-
     id = Column(BigInteger, primary_key=True)
     sirket_id = Column(BigInteger, ForeignKey("sirketler.id"), nullable=False)
     tip = Column(SAEnum(CariTip, name="cari_tip_t"), nullable=False)
@@ -46,11 +38,8 @@ class CariHesap(Base):
     bakiye_eur = Column(Numeric(18, 2), default=0)
     aktif = Column(Boolean, default=True)
     olusturma_tarihi = Column(DateTime, server_default=func.now())
-
-
 class CariHareket(Base):
     __tablename__ = "cari_hareketler"
-
     id = Column(BigInteger, primary_key=True)
     cari_id = Column(BigInteger, ForeignKey("cari_hesaplar.id"), nullable=False)
     sirket_id = Column(BigInteger, ForeignKey("sirketler.id"), nullable=False)
