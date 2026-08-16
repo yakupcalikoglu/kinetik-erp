@@ -6,6 +6,7 @@ from sqlalchemy import (Column, BigInteger, String, Numeric, Boolean, Integer,
                          DateTime, Date, ForeignKey, Text, Enum as SAEnum)
 from sqlalchemy.sql import func
 from app.db.session import Base
+from app.db.soft_delete import SoftDeleteMixin
 
 
 class StokKaynak(str, enum.Enum):
@@ -71,7 +72,7 @@ class StokKategori(Base):
     ad = Column(String(150), nullable=False)
 
 
-class StokKarti(Base):
+class StokKarti(Base, SoftDeleteMixin):
     __tablename__ = "stok_kartlari"
 
     id = Column(BigInteger, primary_key=True)
@@ -92,7 +93,7 @@ class StokKarti(Base):
     olusturma_tarihi = Column(DateTime, server_default=func.now())
 
 
-class StokSeriNo(Base):
+class StokSeriNo(Base, SoftDeleteMixin):
     __tablename__ = "stok_seri_no"
 
     id = Column(BigInteger, primary_key=True)
@@ -218,7 +219,7 @@ FATURALI_SATIS_MALIYET_TIPLERI = [
 ]
 
 
-class Siparis(Base):
+class Siparis(Base, SoftDeleteMixin):
     __tablename__ = "siparisler"
 
     id = Column(BigInteger, primary_key=True)
