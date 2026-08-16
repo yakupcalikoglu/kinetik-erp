@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, hataMesajiCikar } from '../api/client';
-import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, ParaGirdisi, paraFormat, Etiket } from '../components/Ortak';
+import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, ParaGirdisi, paraFormat, Etiket, useKirliFormUyarisi } from '../components/Ortak';
 import AramaliSecici from '../components/AramaliSecici';
 
 function TedarikciOzetiPaneli({ tedarikciCariId }) {
@@ -103,6 +103,12 @@ export default function SiparisOlusturSayfasi() {
   const [kaydediliyor, setKaydediliyor] = useState(false);
   const [yukleniyor, setYukleniyor] = useState(duzenlemeModu);
   const [hata, setHata] = useState(null);
+
+  // Kullanici bir tedarikci sectiyse VEYA en az bir urun satirini kismen
+  // doldurduysa (ya da mevcut bir siparisi DUZENLIYORSA) "kirli" sayilir -
+  // sayfa kapatilirsa/yenilenirse tarayici uyarsin diye.
+  const kirliMi = duzenlemeModu || !!form.tedarikci_cari_id || urunler.some((u) => u.stok_karti_id || u.birim_fiyat);
+  useKirliFormUyarisi(kirliMi);
 
   useEffect(() => {
     api.get('/cariler', { params: { tip: 'TEDARIKCI' } })
