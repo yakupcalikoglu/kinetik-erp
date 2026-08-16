@@ -49,7 +49,7 @@ function SiraliBaslik({ children, alanAdi, siralama, style }) {
     </th>
   );
 }
-import { api, hataMesajiCikar, ozelOnayIste } from '../api/client';
+import { api, hataMesajiCikar, ozelOnayIste, geriAlBildirimGoster } from '../api/client';
 import { excelIndir } from '../utils/disaAktarma';
 
 const API_TABAN_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -1004,6 +1004,11 @@ export default function StokSayfasi() {
       await api.delete(`/stok-seri-no/${urun.id}`);
       urunleriYukle();
       tumUrunleriYukle();
+      geriAlBildirimGoster(`"${urun.seri_no}" silindi.`, async () => {
+        await api.put(`/stok-seri-no/${urun.id}/geri-getir`);
+        urunleriYukle();
+        tumUrunleriYukle();
+      });
     } catch (err) {
       setHata(hataMesajiCikar(err));
     }
