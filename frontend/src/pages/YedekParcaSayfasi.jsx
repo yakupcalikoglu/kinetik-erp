@@ -1,7 +1,7 @@
 import { useEffect, useState, Fragment } from 'react';
 import { useLocation } from 'react-router-dom';
 import * as XLSX from 'xlsx';
-import { api, hataMesajiCikar, ozelOnayIste } from '../api/client';
+import { api, hataMesajiCikar, ozelOnayIste, geriAlBildirimGoster } from '../api/client';
 import {
   Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat, eylemChipStili, ParaGirdisi,
   useKademelıGoster, DahaFazlaGosterButonu, DahaFazlaMenu,
@@ -725,6 +725,10 @@ export default function YedekParcaSayfasi() {
     try {
       await api.delete(`/yedek-parcalar/${p.id}`);
       yukle();
+      geriAlBildirimGoster(`"${p.ad}" silindi.`, async () => {
+        await api.put(`/yedek-parcalar/${p.id}/geri-getir`);
+        yukle();
+      });
     } catch (err) {
       setHata(hataMesajiCikar(err));
     }
