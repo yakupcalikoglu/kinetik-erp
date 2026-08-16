@@ -15,6 +15,7 @@ from app.models.diger import (
 )
 from app.models.denetim import DuzenlemeKaydi
 from app.core.security import sifre_dogrula
+from app.db.soft_delete import yumusak_sil, yumusak_geri_getir, aktif_filtre
 from app.schemas.diger import (
     PersonelOlusturIstegi, PersonelYanit, PersonelOdemeOlusturIstegi, PersonelOdemeYanit, OdeIstegi,
     PersonelDuzenleIstegi,
@@ -170,7 +171,7 @@ def sabit_gider_ekle(istek: SabitGiderOlusturIstegi, sirket_id: int = Depends(ak
 def sabit_giderleri_listele(
     donem: str | None = None, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
 ):
-    sorgu = select(SabitGider).where(SabitGider.sirket_id == sirket_id)
+    sorgu = select(SabitGider).where(SabitGider.sirket_id == sirket_id, aktif_filtre(SabitGider))
     if donem:
         sorgu = sorgu.where(func.to_char(SabitGider.donem, "YYYY-MM") == donem)
     return list(db.execute(sorgu).scalars())
@@ -262,7 +263,7 @@ def borc_olustur(istek: BorcOlusturIstegi, sirket_id: int = Depends(aktif_sirket
 def borclari_listele(
     tip: str | None = None, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
 ):
-    sorgu = select(Borc).where(Borc.sirket_id == sirket_id)
+    sorgu = select(Borc).where(Borc.sirket_id == sirket_id, aktif_filtre(Borc))
     if tip:
         sorgu = sorgu.where(Borc.tip == tip)
     return list(db.execute(sorgu).scalars())
@@ -616,6 +617,18 @@ def personel_sil(personel_id: int, sirket_id: int = Depends(aktif_sirket_id_geti
     return {"silindi": True}
 
 
+@router.put("/personel/{personel_id}/geri-getir", response_model=PersonelYanit,
+            dependencies=[Depends(izin_gerektir("PERSONEL_DUZENLE"))])
+def personel_geri_getir(personel_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
+    personel = db.get(Personel, personel_id)
+    if personel is None or personel.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Personel bulunamadı.")
+    personel.aktif = True
+    db.commit()
+    db.refresh(personel)
+    return personel
+
+
 @router.put("/personel-odemeleri/{odeme_id}/odemeyi-geri-al", dependencies=[Depends(izin_gerektir("PERSONEL_DUZENLE"))])
 def personel_odemesini_geri_al(
     odeme_id: int,
@@ -676,9 +689,17 @@ def sabit_gider_sil(gider_id: int, sirket_id: int = Depends(aktif_sirket_id_geti
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Gider kaydı bulunamadı.")
     if gider.odendi_mi:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ödenmiş bir gider kaydı silinemez.")
-    db.delete(gider)
-    db.commit()
+    yumusak_sil(db, gider)
     return {"silindi": True}
+
+
+@router.put("/sabit-giderler/{gider_id}/geri-getir", dependencies=[Depends(izin_gerektir("GIDER_DUZENLE"))])
+def sabit_gider_geri_getir(gider_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
+    gider = db.get(SabitGider, gider_id)
+    if gider is None or gider.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Gider kaydı bulunamadı.")
+    yumusak_geri_getir(db, gider)
+    return gider
 
 
 @router.put("/sabit-giderler/{gider_id}/odemeyi-geri-al", dependencies=[Depends(izin_gerektir("GIDER_DUZENLE"))])
@@ -718,9 +739,17 @@ def borc_sil(borc_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: 
     odeme_var_mi = db.execute(select(BorcOdeme).where(BorcOdeme.borc_id == borc_id)).first()
     if odeme_var_mi is not None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ödemesi yapılmış bir borç kaydı silinemez.")
-    db.delete(borc)
-    db.commit()
+    yumusak_sil(db, borc)
     return {"silindi": True}
+
+
+@router.put("/borclar/{borc_id}/geri-getir", dependencies=[Depends(izin_gerektir("BORC_DUZENLE"))])
+def borc_geri_getir(borc_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
+    borc = db.get(Borc, borc_id)
+    if borc is None or borc.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Borç kaydı bulunamadı.")
+    yumusak_geri_getir(db, borc)
+    return borc
 
 
 @router.delete("/borc-odemeleri/{odeme_id}", dependencies=[Depends(izin_gerektir("BORC_DUZENLE"))])
@@ -870,4 +899,3 @@ def kdv_manuel_giris_sil(
     db.delete(kayit)
     db.commit()
     return {"silindi": True}
-
