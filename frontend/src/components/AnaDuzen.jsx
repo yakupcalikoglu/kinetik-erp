@@ -58,7 +58,8 @@ function Bildirimler() {
       api.get('/kiralama-sozlesmeleri').catch(() => ({ data: [] })),
       api.get('/cekler').catch(() => ({ data: [] })),
       api.get('/raporlar/yaklasan-vadeler', { params: { gun: 30 } }).catch(() => ({ data: { odemeler: [] } })),
-    ]).then(([yp, kira, cek, vadeler]) => {
+      api.get('/pos-taksit-detay/vadesi-gecenler').catch(() => ({ data: [] })),
+    ]).then(([yp, kira, cek, vadeler, posVadesiGecen]) => {
       const bugun = new Date().toISOString().slice(0, 10);
       const liste = [];
 
@@ -92,6 +93,13 @@ function Bildirimler() {
           id: `akr-${v.kaynak_id}`,
           mesaj: `${v.aciklama} vadesi geçti (${v.tarih}) — ${Number(v.tutar).toLocaleString('tr-TR')} ${v.para_birimi}`,
           yol: '/finansal?sekme=akreditif',
+        }));
+
+      (posVadesiGecen.data || [])
+        .forEach((p) => liste.push({
+          id: `postaksit-${p.taksit_id}`,
+          mesaj: `POS taksidi ${p.taksit_no} (${p.urun_bilgisi}${p.musteri_unvan ? ' — ' + p.musteri_unvan : ''}) vadesi geçti (${p.vade_tarihi}) ama hesaba yattığı işaretlenmedi — ${Number(p.tutar).toLocaleString('tr-TR')} ₺`,
+          yol: '/finansal?sekme=postaksit',
         }));
 
       setBildirimler(liste);
