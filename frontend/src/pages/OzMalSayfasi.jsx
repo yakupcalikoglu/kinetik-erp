@@ -1,6 +1,6 @@
 import { useEffect, useState, Fragment } from 'react';
 import { useLocation } from 'react-router-dom';
-import { api, hataMesajiCikar, ozelOnayIste, ozelAlert } from '../api/client';
+import { api, hataMesajiCikar, ozelOnayIste, ozelAlert, geriAlBildirimGoster } from '../api/client';
 import {
   Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat, eylemChipStili, ParaGirdisi,
   DahaFazlaMenu,
@@ -546,6 +546,10 @@ export default function OzMalSayfasi() {
     try {
       await api.delete(`/demirbaslar/${kayit.id}`);
       yukle();
+      geriAlBildirimGoster(`"${kayit.ad}" silindi.`, async () => {
+        await api.put(`/demirbaslar/${kayit.id}/geri-getir`);
+        yukle();
+      });
     } catch (err) {
       setHata(hataMesajiCikar(err));
     }
