@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react';
 import {
   LayoutDashboard, Wallet, Users, Boxes, ShoppingCart, Landmark, ArrowLeftRight,
   Receipt, FileSpreadsheet, BarChart3, HandCoins, Tag, Wrench, Settings, Search,
-  Building2, Bell, ClipboardList,
+  Building2, Bell, ClipboardList, ChevronDown, ChevronRight,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { api, hataMesajiCikar, basariBildirimDinle, geriAlBildirimDinle, yuklemeDurumuDinle, onayIstegiDinle, _onayYaniti, alertIstegiDinle, _alertYaniti, promptIstegiDinle, _promptYaniti } from '../api/client';
@@ -336,7 +336,24 @@ const MODUL_GRUPLARI = [
       { yol: '/kasa', ad: 'Ana Kasa', Simge: Wallet, gerekliIzin: 'KASA_GORUNTULE' },
       { yol: '/banka', ad: 'Banka', Simge: Landmark, gerekliIzin: 'BANKA_GORUNTULE' },
       { yol: '/virman', ad: 'Virman', Simge: ArrowLeftRight },
-      { yol: '/finansal', ad: 'Finansal Takip', Simge: Receipt },
+      {
+        yol: '/finansal', ad: 'Finansal Takip', Simge: Receipt,
+        // Finansal Takip'in KENDI SAYFASI icindeki 9-10 sekmeye, ana
+        // sidebar'dan da (hangi sayfada olursak olalim) dogrudan
+        // gidebilmek icin - tiklaninca sandvic/akordeon gibi asagi acilir.
+        altModuller: [
+          { yol: '/finansal?sekme=taksit', ad: 'Taksitli Satış' },
+          { yol: '/finansal?sekme=kiralama', ad: 'Kiralama' },
+          { yol: '/finansal?sekme=akreditif', ad: 'Akreditif' },
+          { yol: '/finansal?sekme=leasing', ad: 'Leasing' },
+          { yol: '/finansal?sekme=personel', ad: 'Personel' },
+          { yol: '/finansal?sekme=gider', ad: 'Diğer Giderler' },
+          { yol: '/finansal?sekme=bakim', ad: 'Bakım' },
+          { yol: '/finansal?sekme=cek', ad: 'Çek' },
+          { yol: '/finansal?sekme=postaksit', ad: 'Kredi Kartı Taksitleri' },
+          { yol: '/finansal?sekme=borc', ad: 'Ortak / Dış Borç' },
+        ],
+      },
     ],
   },
   {
@@ -738,6 +755,10 @@ export default function AnaDuzen() {
   const navigate = useNavigate();
   const location = useLocation();
   const [kisayollarAcik, setKisayollarAcik] = useState(false);
+  // Sol menudeki "Finansal Takip" gibi alt-modulu OLAN bir modulun,
+  // TIKLANINCA (sandvic/akordeon gibi) asagi acilmasi icin - hangi
+  // modulun akordeonu ACIK, tek seferde SADECE biri acik kalir.
+  const [akikModulAkordeonu, setAkikModulAkordeonu] = useState(null);
 
   useEffect(() => {
     function tusaBasildi(e) {
@@ -892,28 +913,69 @@ export default function AnaDuzen() {
                   {grup.baslik}
                 </div>
               )}
-              {grup.moduller.map((m) => (
-            <NavLink
-              key={m.yol}
-              to={m.yol}
-              end={m.yol === '/'}
-              onClick={() => setMobilMenuAcik(false)}
-              style={({ isActive }) => ({
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                padding: '9px 12px',
-                borderRadius: 6,
-                color: isActive ? 'white' : 'rgba(255,255,255,0.65)',
-                background: isActive ? 'rgba(255,255,255,0.12)' : 'transparent',
-                fontSize: 13.5,
-                fontWeight: isActive ? 500 : 400,
+              {grup.moduller.map((m) => {
+                const buAnaSayfadaAktif = location.pathname === m.yol;
+                const akordeonAcik = m.altModuller && (buAnaSayfadaAktif || akikModulAkordeonu === m.yol);
+                return (
+                  <div key={m.yol}>
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                      <NavLink
+                        to={m.yol}
+                        end={m.yol === '/'}
+                        onClick={() => setMobilMenuAcik(false)}
+                        style={({ isActive }) => ({
+                          flex: 1,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 10,
+                          padding: '9px 12px',
+                          borderRadius: 6,
+                          color: isActive ? 'white' : 'rgba(255,255,255,0.65)',
+                          background: isActive ? 'rgba(255,255,255,0.12)' : 'transparent',
+                          fontSize: 13.5,
+                          fontWeight: isActive ? 500 : 400,
+                        })}
+                      >
+                        <m.Simge size={16} style={{ opacity: 0.85, flexShrink: 0 }} />
+                        {m.ad}
+                      </NavLink>
+                      {m.altModuller && (
+                        <button
+                          onClick={() => setAkikModulAkordeonu((mevcut) => (mevcut === m.yol ? null : m.yol))}
+                          style={{
+                            background: 'none', border: 'none', cursor: 'pointer', padding: 6,
+                            color: 'rgba(255,255,255,0.5)', display: 'flex', alignItems: 'center',
+                          }}
+                          aria-label="Alt menüyü aç/kapat"
+                        >
+                          {akordeonAcik ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                        </button>
+                      )}
+                    </div>
+                    {m.altModuller && akordeonAcik && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 1, marginLeft: 14, marginTop: 2, marginBottom: 4, borderLeft: '1px solid rgba(255,255,255,0.12)', paddingLeft: 10 }}>
+                        {m.altModuller.map((alt) => {
+                          const altAktif = buAnaSayfadaAktif && location.search === alt.yol.slice(alt.yol.indexOf('?'));
+                          return (
+                            <button
+                              key={alt.yol}
+                              onClick={() => { navigate(alt.yol); setMobilMenuAcik(false); }}
+                              style={{
+                                textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer',
+                                padding: '6px 10px', borderRadius: 5, fontSize: 12.5,
+                                color: altAktif ? 'white' : 'rgba(255,255,255,0.55)',
+                                fontWeight: altAktif ? 600 : 400,
+                              }}
+                            >
+                              {alt.ad}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
               })}
-            >
-              <m.Simge size={16} style={{ opacity: 0.85, flexShrink: 0 }} />
-              {m.ad}
-            </NavLink>
-              ))}
             </div>
           ))}
         </nav>
