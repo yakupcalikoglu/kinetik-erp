@@ -14,6 +14,7 @@ from app.models.diger import (
     KdvManuelGiris,
 )
 from app.models.denetim import DuzenlemeKaydi
+from app.models.stok import StokSeriNo
 from app.core.security import sifre_dogrula
 from app.db.soft_delete import yumusak_sil, yumusak_geri_getir, aktif_filtre
 from app.schemas.diger import (
@@ -403,11 +404,26 @@ def proforma_olustur(istek: ProformaOlusturIstegi, sirket_id: int = Depends(akti
     return _proforma_detayli_getir(db, yeni.id)
 
 
+def _proforma_kalemlerini_zenginlestir(db: Session, kalemler: list) -> None:
+    """Her kaleme, secilmisse GERCEK urunun seri numarasini ekler - musteriye
+    "TAM OLARAK hangi urunu satacagimizi" net gostermek icin."""
+    seri_id_ler = [k.stok_seri_no_id for k in kalemler if k.stok_seri_no_id]
+    if not seri_id_ler:
+        for k in kalemler:
+            k.seri_no = None
+        return
+    urunler = {u.id: u for u in db.execute(select(StokSeriNo).where(StokSeriNo.id.in_(seri_id_ler))).scalars()}
+    for k in kalemler:
+        urun = urunler.get(k.stok_seri_no_id)
+        k.seri_no = urun.seri_no if urun else None
+
+
 def _proforma_detayli_getir(db: Session, proforma_id: int) -> ProformaFatura:
     proforma = db.get(ProformaFatura, proforma_id)
     proforma.kalemler = list(db.execute(
         select(ProformaDetay).where(ProformaDetay.proforma_id == proforma_id)
     ).scalars())
+    _proforma_kalemlerini_zenginlestir(db, proforma.kalemler)
     return proforma
 
 
@@ -425,6 +441,7 @@ def proformalari_listele(sirket_id: int = Depends(aktif_sirket_id_getir), db: Se
         p.kalemler = list(db.execute(
             select(ProformaDetay).where(ProformaDetay.proforma_id == p.id)
         ).scalars())
+        _proforma_kalemlerini_zenginlestir(db, p.kalemler)
     return sonuclar
 
 
