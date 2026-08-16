@@ -7,7 +7,7 @@ import {
   Building2, Bell, ClipboardList,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { api, hataMesajiCikar, basariBildirimDinle, yuklemeDurumuDinle, onayIstegiDinle, _onayYaniti, alertIstegiDinle, _alertYaniti, promptIstegiDinle, _promptYaniti } from '../api/client';
+import { api, hataMesajiCikar, basariBildirimDinle, geriAlBildirimDinle, yuklemeDurumuDinle, onayIstegiDinle, _onayYaniti, alertIstegiDinle, _alertYaniti, promptIstegiDinle, _promptYaniti } from '../api/client';
 
 const ARAMA_TUR_METIN = { CARI: 'Cari', SIPARIS: 'Sipariş', STOK: 'Stok', URUN_TANIMI: 'Ürün Tanımı', DEMIRBAS: 'Demirbaş', YEDEK_PARCA: 'Yedek Parça', KOMUT: 'İşlem' };
 
@@ -401,6 +401,56 @@ function BasariToast() {
   );
 }
 
+// Bir kayit "yumusak silindiginde" (soft-delete), birkac saniye "Geri Al"
+// secenegi sunan toast - client.js'teki geriAlBildirimGoster() cagrildiginda
+// gorunur, ya GERI AL'a basilinca ya da 8 saniye sonra kendiliginden kapanir.
+function GeriAlToastPaneli() {
+  const [bildirim, setBildirim] = useState(null); // { mesaj, geriAlFn }
+
+  useEffect(() => {
+    let zamanlayici;
+    const iptal = geriAlBildirimDinle(({ mesaj, geriAlFn }) => {
+      clearTimeout(zamanlayici);
+      setBildirim({ mesaj, geriAlFn });
+      zamanlayici = setTimeout(() => setBildirim(null), 8000);
+    });
+    return () => { iptal(); clearTimeout(zamanlayici); };
+  }, []);
+
+  if (!bildirim) return null;
+
+  async function geriAlTiklandi() {
+    const fn = bildirim.geriAlFn;
+    setBildirim(null);
+    await fn();
+  }
+
+  return (
+    <div
+      style={{
+        position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 200,
+        background: 'var(--lacivert-koyu, #16233f)', color: 'white',
+        padding: '12px 18px', borderRadius: 8, fontSize: 13.5, fontWeight: 500,
+        boxShadow: '0 4px 14px rgba(0,0,0,0.25)',
+        display: 'flex', alignItems: 'center', gap: 16,
+        animation: 'kinetikToastGir 0.2s ease-out',
+      }}
+    >
+      <span>{bildirim.mesaj}</span>
+      <button
+        onClick={geriAlTiklandi}
+        style={{
+          background: 'none', border: '1px solid rgba(255,255,255,0.4)', color: 'white',
+          borderRadius: 6, padding: '5px 12px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+          flexShrink: 0,
+        }}
+      >
+        Geri Al
+      </button>
+    </div>
+  );
+}
+
 function YukariCikButonu() {
   const [gorunur, setGorunur] = useState(false);
 
@@ -743,6 +793,7 @@ export default function AnaDuzen() {
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
       <BasariToast />
+      <GeriAlToastPaneli />
       <GenelYuklemeCubugu />
       <OzelOnayPaneli />
       <OzelAlertPaneli />
