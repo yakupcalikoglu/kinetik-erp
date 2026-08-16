@@ -11,6 +11,7 @@ from app.models.cari import CariHesap
 from app.models.stok import StokSeriNo, StokKarti
 from app.models.denetim import DuzenlemeKaydi
 from app.core.security import sifre_dogrula
+from app.db.soft_delete import yumusak_sil, yumusak_geri_getir, aktif_filtre
 from app.schemas.yedek_parca import (
     YedekParcaOlusturIstegi, YedekParcaDuzenleIstegi, YedekParcaYanit,
     YedekParcaHareketOlusturIstegi, YedekParcaHareketYanit, YedekParcaHareketDuzenleIstegi,
@@ -111,7 +112,7 @@ def yedek_parca_toplu_ice_aktar(
 def yedek_parcalari_listele(
     sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
 ):
-    sorgu = select(YedekParca).where(YedekParca.sirket_id == sirket_id).order_by(YedekParca.ad)
+    sorgu = select(YedekParca).where(YedekParca.sirket_id == sirket_id, aktif_filtre(YedekParca)).order_by(YedekParca.ad)
     return list(db.execute(sorgu).scalars())
 
 
@@ -152,15 +153,27 @@ def yedek_parca_duzenle(
 def yedek_parca_sil(
     parca_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
 ):
+    """
+    Parcayi GERCEKTEN silmez - soft-delete yapar. Onceden "hareketi olan
+    parca silinemez" kurali vardi (gercek DELETE, FK ihlaline yol
+    acabilirdi) - soft-delete bu riski ORTADAN KALDIRDIGI icin artik
+    hareketi olan bir parca da guvenle silinip GERI GETIRILEBILIR.
+    """
     kayit = _parca_getir_veya_404(db, parca_id, sirket_id)
-    hareket_var_mi = db.execute(
-        select(YedekParcaHareketi).where(YedekParcaHareketi.yedek_parca_id == parca_id)
-    ).first()
-    if hareket_var_mi is not None:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Hareketi olan bir yedek parça silinemez.")
-    db.delete(kayit)
-    db.commit()
+    yumusak_sil(db, kayit)
     return {"silindi": True}
+
+
+@router.put("/{parca_id}/geri-getir", response_model=YedekParcaYanit,
+            dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
+def yedek_parca_geri_getir(
+    parca_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
+):
+    kayit = db.get(YedekParca, parca_id)
+    if kayit is None or kayit.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Yedek parça bulunamadı.")
+    yumusak_geri_getir(db, kayit)
+    return kayit
 
 
 @router.post("/{parca_id}/hareketler", response_model=YedekParcaHareketYanit,
