@@ -1,7 +1,7 @@
 import { useEffect, useState, Fragment } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { api, hataMesajiCikar, ozelOnayIste, ozelPrompt } from '../api/client';
+import { api, hataMesajiCikar, ozelOnayIste, ozelPrompt, geriAlBildirimGoster } from '../api/client';
 import { Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat, eylemChipStili, ParaGirdisi, useKademelıGoster, DahaFazlaGosterButonu, DahaFazlaMenu, TabloIskeleti, MALIYET_TIP_METIN, ManuelMaliyetKalemiEkleFormu } from '../components/Ortak';
 import { excelIndir } from '../utils/disaAktarma';
 import BelgeSablonu from '../components/BelgeSablonu';
@@ -717,14 +717,14 @@ export default function SiparislerSayfasi() {
   }
 
   async function topluSil() {
-    if (!(await ozelOnayIste(`${secilenIdler.size} siparişi silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`))) return;
+    if (!(await ozelOnayIste(`${secilenIdler.size} siparişi silmek istediğinize emin misiniz?`))) return;
     setHata(null);
-    let basarili = 0;
+    const silinenIdler = [];
     const basarisizlar = [];
     for (const id of secilenIdler) {
       try {
         await api.delete(`/siparisler/${id}`);
-        basarili += 1;
+        silinenIdler.push(id);
       } catch (err) {
         basarisizlar.push(id);
       }
@@ -732,9 +732,15 @@ export default function SiparislerSayfasi() {
     setSecilenIdler(new Set());
     listeyiYukle();
     if (basarisizlar.length > 0) {
-      setHata(`${basarili} sipariş silindi, ${basarisizlar.length} sipariş silinemedi (muhtemelen Taslak/İptal dışındaki siparişler silinemez).`);
+      setHata(`${silinenIdler.length} sipariş silindi, ${basarisizlar.length} sipariş silinemedi (muhtemelen Taslak/İptal dışındaki siparişler silinemez).`);
     } else {
-      setBilgiMesaji(`${basarili} sipariş silindi.`);
+      setBilgiMesaji(`${silinenIdler.length} sipariş silindi.`);
+    }
+    if (silinenIdler.length > 0) {
+      geriAlBildirimGoster(`${silinenIdler.length} sipariş silindi.`, async () => {
+        await Promise.all(silinenIdler.map((id) => api.put(`/siparisler/${id}/geri-getir`)));
+        listeyiYukle();
+      });
     }
   }
 
@@ -759,6 +765,10 @@ export default function SiparislerSayfasi() {
       await api.delete(`/siparisler/${siparisId}`);
       setBilgiMesaji(`${siparisNo} numaralı sipariş silindi.`);
       listeyiYukle();
+      geriAlBildirimGoster(`Sipariş ${siparisNo} silindi.`, async () => {
+        await api.put(`/siparisler/${siparisId}/geri-getir`);
+        listeyiYukle();
+      });
     } catch (err) {
       setHata(hataMesajiCikar(err));
     }
