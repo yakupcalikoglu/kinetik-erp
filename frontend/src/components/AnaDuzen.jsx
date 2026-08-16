@@ -1095,10 +1095,19 @@ export default function AnaDuzen() {
         </nav>
 
         <div style={{ padding: 16, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-          <div style={{ fontSize: 13, fontWeight: 500 }}>{oturum?.kullanici?.ad_soyad}</div>
-          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 10 }}>
-            {oturum?.kullanici?.email}
-          </div>
+          <NavLink
+            to="/profilim"
+            onClick={() => setMobilMenuAcik(false)}
+            style={{ display: 'block', textDecoration: 'none', marginBottom: 10 }}
+          >
+            <div style={{ fontSize: 13, fontWeight: 500, color: 'white' }}>{oturum?.kullanici?.ad_soyad}</div>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>
+              {oturum?.kullanici?.email}
+            </div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', textDecoration: 'underline', marginTop: 2 }}>
+              Profilim / Şifre değiştir
+            </div>
+          </NavLink>
           <button
             onClick={cikisIslemi}
             style={{
