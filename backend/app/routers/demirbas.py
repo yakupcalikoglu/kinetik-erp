@@ -13,6 +13,7 @@ from app.models.cari import CariHesap
 from app.models.denetim import DuzenlemeKaydi
 from app.core.security import sifre_dogrula
 from app.services.para_hareketi import para_hareketi_olustur
+from app.db.soft_delete import yumusak_sil, yumusak_geri_getir, aktif_filtre
 from app.schemas.demirbas import (
     DemirbasOlusturIstegi, DemirbasDuzenleIstegi, DemirbasSatisIstegi, DemirbasYanit,
     DemirbasTopluIceAktarIstegi, DemirbasTopluIceAktarSonucu,
@@ -133,7 +134,7 @@ def demirbas_toplu_ice_aktar(
 def demirbaslari_listele(
     sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
 ):
-    sorgu = select(Demirbas).where(Demirbas.sirket_id == sirket_id).order_by(Demirbas.id.desc())
+    sorgu = select(Demirbas).where(Demirbas.sirket_id == sirket_id, aktif_filtre(Demirbas)).order_by(Demirbas.id.desc())
     kayitlar = list(db.execute(sorgu).scalars())
     _cari_unvan_ekle(db, kayitlar)
     for k in kayitlar:
@@ -185,6 +186,12 @@ def demirbas_duzenle(
 def demirbas_sil(
     demirbas_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
 ):
+    """
+    Kaydi GERCEKTEN silmez - soft-delete yapar. "Satilmis demirbas
+    silinemez" kurali KORUNUYOR - bu, FK ihlali korkusuyla degil, ILGILI
+    Kasa/Banka hareketinin kaynagi asili kalmasin diye bir IS KURALI, ve
+    soft-delete bunu degistirmez (once 'Satisi Geri Al' gerekir).
+    """
     kayit = _demirbas_getir_veya_404(db, demirbas_id, sirket_id)
     if kayit.durum == "SATILDI":
         raise HTTPException(
@@ -192,9 +199,22 @@ def demirbas_sil(
             "Satılmış bir demirbaş doğrudan silinemez (kasaya işlenen tutar asılı kalır). "
             "Önce 'Satışı Geri Al' ile satışı iptal edin, sonra silin.",
         )
-    db.delete(kayit)
-    db.commit()
+    yumusak_sil(db, kayit)
     return {"silindi": True}
+
+
+@router.put("/{demirbas_id}/geri-getir", response_model=DemirbasYanit,
+            dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
+def demirbas_geri_getir(
+    demirbas_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
+):
+    kayit = db.get(Demirbas, demirbas_id)
+    if kayit is None or kayit.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Demirbaş bulunamadı.")
+    yumusak_geri_getir(db, kayit)
+    _cari_unvan_ekle(db, [kayit])
+    _guncel_deger_hesapla(kayit)
+    return kayit
 
 
 @router.put("/{demirbas_id}/satisi-geri-al", response_model=DemirbasYanit,
