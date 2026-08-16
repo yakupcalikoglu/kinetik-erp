@@ -422,3 +422,12 @@ class PosTaksitYanit(BaseModel):
 
 class PosTaksitYatirIstegi(BaseModel):
     yatma_tarihi: date
+
+class PosTaksitVadesiGecenSatiri(BaseModel):
+    taksit_id: int
+    plan_id: int
+    urun_bilgisi: str
+    musteri_unvan: str | None = None
+    taksit_no: int
+    vade_tarihi: date
+    tutar: Decimal
