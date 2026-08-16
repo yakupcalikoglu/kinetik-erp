@@ -606,19 +606,22 @@ def genel_bakis(
             dependencies=[Depends(izin_gerektir("RAPOR_GORUNTULE"))])
 def yaklasan_vadeler(
     gun: int = Query(30, description="Kac gun ileriye kadar vadeler getirilsin"),
+    baslangic_gun: int = Query(0, description="Kac gun GERIYE (negatif) kadar vadeler de dahil edilsin - Dashboard'daki 'Bugun Yapilacaklar' icin, vadesi GECMIS ama hala odenmemis kayitlari da gormek icin kullanilir."),
     sirket_id: int = Depends(aktif_sirket_id_getir),
     db: Session = Depends(get_db),
 ):
     """
     Genel Bakis ekrani icin: onumuzdeki `gun` gun icinde vadesi gelecek
-    tum odemeleri (para cikisi) ve tahsilatlari (para girisi) tek bir
-    listede, kaynagi ne olursa olsun (cek/leasing/akreditif/taksit/kira)
-    birlestirip tarihe gore siralar.
+    (ve istenirse `baslangic_gun` ile GECMISTEKI vadesi gecmis) tum
+    odemeleri (para cikisi) ve tahsilatlari (para girisi) tek bir listede,
+    kaynagi ne olursa olsun (cek/leasing/akreditif/taksit/kira) birlestirip
+    tarihe gore siralar.
     """
     from app.models.finansal import CekTip, LeasingSozlesme, LeasingOdeme
     from app.models.akreditif import Akreditif, AkreditifKalemi
 
     bugun = date.today()
+    baslangic_tarih = bugun + timedelta(days=baslangic_gun)
     son_tarih = bugun + timedelta(days=gun)
 
     def cari_unvani(cari_id):
@@ -635,7 +638,7 @@ def yaklasan_vadeler(
         select(Cek).where(
             Cek.sirket_id == sirket_id,
             Cek.durum == CekDurum.PORTFOYDE,
-            Cek.vade_tarihi >= bugun,
+            Cek.vade_tarihi >= baslangic_tarih,
             Cek.vade_tarihi <= son_tarih,
         )
     ).scalars())
@@ -655,7 +658,7 @@ def yaklasan_vadeler(
         .where(
             LeasingSozlesme.sirket_id == sirket_id,
             LeasingOdeme.odendi_mi.is_(False),
-            LeasingOdeme.vade_tarihi >= bugun,
+            LeasingOdeme.vade_tarihi >= baslangic_tarih,
             LeasingOdeme.vade_tarihi <= son_tarih,
         )
     ).all())
@@ -674,7 +677,7 @@ def yaklasan_vadeler(
         .where(
             Akreditif.sirket_id == sirket_id,
             AkreditifKalemi.odendi_mi.is_(False),
-            AkreditifKalemi.vade_tarihi >= bugun,
+            AkreditifKalemi.vade_tarihi >= baslangic_tarih,
             AkreditifKalemi.vade_tarihi <= son_tarih,
         )
     ).all())
@@ -698,7 +701,7 @@ def yaklasan_vadeler(
         .where(
             TaksitliSatisPlani.sirket_id == sirket_id,
             TaksitDetay.odendi_mi.is_(False),
-            TaksitDetay.vade_tarihi >= bugun,
+            TaksitDetay.vade_tarihi >= baslangic_tarih,
             TaksitDetay.vade_tarihi <= son_tarih,
         )
     ).all())
@@ -718,7 +721,7 @@ def yaklasan_vadeler(
         .where(
             KiralamaSozlesme.sirket_id == sirket_id,
             KiralamaOdeme.odendi_mi.is_(False),
-            KiralamaOdeme.donem_sonu >= bugun,
+            KiralamaOdeme.donem_sonu >= baslangic_tarih,
             KiralamaOdeme.donem_sonu <= son_tarih,
         )
     ).all())
