@@ -9,6 +9,7 @@ from app.db.session import get_db
 from app.core.deps import aktif_sirket_id_getir, izin_gerektir, aktif_kullanici_getir
 from app.models.auth import Kullanici
 from app.models.cari import CariHesap, CariHareket
+from app.db.soft_delete import yumusak_sil, yumusak_geri_getir, aktif_filtre
 from app.models.denetim import DuzenlemeKaydi
 from app.core.security import sifre_dogrula
 from app.schemas.cari import (
@@ -51,7 +52,7 @@ def carileri_listele(
     sirket_id: int = Depends(aktif_sirket_id_getir),
     db: Session = Depends(get_db),
 ):
-    sorgu = select(CariHesap).where(CariHesap.sirket_id == sirket_id)
+    sorgu = select(CariHesap).where(CariHesap.sirket_id == sirket_id, aktif_filtre(CariHesap))
     if tip:
         sorgu = sorgu.where(CariHesap.tip == tip)
     if arama:
@@ -369,20 +370,31 @@ def cari_sil(
     sirket_id: int = Depends(aktif_sirket_id_getir),
     db: Session = Depends(get_db),
 ):
+    """
+    Cariyi GERCEKTEN silmez - "silindi" olarak isaretler (soft-delete).
+    Boylece iliskili kayitlarda (siparis, cek, hareket vb.) FK ihlali
+    olusmaz ve yanlislikla silinen bir cari HER ZAMAN geri getirilebilir.
+    """
     cari = db.get(CariHesap, cari_id)
     if cari is None or cari.sirket_id != sirket_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Cari kayıt bulunamadı.")
 
-    try:
-        db.delete(cari)
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            "Bu cari kayıt başka kayıtlarda (sipariş, çek, hareket vb.) kullanıldığı için silinemiyor."
-        )
+    yumusak_sil(db, cari)
     return {"silindi": True}
+
+
+@router.put("/{cari_id}/geri-getir", response_model=CariYanit,
+            dependencies=[Depends(izin_gerektir("CARI_DUZENLE"))])
+def cari_geri_getir(
+    cari_id: int,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    cari = db.get(CariHesap, cari_id)
+    if cari is None or cari.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Cari kayıt bulunamadı.")
+    yumusak_geri_getir(db, cari)
+    return cari
 
 
 @router.get("/{cari_id}/ozet", response_model=CariOzetYaniti,
