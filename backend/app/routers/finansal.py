@@ -28,6 +28,7 @@ from app.schemas.finansal import (
     KiralamaDuzenleIstegi, KiralamaSonlandirIstegi,
     BakimOlusturIstegi, BakimYanit,
     PosTaksitOlusturIstegi, PosTaksitYanit, PosTaksitDetayYanit, PosTaksitYatirIstegi,
+    PosTaksitVadesiGecenSatiri,
 )
 from app.services.para_hareketi import para_hareketi_olustur
 
@@ -1446,3 +1447,59 @@ def pos_taksit_plani_sil(plan_id: int, sirket_id: int = Depends(aktif_sirket_id_
     db.delete(plan)
     db.commit()
     return {"silindi": True}
+
+@router.get("/pos-taksitleri/vadesi-gecenler", response_model=list[PosTaksitDetayYanit],
+            dependencies=[Depends(izin_gerektir("STOK_GORUNTULE"))])
+def pos_taksitleri_vadesi_gecenler(
+    sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
+):
+    """
+    Vade tarihi gecmis ama HALA "hesaba yatti" olarak isaretlenmemis POS
+    taksitlerini doner - Bildirimler cubugunda kullanicinin "banka bu ay
+    yatirmayi unuttu mu / kontrol etmem gerekiyor mu" sorusuna cevap
+    vermesi icin.
+    """
+    from datetime import date as _date
+    sorgu = (
+        select(PosTaksitDetay)
+        .join(PosTaksitPlani, PosTaksitPlani.id == PosTaksitDetay.plan_id)
+        .where(
+            PosTaksitPlani.sirket_id == sirket_id,
+            PosTaksitDetay.yatti_mi.is_(False),
+            PosTaksitDetay.vade_tarihi < _date.today(),
+        )
+    )
+    return list(db.execute(sorgu).scalars())
+
+
+@router.get("/pos-taksit-detay/vadesi-gecenler", response_model=list[PosTaksitVadesiGecenSatiri],
+            dependencies=[Depends(izin_gerektir("STOK_GORUNTULE"))])
+def pos_taksit_vadesi_gecenler(
+    sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
+):
+    """
+    Vadesi GECMIS ama HALA "hesaba yatmadi" isaretli taksitleri doner -
+    Bildirimler (zil) icin. Bankada bir sorun olabilecegini (POS
+    saglayicisi odemeyi geciktirdi, ya da unutulup isaretlenmedi) erken
+    fark etmek icin.
+    """
+    from datetime import date as _date
+    bugun = _date.today()
+
+    sorgu = (
+        select(PosTaksitDetay, PosTaksitPlani)
+        .join(PosTaksitPlani, PosTaksitPlani.id == PosTaksitDetay.plan_id)
+        .where(PosTaksitPlani.sirket_id == sirket_id, PosTaksitDetay.yatti_mi.is_(False), PosTaksitDetay.vade_tarihi < bugun)
+    )
+    sonuclar = []
+    for taksit, plan in db.execute(sorgu).all():
+        urun = db.get(StokSeriNo, plan.stok_seri_no_id)
+        kart = db.get(StokKarti, urun.stok_karti_id) if urun else None
+        urun_bilgisi = f"{kart.marka} {kart.model} ({urun.seri_no})" if kart and urun else (urun.seri_no if urun else "—")
+        musteri = db.get(CariHesap, plan.musteri_cari_id) if plan.musteri_cari_id else None
+        sonuclar.append(PosTaksitVadesiGecenSatiri(
+            taksit_id=taksit.id, plan_id=plan.id, urun_bilgisi=urun_bilgisi,
+            musteri_unvan=musteri.unvan if musteri else None,
+            taksit_no=taksit.taksit_no, vade_tarihi=taksit.vade_tarihi, tutar=taksit.tutar,
+        ))
+    return sonuclar
