@@ -1,17 +1,14 @@
-name: Haftalik Veritabani Yedegi
-
+name: Gunluk Veritabani Yedegi
 on:
   schedule:
-    - cron: '0 3 * * 1'   # Her Pazartesi 03:00 UTC (Turkiye saatiyle 06:00)
+    - cron: '0 3 * * *'   # Her gun 03:00 UTC (Turkiye saatiyle 06:00)
   workflow_dispatch:       # Actions sekmesinden elle de calistirilabilir
-
 jobs:
   yedek-al:
     runs-on: ubuntu-latest
     steps:
       - name: Repoyu checkout et
         uses: actions/checkout@v4
-
       - name: PostgreSQL 17 istemcisini kur
         run: |
           sudo apt-get update
@@ -21,7 +18,6 @@ jobs:
           sudo sh -c 'echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
           sudo apt-get update
           sudo apt-get install -y postgresql-client-17
-
       - name: Veritabanini yedekle
         env:
           DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
@@ -30,12 +26,10 @@ jobs:
           TARIH=$(date +%Y-%m-%d)
           /usr/lib/postgresql/17/bin/pg_dump "$DATABASE_URL" --no-owner --no-privileges > "yedekler/yedek_${TARIH}.sql"
           gzip "yedekler/yedek_${TARIH}.sql"
-
-      - name: Eski yedekleri temizle (son 12 haftayi tut)
+      - name: Eski yedekleri temizle (son 30 gunu tut)
         run: |
           cd yedekler
-          ls -t *.sql.gz 2>/dev/null | tail -n +13 | xargs -r rm --
-
+          ls -t *.sql.gz 2>/dev/null | tail -n +31 | xargs -r rm --
       - name: Degisiklikleri commitle
         run: |
           git config user.name "github-actions[bot]"
