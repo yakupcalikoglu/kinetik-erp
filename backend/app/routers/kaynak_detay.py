@@ -94,6 +94,24 @@ def kaynak_detayi_getir(
                     ("Konum", "Finansal Takip → Taksitli Satış"),
                 ]
 
+        elif kaynak_tablo == "POS_TAKSIT_DETAY":
+            from app.models.finansal import PosTaksitDetay, PosTaksitPlani
+            from app.models.stok import StokSeriNo, StokKarti
+            taksit = db.get(PosTaksitDetay, kaynak_id)
+            if taksit is not None:
+                plan = db.get(PosTaksitPlani, taksit.plan_id)
+                urun = db.get(StokSeriNo, plan.stok_seri_no_id) if plan else None
+                kart = db.get(StokKarti, urun.stok_karti_id) if urun else None
+                urun_bilgisi = f"{kart.marka} {kart.model} ({urun.seri_no})" if kart and urun else "—"
+                baslik = f"Kredi Kartı Taksidi — {taksit.taksit_no}/{plan.taksit_sayisi if plan else '?'}"
+                detaylar = [
+                    ("Ürün", urun_bilgisi),
+                    ("Müşteri", cari_unvan(plan.musteri_cari_id) if plan else "—"),
+                    ("Tutar", f"{taksit.tutar} TRY"),
+                    ("Vade Tarihi", str(taksit.vade_tarihi)),
+                    ("Konum", "Finansal Takip → Kredi Kartı Taksitleri"),
+                ]
+
         elif kaynak_tablo == "KIRALAMA_ODEME":
             from app.models.finansal import KiralamaOdeme, KiralamaSozlesme
             odeme = db.get(KiralamaOdeme, kaynak_id)
