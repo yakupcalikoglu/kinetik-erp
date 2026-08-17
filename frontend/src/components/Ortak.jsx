@@ -100,6 +100,110 @@ export function useKirliFormUyarisi(kirliMi) {
   }, [kirliMi]);
 }
 
+// Herhangi bir kayda (Siparis, Leasing, Cek vb.) gumruk evraki, sozlesme
+// kopyasi, fatura taramasi gibi belgeler eklenip listelenebilmesi icin -
+// kaynak_tablo + kaynak_id ile calisir, backend'deki /belgeler router'iyla
+// AYNI genel deseni kullanir. Kullanimi:
+//   <BelgeYoneticisi kaynakTablo="SIPARIS" kaynakId={siparis.id} />
+export function BelgeYoneticisi({ kaynakTablo, kaynakId }) {
+  const [belgeler, setBelgeler] = useState(null);
+  const [hata, setHata] = useState(null);
+  const [yukleniyor, setYukleniyor] = useState(false);
+
+  function yukle() {
+    api.get('/belgeler', { params: { kaynak_tablo: kaynakTablo, kaynak_id: kaynakId } })
+      .then((r) => setBelgeler(r.data))
+      .catch((e) => setHata(hataMesajiCikar(e)));
+  }
+  useEffect(yukle, [kaynakTablo, kaynakId]); // eslint-disable-line
+
+  async function dosyaSecildi(e) {
+    const dosya = e.target.files?.[0];
+    if (!dosya) return;
+    setHata(null);
+    setYukleniyor(true);
+    try {
+      const form = new FormData();
+      form.append('dosya', dosya);
+      await api.post('/belgeler', form, { params: { kaynak_tablo: kaynakTablo, kaynak_id: kaynakId } });
+      yukle();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setYukleniyor(false);
+      e.target.value = '';
+    }
+  }
+
+  async function indir(belge) {
+    try {
+      const { data } = await api.get(`/belgeler/${belge.id}/indir`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([data]));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = belge.dosya_adi;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    }
+  }
+
+  async function sil(belge) {
+    if (!(await ozelOnayIste(`"${belge.dosya_adi}" belgesini silmek istediğinize emin misiniz?`))) return;
+    try {
+      await api.delete(`/belgeler/${belge.id}`);
+      yukle();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    }
+  }
+
+  function boyutFormat(bayt) {
+    if (!bayt) return '';
+    if (bayt < 1024) return `${bayt} B`;
+    if (bayt < 1024 * 1024) return `${(bayt / 1024).toFixed(0)} KB`;
+    return `${(bayt / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  return (
+    <div style={{ padding: '12px 14px', background: 'var(--zemin)', borderRadius: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <div style={{ fontSize: 12.5, fontWeight: 600 }}>Belgeler {belgeler ? `(${belgeler.length})` : ''}</div>
+        <label style={{ fontSize: 11.5, color: 'var(--lacivert)', cursor: yukleniyor ? 'default' : 'pointer', textDecoration: 'underline' }}>
+          {yukleniyor ? 'Yükleniyor...' : '+ Belge ekle'}
+          <input type="file" onChange={dosyaSecildi} disabled={yukleniyor} style={{ display: 'none' }} />
+        </label>
+      </div>
+      {hata && <div style={{ fontSize: 11.5, color: 'var(--kirmizi)', marginBottom: 6 }}>{hata}</div>}
+      {belgeler === null ? (
+        <div style={{ fontSize: 12, color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
+      ) : belgeler.length === 0 ? (
+        <div style={{ fontSize: 12, color: 'var(--metin-soluk)' }}>Henüz belge eklenmemiş — gümrük evrakı, sözleşme kopyası vb. ekleyebilirsiniz.</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {belgeler.map((b) => (
+            <div key={b.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 8px', background: 'white', borderRadius: 6, fontSize: 12 }}>
+              <div style={{ overflow: 'hidden' }}>
+                <span style={{ fontWeight: 500 }}>{b.dosya_adi}</span>
+                <span style={{ color: 'var(--metin-soluk)', marginLeft: 6 }}>
+                  {boyutFormat(b.boyut_bayt)}{b.yukleyen_ad ? ` — ${b.yukleyen_ad}` : ''}
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexShrink: 0, marginLeft: 8 }}>
+                <button onClick={() => indir(b)} style={{ background: 'none', border: 'none', color: 'var(--lacivert)', cursor: 'pointer', fontSize: 11.5, padding: 0 }}>İndir</button>
+                <button onClick={() => sil(b)} style={{ background: 'none', border: 'none', color: 'var(--kirmizi)', cursor: 'pointer', fontSize: 11.5, padding: 0 }}>Sil</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function BilgiIpucu({ metin }) {
   const [acik, setAcik] = useState(false);
   const kutuRef = useRef(null);
