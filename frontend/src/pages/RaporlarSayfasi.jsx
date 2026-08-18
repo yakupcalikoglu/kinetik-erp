@@ -3,11 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { api, hataMesajiCikar } from '../api/client';
 import {
   Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, BosDurum, paraFormat, Etiket,
-  CizgiGrafik, BarGrafik,
+  CizgiGrafik, BarGrafik, Sekmeler,
 } from '../components/Ortak';
 
 const HAREKET_TURLERI = [
   { deger: 'STOK_SATIS', etiket: 'Stok Satışı (peşin)' },
+  { deger: 'POS_TAKSIT', etiket: 'Kredi Kartı Taksitli Satış' },
   { deger: 'TAKSIT', etiket: 'Taksitli Satış Tahsilatı' },
   { deger: 'KIRA_GELIRI', etiket: 'Kira Geliri' },
   { deger: 'AKREDITIF', etiket: 'Akreditif Ödemesi' },
@@ -62,6 +63,7 @@ const KAYNAK_YOL_HARITASI = {
   AKREDITIF_KALEMI: '/finansal?sekme=akreditif',
   TAKSIT_DETAY: '/finansal?sekme=taksit',
   KIRALAMA_ODEME: '/finansal?sekme=kiralama',
+  POS_TAKSIT_DETAY: '/finansal?sekme=postaksit',
 };
 
 function paraBazliToplamGoster(satirlar) {
@@ -1052,6 +1054,7 @@ function CariRaporu() {
 const EKSIK_MALIYET_KATEGORILERI = [
   { anahtar: 'satinalma_maliyeti_try', ad: 'Satınalma' },
   { anahtar: 'nakliye_maliyeti_try', ad: 'Nakliye/Navlun' },
+  { anahtar: 'sigorta_maliyeti_try', ad: 'Sigorta' },
   { anahtar: 'gumruk_maliyeti_try', ad: 'Gümrük' },
   { anahtar: 'antrepo_maliyeti_try', ad: 'Antrepo' },
 ];
@@ -1125,25 +1128,67 @@ function EksikMaliyetRaporu() {
   );
 }
 
+// Onceden 15 kart hep alt alta ayni sayfadaydi - "asiri goz yorucu ve
+// yogun" olmasi kacinilmazdi. Mantiksal 5 gruba (sekmeye) bolunerek, kullanici
+// TEK SEFERDE sadece ilgilendigi kategoriyi gorur - digerleri gerektiginde
+// bir tikla erisilebilir kalir, hicbiri KAYBOLMAZ.
+const RAPOR_SEKMELERI = [
+  { deger: 'genel', etiket: 'Genel Bakış' },
+  { deger: 'karzarar', etiket: 'Kâr / Zarar' },
+  { deger: 'nakit', etiket: 'Nakit & Gider' },
+  { deger: 'envanter', etiket: 'Envanter' },
+  { deger: 'detay', etiket: 'Detaylı Sorgular' },
+];
+
 export default function RaporlarSayfasi() {
+  const [sekme, setSekme] = useState('genel');
+
   return (
     <div>
       <SayfaBasligi baslik="Raporlar" aciklama="Genel bakış, yaklaşan vadeler, envanter, hareket türü, ürün ve cari bazlı raporlar" />
-      <GenelBakisKarti />
-      <EksikMaliyetRaporu />
-      <YillikKarsilastirmaKarti />
-      <AylikNetKarKarti />
-      <NakitAkisTahminiKarti />
-      <KdvOzetiKarti />
-      <KarMarjiKarti />
-      <HarcamaTurleriOzetiKarti />
-      <YaklasanVadelerKarti />
-      <AnaKasaOzetKarti />
-      <DepoEnvanteriKarti />
-      <AktifKiralamalarKarti />
-      <HareketTuruRaporu />
-      <SeriNoRaporu />
-      <CariRaporu />
+      <div style={{ marginBottom: 20 }}>
+        <Sekmeler sekmeler={RAPOR_SEKMELERI} aktif={sekme} onDegistir={setSekme} />
+      </div>
+
+      {sekme === 'genel' && (
+        <>
+          <GenelBakisKarti />
+          <EksikMaliyetRaporu />
+          <YaklasanVadelerKarti />
+        </>
+      )}
+
+      {sekme === 'karzarar' && (
+        <>
+          <YillikKarsilastirmaKarti />
+          <AylikNetKarKarti />
+          <KarMarjiKarti />
+          <KdvOzetiKarti />
+        </>
+      )}
+
+      {sekme === 'nakit' && (
+        <>
+          <NakitAkisTahminiKarti />
+          <AnaKasaOzetKarti />
+          <HarcamaTurleriOzetiKarti />
+        </>
+      )}
+
+      {sekme === 'envanter' && (
+        <>
+          <DepoEnvanteriKarti />
+          <AktifKiralamalarKarti />
+        </>
+      )}
+
+      {sekme === 'detay' && (
+        <>
+          <HareketTuruRaporu />
+          <SeriNoRaporu />
+          <CariRaporu />
+        </>
+      )}
     </div>
   );
 }
