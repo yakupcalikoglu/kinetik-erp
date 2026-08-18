@@ -444,6 +444,43 @@ def _stok_satis_satirlari(db, sirket_id, baslangic, bitis):
     return sonuc
 
 
+def _pos_taksit_satirlari(db, sirket_id, baslangic, bitis):
+    from app.models.finansal import PosTaksitPlani
+    sorgu = select(PosTaksitPlani).where(PosTaksitPlani.sirket_id == sirket_id)
+    if baslangic:
+        sorgu = sorgu.where(PosTaksitPlani.baslangic_tarihi >= baslangic)
+    if bitis:
+        sorgu = sorgu.where(PosTaksitPlani.baslangic_tarihi <= bitis)
+    planlar = list(db.execute(sorgu).scalars())
+
+    urun_haritasi, kart_haritasi = {}, {}
+    if planlar:
+        urunler = list(db.execute(
+            select(StokSeriNo).where(StokSeriNo.id.in_({p.stok_seri_no_id for p in planlar}))
+        ).scalars())
+        urun_haritasi = {u.id: u for u in urunler}
+        if urunler:
+            kart_haritasi = {
+                k.id: k for k in db.execute(
+                    select(StokKarti).where(StokKarti.id.in_({u.stok_karti_id for u in urunler}))
+                ).scalars()
+            }
+
+    sonuc = []
+    for p in planlar:
+        urun = urun_haritasi.get(p.stok_seri_no_id)
+        kart = kart_haritasi.get(urun.stok_karti_id) if urun else None
+        cari = db.get(CariHesap, p.musteri_cari_id) if p.musteri_cari_id else None
+        urun_adi = f"{kart.marka} {kart.model}" if kart else ""
+        aciklama = f"Kredi kartı taksitli satış - {urun.seri_no if urun else '?'}" + (f" ({urun_adi})" if urun_adi else "") + (f" — {cari.unvan}" if cari else "")
+        sonuc.append(HareketTuruSatiri(
+            tarih=p.baslangic_tarihi, tur="POS_TAKSIT", aciklama=aciklama,
+            tutar=p.toplam_tutar, cari_id=p.musteri_cari_id,
+            cari_unvan=cari.unvan if cari else None,
+        ))
+    return sonuc
+
+
 _HAREKET_TURU_FONKSIYONLARI = {
     "MAAS": _maas_satirlari,
     "KIRA_GELIRI": _kira_geliri_satirlari,
@@ -456,6 +493,7 @@ _HAREKET_TURU_FONKSIYONLARI = {
     "TAKSIT": _taksit_satirlari,
     "CEK": _cek_satirlari,
     "STOK_SATIS": _stok_satis_satirlari,
+    "POS_TAKSIT": _pos_taksit_satirlari,
 }
 
 
