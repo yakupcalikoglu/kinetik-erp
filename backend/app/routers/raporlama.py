@@ -644,7 +644,14 @@ def genel_bakis(
             dependencies=[Depends(izin_gerektir("RAPOR_GORUNTULE"))])
 def yaklasan_vadeler(
     gun: int = Query(30, description="Kac gun ileriye kadar vadeler getirilsin"),
-    baslangic_gun: int = Query(0, description="Kac gun GERIYE (negatif) kadar vadeler de dahil edilsin - Dashboard'daki 'Bugun Yapilacaklar' icin, vadesi GECMIS ama hala odenmemis kayitlari da gormek icin kullanilir."),
+    # NOT: burada Query(...) KASITLI OLARAK KULLANILMADI - bu fonksiyon
+    # sadece FastAPI route handler'i olarak DEGIL, ayrica baska bir Python
+    # fonksiyonu (nakit_akis_tahmini) icinden DOGRUDAN da cagriliyor. Query()
+    # sadece HTTP istegi baglaminda gercek degere donusur; dogrudan
+    # cagrildiginda deger EXPLICIT verilmezse Query nesnesinin KENDISI
+    # (int degil) kalir ve timedelta(days=...) hesaplamasi COKER - bu da
+    # worker'in cokup "Sunucuya baglanilamadi" hatasi vermesine yol acmisti.
+    baslangic_gun: int = 0,
     sirket_id: int = Depends(aktif_sirket_id_getir),
     db: Session = Depends(get_db),
 ):
