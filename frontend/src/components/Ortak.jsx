@@ -866,7 +866,13 @@ export const FATURALI_SATIS_MALIYET_TIPLERI = ['GUMRUK', 'ILAVE_GUMRUK_VERGISI',
 // maliyetler) sayfalarinda kullanilir.
 export function ManuelMaliyetKalemiEkleFormu({ urun, onKaydedildi, onVazgec, varsayilanTip = 'NAKLIYE', digerUrunler = null }) {
   const [cariler, setCariler] = useState([]);
-  const [tumSiparriseDagit, setTumSiparriseDagit] = useState(false);
+  // "kime" -> 'TEK' (sadece bu urun) | 'SECILEN' (isaretlenen bircok urun) | 'TUMU' (siparisin tamami)
+  const [kime, setKime] = useState('TEK');
+  // Varsayilan olarak bu urun ZATEN isaretli gelsin - "Secilen urunlere"
+  // moduna gecince kullanici baskalarini da EKLEYEBILSIN, cikarabilsin.
+  const [secilenIdler, setSecilenIdler] = useState(() => new Set([urun.id]));
+  // 'ORANSAL' (satinalma maliyetine oranli) | 'ESIT' (butun secili urunlere esit)
+  const [yontem, setYontem] = useState('ORANSAL');
   const [form, setForm] = useState({
     tip: varsayilanTip, tutar: '', para_birimi: 'TRY', kur: '1', referans_usd_kuru: '',
     tedarikci_cari_id: '', belge_no: '', tarih: new Date().toISOString().slice(0, 10), aciklama: '',
@@ -887,9 +893,45 @@ export function ManuelMaliyetKalemiEkleFormu({ urun, onKaydedildi, onVazgec, var
     api.get(`/kur/${form.para_birimi}`).then((r) => setForm((f) => ({ ...f, kur: r.data.kur }))).catch(() => {});
   }, [form.para_birimi]); // eslint-disable-line
 
+  function urunSecimDegistir(id) {
+    setSecilenIdler((mevcut) => {
+      const yeni = new Set(mevcut);
+      if (yeni.has(id)) yeni.delete(id); else yeni.add(id);
+      return yeni;
+    });
+  }
+
+  // Onizleme icin - kime="SECILEN"/"TUMU" ise hedef urun listesini dondurur.
+  const hedefUrunler = kime === 'TEK'
+    ? [urun]
+    : kime === 'TUMU'
+      ? (digerUrunler || [urun])
+      : (digerUrunler || []).filter((u) => secilenIdler.has(u.id));
+
+  function payHesapla(tutarTry) {
+    if (hedefUrunler.length === 0) return [];
+    if (yontem === 'ESIT') {
+      const pay = tutarTry / hedefUrunler.length;
+      return hedefUrunler.map((u) => ({ urun: u, payTry: pay }));
+    }
+    // ORANSAL: satinalma maliyetine gore - hicbirinde satinalma maliyeti
+    // girilmemisse ESIT dagitima duser (0'a bolme onlenir).
+    const toplamSatinalma = hedefUrunler.reduce((acc, u) => acc + Number(u.satinalma_maliyeti_try || 0), 0);
+    return hedefUrunler.map((u) => ({
+      urun: u,
+      payTry: toplamSatinalma === 0
+        ? tutarTry / hedefUrunler.length
+        : tutarTry * (Number(u.satinalma_maliyeti_try || 0) / toplamSatinalma),
+    }));
+  }
+
   async function kaydet(e) {
     e.preventDefault();
     setHata(null);
+    if (hedefUrunler.length === 0) {
+      setHata('En az bir ürün seçilmelidir.');
+      return;
+    }
     setKaydediliyor(true);
     try {
       const girilenTutar = Number(form.tutar);
@@ -902,15 +944,12 @@ export function ManuelMaliyetKalemiEkleFormu({ urun, onKaydedildi, onVazgec, var
         referans_usd_kuru: form.para_birimi === 'TRY' && form.referans_usd_kuru ? Number(form.referans_usd_kuru) : null,
       };
 
-      if (tumSiparriseDagit && digerUrunler && digerUrunler.length > 1) {
-        // Bu siparisteki TUM urunlere, satinalma maliyetine ORANTILI dagit
-        // (hicbirinde satinalma maliyeti girilmemisse ESIT dagit).
-        const toplamSatinalma = digerUrunler.reduce((acc, u) => acc + Number(u.satinalma_maliyeti_try || 0), 0);
+      if (hedefUrunler.length === 1 && hedefUrunler[0].id === urun.id) {
+        await api.post(`/stok-seri-no/${urun.id}/maliyet-kalemi`, { ...ortak, tutar: girilenTutar });
+      } else {
+        const dagitim = payHesapla(tutarTry);
         const basarisizlar = [];
-        for (const u of digerUrunler) {
-          const payTry = toplamSatinalma === 0
-            ? tutarTry / digerUrunler.length
-            : tutarTry * (Number(u.satinalma_maliyeti_try || 0) / toplamSatinalma);
+        for (const { urun: u, payTry } of dagitim) {
           const payOrijinal = form.para_birimi === 'TRY' ? payTry : payTry / kurDeger;
           try {
             await api.post(`/stok-seri-no/${u.id}/maliyet-kalemi`, { ...ortak, tutar: payOrijinal });
@@ -923,8 +962,6 @@ export function ManuelMaliyetKalemiEkleFormu({ urun, onKaydedildi, onVazgec, var
           setKaydediliyor(false);
           return;
         }
-      } else {
-        await api.post(`/stok-seri-no/${urun.id}/maliyet-kalemi`, { ...ortak, tutar: girilenTutar });
       }
       onKaydedildi();
     } catch (err) {
@@ -934,18 +971,73 @@ export function ManuelMaliyetKalemiEkleFormu({ urun, onKaydedildi, onVazgec, var
     }
   }
 
+  const onizlemeTutarTry = form.tutar
+    ? (form.para_birimi === 'TRY' ? Number(form.tutar) : Number(form.tutar) * Number(form.kur || 1))
+    : 0;
+  const onizlemeDagitim = onizlemeTutarTry > 0 && hedefUrunler.length > 1 ? payHesapla(onizlemeTutarTry) : null;
+
   return (
     <form onSubmit={kaydet} style={{ padding: 14, background: 'var(--zemin)', borderRadius: 8, marginTop: 8 }}>
       <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>
         {urun.seri_no} — Manuel maliyet kalemi ekle
       </div>
       <HataMesaji>{hata}</HataMesaji>
+
       {digerUrunler && digerUrunler.length > 1 && (
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, fontSize: 12.5, cursor: 'pointer' }}>
-          <input type="checkbox" checked={tumSiparriseDagit} onChange={(e) => setTumSiparriseDagit(e.target.checked)} />
-          Bu tutarı, bu siparişteki {digerUrunler.length} ürünün tamamına satınalma maliyetine oranlı dağıt (sadece {urun.seri_no}'ya eklemek yerine)
-        </label>
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 12, color: 'var(--metin-ikincil)', marginBottom: 6 }}>Bu maliyet hangi ürün(ler)e yansısın?</div>
+          <div style={{ display: 'flex', gap: 14, marginBottom: 8, flexWrap: 'wrap' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, cursor: 'pointer' }}>
+              <input type="radio" name={`kime-${urun.id}`} checked={kime === 'TEK'} onChange={() => setKime('TEK')} />
+              Sadece {urun.seri_no}
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, cursor: 'pointer' }}>
+              <input type="radio" name={`kime-${urun.id}`} checked={kime === 'SECILEN'} onChange={() => setKime('SECILEN')} />
+              Seçtiğim ürünlere
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, cursor: 'pointer' }}>
+              <input type="radio" name={`kime-${urun.id}`} checked={kime === 'TUMU'} onChange={() => setKime('TUMU')} />
+              Siparişteki tüm ürünlere ({digerUrunler.length})
+            </label>
+          </div>
+
+          {kime === 'SECILEN' && (
+            <div style={{ background: 'white', border: '1px solid var(--kenarlik)', borderRadius: 7, padding: '6px 10px', marginBottom: 8 }}>
+              {digerUrunler.map((u) => (
+                <label key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', fontSize: 12.5, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={secilenIdler.has(u.id)} onChange={() => urunSecimDegistir(u.id)} />
+                  {u.seri_no}
+                </label>
+              ))}
+            </div>
+          )}
+
+          {kime !== 'TEK' && (
+            <div style={{ display: 'flex', gap: 14, marginBottom: 4 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, cursor: 'pointer' }}>
+                <input type="radio" name={`yontem-${urun.id}`} checked={yontem === 'ORANSAL'} onChange={() => setYontem('ORANSAL')} />
+                Satınalma fiyatına oranla dağıt
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, cursor: 'pointer' }}>
+                <input type="radio" name={`yontem-${urun.id}`} checked={yontem === 'ESIT'} onChange={() => setYontem('ESIT')} />
+                Eşit bölüştür
+              </label>
+            </div>
+          )}
+
+          {onizlemeDagitim && (
+            <div style={{ fontSize: 11.5, color: 'var(--metin-ikincil)', background: 'white', borderRadius: 6, padding: '6px 10px' }}>
+              {onizlemeDagitim.map(({ urun: u, payTry }) => (
+                <div key={u.id} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>{u.seri_no}</span>
+                  <strong style={{ color: 'var(--metin-birincil)' }}>{paraFormat(payTry)}</strong>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
+
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12 }}>
         <Alan etiket="Maliyet tipi">
           <select value={form.tip} onChange={(e) => setForm((f) => ({ ...f, tip: e.target.value }))} style={girdiStili}>
