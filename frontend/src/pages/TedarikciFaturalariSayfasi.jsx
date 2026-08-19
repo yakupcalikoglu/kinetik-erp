@@ -161,13 +161,14 @@ function YeniFaturaFormu({ onKaydedildi, onVazgec }) {
 function OdemeFormu({ fatura, kalanBakiye, onKaydedildi, onVazgec }) {
   const [siparisler, setSiparisler] = useState([]);
   const [bankaHesaplari, setBankaHesaplari] = useState([]);
-  const [siparisUrunleri, setSiparisUrunleri] = useState([]);
+  const [siparisUrunleri, setSiparisUrunleri] = useState(null);
+  const [secilenUrunIdleri, setSecilenUrunIdleri] = useState(new Set());
   const [stokKartlari, setStokKartlari] = useState([]);
   const [cariler, setCariler] = useState([]);
   const [form, setForm] = useState({
     tutar: String(kalanBakiye), odeme_tarihi: new Date().toISOString().slice(0, 10),
     odeme_yontemi: 'BANKA', banka_hesap_id: '', kur: '1',
-    dagitim_tipi: 'SIPARIS', siparis_id: '', stok_seri_no_id: '',
+    dagitim_tipi: 'URUNLER', siparis_id: '', yontem: 'ORANSAL',
     maliyet_tipi: fatura.varsayilan_maliyet_tipi || 'DIGER', aciklama: '',
   });
   const [hata, setHata] = useState(null);
@@ -185,7 +186,10 @@ function OdemeFormu({ fatura, kalanBakiye, onKaydedildi, onVazgec }) {
   }
 
   useEffect(() => {
-    api.get('/siparisler').then((r) => setSiparisler(r.data)).catch(() => {});
+    api.get('/siparisler').then((r) => {
+      const siralanmis = [...r.data].sort((a, b) => (b.siparis_tarihi || '').localeCompare(a.siparis_tarihi || ''));
+      setSiparisler(siralanmis);
+    }).catch(() => {});
     api.get('/banka-hesaplari').then((r) => setBankaHesaplari(r.data)).catch(() => {});
     api.get('/stok-kartlari').then((r) => setStokKartlari(r.data)).catch(() => {});
     api.get('/cariler').then((r) => setCariler(r.data)).catch(() => {});
@@ -196,19 +200,39 @@ function OdemeFormu({ fatura, kalanBakiye, onKaydedildi, onVazgec }) {
     api.get(`/kur/${fatura.para_birimi}`).then((r) => setForm((f) => ({ ...f, kur: r.data.kur }))).catch(() => {});
   }, [fatura.para_birimi]);
 
+  // Siparis sectiginde ürünler (checkbox'larla secilebilir hale gelsin
+  // diye) her zaman cekilir - artik "URUN" moduna ozel degil, "URUNLER"
+  // (secili birkacina/tumune dagitim) modu icin de gerekli. Hata ARTIK
+  // sessizce yutulmuyor - kullanici "urunler gelmiyor" derken aslinda
+  // BASARISIZ bir istegi fark edemiyordu.
   useEffect(() => {
-    if (form.dagitim_tipi === 'URUN' && form.siparis_id) {
-      api.get('/stok-seri-no', { params: { siparis_id: form.siparis_id } }).then((r) => setSiparisUrunleri(r.data)).catch(() => {});
-    } else {
-      setSiparisUrunleri([]);
-    }
-  }, [form.dagitim_tipi, form.siparis_id]);
+    if (!form.siparis_id) { setSiparisUrunleri(null); setSecilenUrunIdleri(new Set()); return; }
+    setHata(null);
+    api.get('/stok-seri-no', { params: { siparis_id: form.siparis_id } }).then((r) => {
+      setSiparisUrunleri(r.data);
+      setSecilenUrunIdleri(new Set(r.data.map((u) => u.id))); // varsayilan: hepsi secili
+    }).catch((e) => setHata(hataMesajiCikar(e)));
+  }, [form.siparis_id]);
 
-  const secilenBankaHesabi = bankaHesaplari.find((h) => h.id === Number(form.banka_hesap_id));
+  function tumunuSecToggle(e) {
+    if (e.target.checked) setSecilenUrunIdleri(new Set((siparisUrunleri || []).map((u) => u.id)));
+    else setSecilenUrunIdleri(new Set());
+  }
+  function urunSecimDegistir(id) {
+    setSecilenUrunIdleri((mevcut) => {
+      const yeni = new Set(mevcut);
+      if (yeni.has(id)) yeni.delete(id); else yeni.add(id);
+      return yeni;
+    });
+  }
+
+  const tumuSecili = siparisUrunleri && siparisUrunleri.length > 0 && secilenUrunIdleri.size === siparisUrunleri.length;
 
   async function kaydet(e) {
     e.preventDefault();
     setHata(null);
+    if (!form.siparis_id) { setHata('Lütfen bir sipariş seçin.'); return; }
+    if (secilenUrunIdleri.size === 0) { setHata('En az bir ürün seçmelisiniz.'); return; }
     setKaydediliyor(true);
     try {
       await api.post(`/tedarikci-faturalari/${fatura.id}/ode`, {
@@ -217,9 +241,9 @@ function OdemeFormu({ fatura, kalanBakiye, onKaydedildi, onVazgec }) {
         odeme_yontemi: form.odeme_yontemi,
         banka_hesap_id: form.odeme_yontemi === 'BANKA' ? Number(form.banka_hesap_id) : null,
         kur: Number(form.kur),
-        dagitim_tipi: form.dagitim_tipi,
-        siparis_id: form.dagitim_tipi === 'SIPARIS' ? Number(form.siparis_id) : null,
-        stok_seri_no_id: form.dagitim_tipi === 'URUN' ? Number(form.stok_seri_no_id) : null,
+        dagitim_tipi: 'URUNLER',
+        stok_seri_no_idleri: Array.from(secilenUrunIdleri),
+        yontem: form.yontem,
         maliyet_tipi: form.maliyet_tipi,
         aciklama: form.aciklama || null,
       });
@@ -271,38 +295,63 @@ function OdemeFormu({ fatura, kalanBakiye, onKaydedildi, onVazgec }) {
               {Object.entries(MALIYET_TIP_METIN).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
           </Alan>
-          <Alan etiket="Bu masraf neye yansıyacak?">
-            <select value={form.dagitim_tipi} onChange={(e) => setForm((f) => ({ ...f, dagitim_tipi: e.target.value }))} style={girdiStili}>
-              <option value="SIPARIS">Bir siparişin TÜM ürünlerine (orantılı dağıt)</option>
-              <option value="URUN">Tek bir ürüne (seri no)</option>
-            </select>
-          </Alan>
           <Alan etiket="Sipariş">
             <AramaliSecici
               secenekler={siparisler}
               deger={form.siparis_id}
-              onDegistir={(v) => setForm((f) => ({ ...f, siparis_id: v, stok_seri_no_id: '' }))}
+              onDegistir={(v) => setForm((f) => ({ ...f, siparis_id: v }))}
               etiketFn={(s) => s.siparis_no}
               bosMetin="Sipariş no yazarak arayın..."
             />
           </Alan>
-          {form.dagitim_tipi === 'URUN' && (
-            <Alan etiket="Ürün (seri no)">
-              <select required value={form.stok_seri_no_id} onChange={(e) => setForm((f) => ({ ...f, stok_seri_no_id: e.target.value }))} style={girdiStili}>
-                <option value="">Seçin...</option>
-                {siparisUrunleri.map((u) => <option key={u.id} value={u.id}>{urunEtiketiOlustur(u)}</option>)}
-              </select>
-              {form.stok_seri_no_id && siparisUrunleri.find((u) => u.id === Number(form.stok_seri_no_id))?.musteri_cari_id && (
-                <div style={{ fontSize: 12, color: 'var(--kirmizi)', marginTop: 4 }}>
-                  ⚠ Bu ürün zaten satılmış — maliyeti bu ürüne eklemek istediğinizden emin olun.
-                </div>
-              )}
-            </Alan>
-          )}
           <Alan etiket="Açıklama (opsiyonel — örn. 'TSE ücreti', 'İlave gümrük vergisi')">
             <input value={form.aciklama} onChange={(e) => setForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
           </Alan>
         </div>
+
+        {form.siparis_id && (
+          <div style={{ marginTop: 4, marginBottom: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <span style={{ fontSize: 12, color: 'var(--metin-ikincil)' }}>Bu masraf hangi ürün(ler)e yansısın?</span>
+              {siparisUrunleri && siparisUrunleri.length > 0 && (
+                <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={tumuSecili} onChange={tumunuSecToggle} /> Tümünü seç
+                </label>
+              )}
+            </div>
+            <div style={{ background: 'white', border: '1px solid var(--kenarlik)', borderRadius: 7, padding: '6px 12px', maxHeight: 180, overflowY: 'auto' }}>
+              {siparisUrunleri === null ? (
+                <div style={{ fontSize: 12.5, color: 'var(--metin-soluk)', padding: '6px 0' }}>Yükleniyor...</div>
+              ) : siparisUrunleri.length === 0 ? (
+                <div style={{ fontSize: 12.5, color: 'var(--metin-soluk)', padding: '6px 0' }}>Bu siparişte teslim alınmış ürün yok.</div>
+              ) : (
+                siparisUrunleri.map((u) => (
+                  <label key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', fontSize: 13, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={secilenUrunIdleri.has(u.id)} onChange={() => urunSecimDegistir(u.id)} />
+                    {urunEtiketiOlustur(u)}
+                  </label>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+
+        {secilenUrunIdleri.size > 1 && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 12, color: 'var(--metin-ikincil)', marginBottom: 6 }}>Dağıtım yöntemi</div>
+            <div style={{ display: 'flex', gap: 14 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
+                <input type="radio" name={`tf-yontem-${fatura.id}`} checked={form.yontem === 'ORANSAL'} onChange={() => setForm((f) => ({ ...f, yontem: 'ORANSAL' }))} />
+                Ürün fiyatına oranla
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
+                <input type="radio" name={`tf-yontem-${fatura.id}`} checked={form.yontem === 'ESIT'} onChange={() => setForm((f) => ({ ...f, yontem: 'ESIT' }))} />
+                Eşit bölüştür
+              </label>
+            </div>
+          </div>
+        )}
+
         <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
           <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Kaydediliyor...' : 'Ödemeyi Kaydet'}</Buton>
           <Buton type="button" variant="ikincil" onClick={onVazgec}>Vazgeç</Buton>
@@ -434,7 +483,7 @@ export default function TedarikciFaturalariSayfasi() {
                     }}
                   />
                 </th>
-                {['Firma', 'Fatura No', 'Masraf Türü', 'Tarih', 'Tutar', 'Ödenen', 'Kalan', 'İşlem'].map((b) => (
+                {['Firma', 'Fatura No', 'İlişkili Sipariş(ler)', 'Masraf Türü', 'Tarih', 'Tutar', 'Ödenen', 'Kalan', 'İşlem'].map((b) => (
                   <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
                 ))}
               </tr>
@@ -443,7 +492,7 @@ export default function TedarikciFaturalariSayfasi() {
               {tarihGrup.yillar.map((yil) => (
                 <Fragment key={yil}>
                   <tr>
-                    <td colSpan={9} style={{ padding: 0 }}>
+                    <td colSpan={10} style={{ padding: 0 }}>
                       <YilBasligi
                         yil={yil}
                         kayitSayisi={Object.values(tarihGrup.gruplar[yil]).flat().length}
@@ -455,7 +504,7 @@ export default function TedarikciFaturalariSayfasi() {
                   {tarihGrup.acikYillar.has(yil) && Object.keys(tarihGrup.gruplar[yil]).sort().reverse().map((ayAnahtari) => (
                     <Fragment key={ayAnahtari}>
                       <tr>
-                        <td colSpan={9} style={{ padding: 0 }}>
+                        <td colSpan={10} style={{ padding: 0 }}>
                           <AyBasligi
                             ayAnahtari={ayAnahtari}
                             kayitSayisi={tarihGrup.gruplar[yil][ayAnahtari].length}
@@ -472,6 +521,12 @@ export default function TedarikciFaturalariSayfasi() {
                     </td>
                     <td style={{ padding: '12px 16px', fontWeight: 500 }}>{f.tedarikci_unvan || `#${f.tedarikci_cari_id}`}</td>
                     <td style={{ padding: '12px 16px' }}>{f.fatura_no || '—'}</td>
+                    <td style={{ padding: '12px 16px', fontSize: 12.5, color: 'var(--metin-ikincil)' }}>
+                      {(() => {
+                        const siparisNolar = [...new Set((f.odemeler || []).map((o) => o.siparis_no).filter(Boolean))];
+                        return siparisNolar.length > 0 ? siparisNolar.join(', ') : '—';
+                      })()}
+                    </td>
                     <td style={{ padding: '12px 16px' }}>{MALIYET_TIP_METIN[f.varsayilan_maliyet_tipi] || f.varsayilan_maliyet_tipi}</td>
                     <td style={{ padding: '12px 16px' }}>{f.tarih}</td>
                     <td style={{ padding: '12px 16px' }}>{paraFormat(f.tutar, f.para_birimi)}</td>
@@ -496,7 +551,7 @@ export default function TedarikciFaturalariSayfasi() {
                   </tr>
                   {duzenleAcikId === f.id && (
                     <tr>
-                      <td colSpan={9} style={{ padding: '0 16px 12px' }}>
+                      <td colSpan={10} style={{ padding: '0 16px 12px' }}>
                         <DuzenleFaturaFormu
                           fatura={f}
                           onKaydedildi={() => { setDuzenleAcikId(null); yukle(); }}
@@ -507,7 +562,7 @@ export default function TedarikciFaturalariSayfasi() {
                   )}
                   {odemeAcikId === f.id && (
                     <tr>
-                      <td colSpan={9} style={{ padding: '0 16px 12px' }}>
+                      <td colSpan={10} style={{ padding: '0 16px 12px' }}>
                         <OdemeFormu
                           fatura={f}
                           kalanBakiye={f.kalan_bakiye}
@@ -519,7 +574,7 @@ export default function TedarikciFaturalariSayfasi() {
                   )}
                   {detayAcikId === f.id && (
                     <tr>
-                      <td colSpan={9} style={{ padding: '0 16px 12px', background: 'var(--zemin)' }}>
+                      <td colSpan={10} style={{ padding: '0 16px 12px', background: 'var(--zemin)' }}>
                         {(!f.odemeler || f.odemeler.length === 0) ? (
                           <div style={{ fontSize: 12.5, color: 'var(--metin-soluk)', padding: '10px 0' }}>Henüz ödeme yapılmamış.</div>
                         ) : (
@@ -537,9 +592,13 @@ export default function TedarikciFaturalariSayfasi() {
                                   <td style={{ padding: '6px 8px', fontSize: 12.5 }}>{o.odeme_tarihi}</td>
                                   <td style={{ padding: '6px 8px', fontSize: 12.5 }}>{paraFormat(o.tutar, f.para_birimi)}</td>
                                   <td style={{ padding: '6px 8px', fontSize: 12.5 }}>{o.odeme_yontemi === 'BANKA' ? 'Banka' : 'Kasa'}</td>
-                                  <td style={{ padding: '6px 8px', fontSize: 12.5 }}>{o.dagitim_tipi === 'SIPARIS' ? 'Sipariş (orantılı)' : 'Tek ürün'}</td>
+                                  <td style={{ padding: '6px 8px', fontSize: 12.5 }}>
+                                    {o.dagitim_tipi === 'SIPARIS' ? 'Sipariş (orantılı)' : o.dagitim_tipi === 'URUNLER' ? 'Seçili ürünler' : 'Tek ürün'}
+                                  </td>
                                   <td style={{ padding: '6px 8px', fontSize: 12.5, fontWeight: 500 }}>
-                                    {o.dagitim_tipi === 'SIPARIS' ? (o.siparis_no || `#${o.siparis_id}`) : (o.seri_no || `#${o.stok_seri_no_id}`)}
+                                    {o.dagitim_tipi === 'SIPARIS' ? (o.siparis_no || `#${o.siparis_id}`)
+                                      : o.dagitim_tipi === 'URUNLER' ? (o.siparis_no || '—')
+                                      : (o.seri_no || `#${o.stok_seri_no_id}`)}
                                   </td>
                                   <td style={{ padding: '6px 8px', fontSize: 12.5 }}>{MALIYET_TIP_METIN[o.maliyet_tipi] || o.maliyet_tipi}</td>
                                   <td style={{ padding: '6px 8px', fontSize: 12.5 }}>
