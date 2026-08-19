@@ -1098,6 +1098,77 @@ export function ManuelMaliyetKalemiEkleFormu({ urun, onKaydedildi, onVazgec, var
 // "Diger" turu icin, SADECE tutari degil, kullanicinin YAZDIGI aciklamayi
 // da (kucuk bir not olarak) gosterir. "Diger"in TEK anlami aciklamasidir,
 // bu yuzden aciklama gorunmezse kutunun degeri kalmaz.
+// Bir urune (StokSeriNo) simdiye kadar EKLENMIS TUM maliyet kalemlerinin
+// (tarih, tur, tutar, tedarikci, aciklama, odendi mi) detayli GECMISINI
+// gosteren panel - "bu urune ne maliyet yaptim" sorusuna tek yerden cevap
+// verir. Hem Siparisler hem Stok sayfasinda, bir urun satirina tiklaninca
+// acilabilir. Backend'deki GET /stok-seri-no/{id}/maliyet-kalemleri
+// endpoint'i ZATEN vardi - burada sadece gorunur hale getiriyoruz.
+export function MaliyetGecmisiPaneli({ urun, cariler = [], onKapat }) {
+  const [kalemler, setKalemler] = useState(null);
+  const [hata, setHata] = useState(null);
+
+  useEffect(() => {
+    api.get(`/stok-seri-no/${urun.id}/maliyet-kalemleri`)
+      .then((r) => setKalemler(r.data))
+      .catch((e) => setHata(hataMesajiCikar(e)));
+  }, [urun.id]);
+
+  function tedarikciAdi(id) {
+    if (!id) return null;
+    const c = cariler.find((c) => c.id === id);
+    return c ? c.unvan : `#${id}`;
+  }
+
+  const toplam = kalemler ? kalemler.reduce((acc, k) => acc + Number(k.tutar_try), 0) : 0;
+
+  return (
+    <div style={{ padding: 14, background: 'var(--zemin)', borderRadius: 8, marginTop: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <div style={{ fontSize: 13, fontWeight: 600 }}>{urun.seri_no} — Maliyet geçmişi</div>
+        {onKapat && <button onClick={onKapat} style={{ background: 'none', border: 'none', color: 'var(--metin-ikincil)', cursor: 'pointer', fontSize: 12.5 }}>Kapat</button>}
+      </div>
+      <HataMesaji>{hata}</HataMesaji>
+      {kalemler === null ? (
+        <div style={{ fontSize: 12.5, color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
+      ) : kalemler.length === 0 ? (
+        <BosDurum baslik="Henüz maliyet kalemi eklenmemiş" />
+      ) : (
+        <>
+          <table>
+            <thead>
+              <tr style={{ background: 'white' }}>
+                {['Tarih', 'Tür', 'Tutar', 'Tedarikçi', 'Belge No', 'Açıklama', 'Ödendi mi'].map((b) => (
+                  <th key={b} style={{ textAlign: 'left', padding: '6px 10px', fontSize: 11.5, color: 'var(--metin-ikincil)' }}>{b}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {kalemler.map((k) => (
+                <tr key={k.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                  <td style={{ padding: '6px 10px', fontSize: 12.5 }}>{k.tarih}</td>
+                  <td style={{ padding: '6px 10px', fontSize: 12.5 }}>{MALIYET_TIP_METIN[k.tip] || k.tip}</td>
+                  <td style={{ padding: '6px 10px', fontSize: 12.5, fontWeight: 500 }}>
+                    {paraFormat(k.tutar_try)}
+                    {k.para_birimi !== 'TRY' && <span style={{ color: 'var(--metin-soluk)', marginLeft: 4 }}>({k.tutar} {k.para_birimi})</span>}
+                  </td>
+                  <td style={{ padding: '6px 10px', fontSize: 12.5, color: 'var(--metin-ikincil)' }}>{tedarikciAdi(k.tedarikci_cari_id) || '—'}</td>
+                  <td style={{ padding: '6px 10px', fontSize: 12.5, color: 'var(--metin-ikincil)' }}>{k.belge_no || '—'}</td>
+                  <td style={{ padding: '6px 10px', fontSize: 12.5, color: 'var(--metin-ikincil)' }}>{k.aciklama || '—'}</td>
+                  <td style={{ padding: '6px 10px', fontSize: 12.5 }}>{k.odendi_mi ? '✅' : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div style={{ marginTop: 8, fontSize: 13, fontWeight: 600, textAlign: 'right' }}>
+            Toplam: {paraFormat(toplam)}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function SatisMaliyetKontrolListesi({ urun, odemeTipi, onMaliyetEkle, kalemler = null }) {
   const beklenenTipler = odemeTipi === 'LEASINGLI' ? LEASING_SATIS_MALIYET_TIPLERI : FATURALI_SATIS_MALIYET_TIPLERI;
   const SUTUN_ESLEME = {
