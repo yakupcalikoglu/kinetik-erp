@@ -7,7 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from app.db.session import get_db
 from app.core.deps import aktif_sirket_id_getir, izin_gerektir, aktif_kullanici_getir
 from app.models.auth import Kullanici
-from datetime import date
+from datetime import date, timedelta
 from app.models.stok import (StokKarti, StokSeriNo, StokMaliyetKalemi,
                               MALIYET_TIP_SUTUN_ESLEME, StokDurum, MaliyetTip, ParaBirimi, StokKaynak)
 import json
@@ -755,6 +755,61 @@ def maliyet_kalemlerini_listele(
         .order_by(StokMaliyetKalemi.tarih.desc())
     )
     return list(db.execute(sorgu).scalars())
+
+
+class OlasiCakismaYaniti(BaseModel):
+    bulundu: bool
+    tarih: date | None = None
+    tutar_try: Decimal | None = None
+    tedarikci_unvan: str | None = None
+
+
+@router.get("/stok-seri-no/{seri_id}/olasi-cakisma", response_model=OlasiCakismaYaniti,
+            dependencies=[Depends(izin_gerektir("STOK_GORUNTULE"))])
+def olasi_cakisma_kontrolu(
+    seri_id: int,
+    tip: MaliyetTip,
+    tutar_try: Decimal,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Manuel maliyet eklemeden ONCE, bu urune (son 30 gun icinde), AYNI
+    turde ve BENZER tutarda (%20 tolerans), Tedarikci Faturalarindan
+    (tedarikci_fatura_odeme_id DOLU - yani banka/kasadan zaten dusmus)
+    gelen bir kayit VAR MI kontrol eder. Varsa, frontend kullaniciyi
+    "bu masrafi zaten girmis olabilirsiniz" diye UYARIR - ayni masrafin
+    hem Tedarikci Faturalari'ndan hem manuel formdan cift girilip, urun
+    maliyetinin iki kat sismesini ONLEMEK icindir.
+    """
+    _seri_no_getir_veya_404(db, seri_id, sirket_id)
+    otuz_gun_once = date.today() - timedelta(days=30)
+    alt_sinir = tutar_try * Decimal("0.8")
+    ust_sinir = tutar_try * Decimal("1.2")
+
+    kalem = db.execute(
+        select(StokMaliyetKalemi).where(
+            StokMaliyetKalemi.stok_seri_no_id == seri_id,
+            StokMaliyetKalemi.tip == tip,
+            StokMaliyetKalemi.tedarikci_fatura_odeme_id.isnot(None),
+            StokMaliyetKalemi.tarih >= otuz_gun_once,
+            StokMaliyetKalemi.tutar_try >= alt_sinir,
+            StokMaliyetKalemi.tutar_try <= ust_sinir,
+        ).order_by(StokMaliyetKalemi.tarih.desc())
+    ).scalars().first()
+
+    if kalem is None:
+        return OlasiCakismaYaniti(bulundu=False)
+
+    tedarikci_unvan = None
+    if kalem.tedarikci_cari_id:
+        from app.models.cari import CariHesap
+        cari = db.get(CariHesap, kalem.tedarikci_cari_id)
+        tedarikci_unvan = cari.unvan if cari else None
+
+    return OlasiCakismaYaniti(
+        bulundu=True, tarih=kalem.tarih, tutar_try=kalem.tutar_try, tedarikci_unvan=tedarikci_unvan,
+    )
 
 
 @router.post("/stok-seri-no/{seri_id}/maliyet-kalemi", response_model=StokSeriNoYanit,
