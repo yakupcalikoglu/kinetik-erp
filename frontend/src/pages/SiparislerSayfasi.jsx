@@ -2,7 +2,7 @@ import { useEffect, useState, Fragment } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, hataMesajiCikar, ozelOnayIste, ozelPrompt, geriAlBildirimGoster } from '../api/client';
-import { Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat, eylemChipStili, ParaGirdisi, useKademelıGoster, DahaFazlaGosterButonu, DahaFazlaMenu, TabloIskeleti, MALIYET_TIP_METIN, ManuelMaliyetKalemiEkleFormu, BelgeYoneticisi } from '../components/Ortak';
+import { Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat, eylemChipStili, ParaGirdisi, useKademelıGoster, DahaFazlaGosterButonu, DahaFazlaMenu, TabloIskeleti, MALIYET_TIP_METIN, ManuelMaliyetKalemiEkleFormu, BelgeYoneticisi, MaliyetGecmisiPaneli } from '../components/Ortak';
 import { excelIndir } from '../utils/disaAktarma';
 import BelgeSablonu from '../components/BelgeSablonu';
 import AramaliSecici from '../components/AramaliSecici';
@@ -598,6 +598,7 @@ export default function SiparislerSayfasi() {
   const [guncelUsdKur, setGuncelUsdKur] = useState(null);
   const [stokKartlari, setStokKartlari] = useState([]);
   const [cariler, setCariler] = useState([]);
+  const [gecmisAcikUrunId, setGecmisAcikUrunId] = useState(null);
   const [yukleniyor, setYukleniyor] = useState(true);
   const [hata, setHata] = useState(null);
   const [odemelerAcikSiparisId, setOdemelerAcikSiparisId] = useState(null);
@@ -1207,14 +1208,30 @@ export default function SiparislerSayfasi() {
                                               )}
                                             </td>
                                             <td style={{ padding: '6px 10px' }}>
-                                              <button
-                                                onClick={() => setMaliyetAcikUrunId((mevcut) => (mevcut === u.id ? null : u.id))}
-                                                style={eylemChipStili('lacivert')}
-                                              >
-                                                {maliyetAcikUrunId === u.id ? 'Kapat' : 'Maliyet Ekle'}
-                                              </button>
+                                              <div style={{ display: 'flex', gap: 6 }}>
+                                                <button
+                                                  onClick={() => setGecmisAcikUrunId((mevcut) => (mevcut === u.id ? null : u.id))}
+                                                  style={eylemChipStili(gecmisAcikUrunId === u.id ? 'lacivert' : 'notr')}
+                                                  title="Bu ürüne şimdiye kadar eklenmiş tüm maliyet kalemlerini gör"
+                                                >
+                                                  {gecmisAcikUrunId === u.id ? 'Geçmişi Kapat' : 'Geçmiş'}
+                                                </button>
+                                                <button
+                                                  onClick={() => setMaliyetAcikUrunId((mevcut) => (mevcut === u.id ? null : u.id))}
+                                                  style={eylemChipStili('lacivert')}
+                                                >
+                                                  {maliyetAcikUrunId === u.id ? 'Kapat' : 'Maliyet Ekle'}
+                                                </button>
+                                              </div>
                                             </td>
                                           </tr>
+                                          {gecmisAcikUrunId === u.id && (
+                                            <tr>
+                                              <td colSpan={18} style={{ padding: '0 10px 10px' }}>
+                                                <MaliyetGecmisiPaneli urun={u} cariler={cariler} onKapat={() => setGecmisAcikUrunId(null)} />
+                                              </td>
+                                            </tr>
+                                          )}
                                           {maliyetAcikUrunId === u.id && (
                                             <tr>
                                               <td colSpan={18} style={{ padding: '0 10px 10px' }}>
