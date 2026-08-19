@@ -61,6 +61,26 @@ def _detayli_getir(db: Session, fatura: TedarikciFaturasi) -> TedarikciFaturasi:
         if o.stok_seri_no_id:
             u = db.get(StokSeriNo, o.stok_seri_no_id)
             o.seri_no = u.seri_no if u else f"#{o.stok_seri_no_id}"
+        if o.dagitim_tipi == "URUNLER":
+            # "URUNLER" (secili birkac urune dagitim) tipinde, TedarikciFaturaOdemesi
+            # kaydinin KENDISINDE siparis_id/stok_seri_no_id (tekil alanlar) HIC
+            # doldurulmaz - bu odemeye bagli StokMaliyetKalemi kayitlari
+            # (tedarikci_fatura_odeme_id FK'si uzerinden) BULUNUP, oradan hangi
+            # urun(ler)e/siparise gittigi COZULUR. Onceden bu dal HIC yoktu, bu
+            # yuzden "URUNLER" ile odenen masraflar listede/detayda BOS gorunuyordu.
+            kalemler = list(db.execute(
+                select(StokMaliyetKalemi).where(StokMaliyetKalemi.tedarikci_fatura_odeme_id == o.id)
+            ).scalars())
+            if kalemler:
+                urunler = list(db.execute(
+                    select(StokSeriNo).where(StokSeriNo.id.in_([k.stok_seri_no_id for k in kalemler]))
+                ).scalars())
+                seri_nolari = [u.seri_no for u in urunler]
+                o.seri_no = ", ".join(seri_nolari) if len(seri_nolari) <= 3 else f"{len(seri_nolari)} ürün"
+                siparis_idleri = {u.siparis_id for u in urunler if u.siparis_id}
+                if len(siparis_idleri) == 1:
+                    s = db.get(Siparis, next(iter(siparis_idleri)))
+                    o.siparis_no = s.siparis_no if s else None
     fatura.odemeler = odemeler
     fatura.toplam_odenen = sum((o.tutar for o in odemeler), Decimal("0"))
     fatura.kalan_bakiye = fatura.tutar - fatura.toplam_odenen
@@ -125,7 +145,12 @@ def fatura_guncelle(
     fatura = db.get(TedarikciFaturasi, fatura_id)
     if fatura is None or fatura.sirket_id != sirket_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Fatura bulunamadı.")
-    if not sifre_dogrula(kullanici, istek.sifre):
+    # DUZELTME: sifre_dogrula(duz_metin_sifre, hash) seklinde cagrilmali -
+    # ONCEKI HALI sifre_dogrula(kullanici, istek.sifre) idi; "kullanici" bir
+    # SQLAlchemy NESNESIYDI (str degil), bu da passlib/bcrypt icinde bir
+    # TypeError'a ve dolayisiyla sunucunun COKMESINE (ve "Sunucuya
+    # baglanilamadi" hatasina) yol aciyordu.
+    if not sifre_dogrula(istek.sifre, kullanici.sifre_hash):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Şifreniz yanlış.")
     veriler = istek.model_dump(exclude={"sifre"}, exclude_unset=True)
     if "varsayilan_maliyet_tipi" in veriler:
