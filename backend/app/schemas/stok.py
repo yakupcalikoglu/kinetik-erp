@@ -324,6 +324,12 @@ class StokMaliyetKalemiYanit(BaseModel):
     belge_no: str | None
     tarih: date
     referans_usd_kuru: Decimal | None = None
+    odendi_mi: bool = False
+    # Bu kalem bir Tedarikci Faturasi odemesinden mi (otomatik, bankadan
+    # dusulerek) yoksa manuel/istisnai olarak mi eklendigini ayirt etmek
+    # icin - "Maliyet Gecmisi" panelinde kullanicinin "bu masraf gercekten
+    # bankadan mi cikti" sorusuna cevap verebilmesi icin eklendi.
+    tedarikci_fatura_odeme_id: int | None = None
 
     class Config:
         from_attributes = True
