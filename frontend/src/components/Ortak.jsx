@@ -1017,6 +1017,12 @@ export function ManuelMaliyetKalemiEkleFormu({ urun, onKaydedildi, onVazgec, var
         faturanız/dekontunuz varsa, çift sayım olmaması için buradan değil <strong>"Tedarikçi/Hizmet Faturaları"</strong> sayfasından girin
         (o hem ürüne yansıtır hem banka/kasadan düşer). Bu form yalnızca faturasız/nakit ödenen istisnai masraflar içindir.
       </div>
+      {urun.durum === 'SATILDI' && (
+        <div style={{ fontSize: 11.5, color: 'var(--kirmizi)', background: 'var(--kirmizi-acik)', borderRadius: 6, padding: '7px 10px', marginBottom: 10, fontWeight: 500 }}>
+          ⚠ Bu ürün zaten satılmış — buraya eklenecek maliyet, bu ürünün geçmişe dönük kâr/zarar hesabını
+          değiştirir (kapanmış bir satış yeniden hesaplanır). Emin değilseniz devam etmeden önce kontrol edin.
+        </div>
+      )}
       <HataMesaji>{hata}</HataMesaji>
 
       {digerUrunler && digerUrunler.length > 1 && (
