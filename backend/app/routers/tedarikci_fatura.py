@@ -180,8 +180,10 @@ def fatura_ode(
             status.HTTP_400_BAD_REQUEST,
             f"Girilen tutar ({istek.tutar}), kalan bakiyeyi ({kalan}) aşıyor."
         )
-    if istek.dagitim_tipi not in ("SIPARIS", "URUN"):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "dagitim_tipi 'SIPARIS' veya 'URUN' olmalıdır.")
+    if istek.dagitim_tipi not in ("SIPARIS", "URUN", "URUNLER"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "dagitim_tipi 'SIPARIS', 'URUN' veya 'URUNLER' olmalıdır.")
+    if istek.yontem not in ("ORANSAL", "ESIT"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "yontem 'ORANSAL' veya 'ESIT' olmalıdır.")
     try:
         maliyet_tipi_enum = MaliyetTip(istek.maliyet_tipi)
     except ValueError:
@@ -212,6 +214,35 @@ def fatura_ode(
             istek.aciklama or f"Fatura ödemesi — {fatura.fatura_no or '#' + str(fatura.id)}",
             tedarikci_fatura_odeme_id=yeni_odeme.id,
         )
+    elif istek.dagitim_tipi == "URUNLER":
+        # Siparisin TAMAMI degil, kullanicinin SECTIGI bir alt kumeye dagit
+        # (Siparisler sayfasindaki "Maliyet Ekle" modalindan gelen ana
+        # senaryo - "birkac urune" ihtiyaci karsilar).
+        if not istek.stok_seri_no_idleri:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "URUNLER dağıtımı için en az bir ürün seçilmelidir.")
+        urunler = list(db.execute(
+            select(StokSeriNo).where(StokSeriNo.id.in_(istek.stok_seri_no_idleri), StokSeriNo.sirket_id == sirket_id)
+        ).scalars())
+        if len(urunler) != len(set(istek.stok_seri_no_idleri)):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Seçilen ürünlerden biri veya birkaçı bulunamadı.")
+
+        if istek.yontem == "ESIT":
+            pay_try_liste = [(u, tutar_try / len(urunler)) for u in urunler]
+        else:
+            toplam_satinalma = sum((u.satinalma_maliyeti_try or 0) for u in urunler)
+            if toplam_satinalma == 0:
+                pay_try_liste = [(u, tutar_try / len(urunler)) for u in urunler]
+            else:
+                pay_try_liste = [(u, tutar_try * (u.satinalma_maliyeti_try or 0) / toplam_satinalma) for u in urunler]
+
+        for urun, pay_try in pay_try_liste:
+            pay_orijinal = istek.tutar * (pay_try / tutar_try) if tutar_try else Decimal("0")
+            _maliyet_kalemi_ekle_ve_ozet_guncelle(
+                db, urun, maliyet_tipi_enum, pay_orijinal, fatura.para_birimi, istek.kur, pay_try,
+                fatura.tedarikci_cari_id, fatura.fatura_no, istek.odeme_tarihi,
+                istek.aciklama or f"Fatura ödemesi (seçili ürünlere dağıtım) — {fatura.fatura_no or '#' + str(fatura.id)}",
+                tedarikci_fatura_odeme_id=yeni_odeme.id,
+            )
     else:
         if not istek.siparis_id:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "SIPARIS dağıtımı için siparis_id zorunludur.")
@@ -223,12 +254,15 @@ def fatura_ode(
                 status.HTTP_400_BAD_REQUEST,
                 "Bu siparişe ait ürün (seri no) bulunamadı; önce sipariş teslim alınmalı."
             )
-        toplam_satinalma = sum((u.satinalma_maliyeti_try or 0) for u in urunler)
-        if toplam_satinalma == 0:
-            # Satinalma maliyeti girilmemisse, ESIT dagit (guvenli varsayilan).
+        if istek.yontem == "ESIT":
             pay_try_liste = [(u, tutar_try / len(urunler)) for u in urunler]
         else:
-            pay_try_liste = [(u, tutar_try * (u.satinalma_maliyeti_try or 0) / toplam_satinalma) for u in urunler]
+            toplam_satinalma = sum((u.satinalma_maliyeti_try or 0) for u in urunler)
+            if toplam_satinalma == 0:
+                # Satinalma maliyeti girilmemisse, ESIT dagit (guvenli varsayilan).
+                pay_try_liste = [(u, tutar_try / len(urunler)) for u in urunler]
+            else:
+                pay_try_liste = [(u, tutar_try * (u.satinalma_maliyeti_try or 0) / toplam_satinalma) for u in urunler]
 
         for urun, pay_try in pay_try_liste:
             # Her urunun kendi payi, faturanin KENDI para biriminde de
