@@ -1,6 +1,6 @@
 import { useEffect, useState, Fragment } from 'react';
 import { api, hataMesajiCikar, ozelOnayIste } from '../api/client';
-import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, BosDurum, paraFormat, eylemChipStili, ParaGirdisi, TabloIskeleti, MALIYET_TIP_METIN, DahaFazlaMenu, useTarihGruplama, YilBasligi, AyBasligi } from '../components/Ortak';
+import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, BosDurum, paraFormat, eylemChipStili, ParaGirdisi, TabloIskeleti, MALIYET_TIP_METIN, DahaFazlaMenu, useTarihGruplama, YilBasligi, AyBasligi, BelgeYoneticisi } from '../components/Ortak';
 import { excelIndir } from '../utils/disaAktarma';
 import AramaliSecici from '../components/AramaliSecici';
 
@@ -369,6 +369,7 @@ export default function TedarikciFaturalariSayfasi() {
   const [odemeAcikId, setOdemeAcikId] = useState(null);
   const [detayAcikId, setDetayAcikId] = useState(null);
   const [duzenleAcikId, setDuzenleAcikId] = useState(null);
+  const [belgeAcikId, setBelgeAcikId] = useState(null);
   const [secilenIdler, setSecilenIdler] = useState(new Set());
 
   function yukle() {
@@ -544,11 +545,19 @@ export default function TedarikciFaturalariSayfasi() {
                         <DahaFazlaMenu kompakt ogeler={[
                           { etiket: duzenleAcikId === f.id ? 'Düzenlemeyi Kapat' : 'Düzenle', onClick: () => setDuzenleAcikId((m) => (m === f.id ? null : f.id)) },
                           { etiket: detayAcikId === f.id ? 'Ödeme Geçmişini Kapat' : 'Ödeme Geçmişi', onClick: () => setDetayAcikId((m) => (m === f.id ? null : f.id)) },
+                          { etiket: belgeAcikId === f.id ? 'Belgeleri Kapat' : 'Belgeler', onClick: () => setBelgeAcikId((m) => (m === f.id ? null : f.id)) },
                           { etiket: 'Sil', onClick: () => sil(f) },
                         ]} />
                       </div>
                     </td>
                   </tr>
+                  {belgeAcikId === f.id && (
+                    <tr>
+                      <td colSpan={10} style={{ padding: '0 16px 12px' }}>
+                        <BelgeYoneticisi kaynakTablo="TEDARIKCI_FATURA" kaynakId={f.id} />
+                      </td>
+                    </tr>
+                  )}
                   {duzenleAcikId === f.id && (
                     <tr>
                       <td colSpan={10} style={{ padding: '0 16px 12px' }}>
