@@ -11,6 +11,12 @@ export function Kart({ children, style }) {
         borderRadius: 'var(--radius-buyuk)',
         padding: 20,
         boxShadow: 'var(--golge-sm)',
+        // Genis tablolar KENDI icinde yatay scroll etsin - boylece
+        // yatay kaydirma cubugu tablonun HEMEN ALTINDA cikar, sayfanin
+        // (main'in) en altina gitmeye gerek kalmaz. Icerik tasmiyorsa
+        // hicbir gorsel etkisi yoktur, bu yuzden TUM Kart kullanimlarina
+        // guvenle uygulanabilir.
+        overflowX: 'auto',
         ...style,
       }}
     >
