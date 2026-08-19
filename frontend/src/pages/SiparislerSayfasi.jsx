@@ -2,7 +2,7 @@ import { useEffect, useState, Fragment } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, hataMesajiCikar, ozelOnayIste, ozelPrompt, geriAlBildirimGoster } from '../api/client';
-import { Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat, eylemChipStili, ParaGirdisi, useKademelıGoster, DahaFazlaGosterButonu, DahaFazlaMenu, TabloIskeleti, MALIYET_TIP_METIN, ManuelMaliyetKalemiEkleFormu, BelgeYoneticisi, MaliyetGecmisiPaneli } from '../components/Ortak';
+import { Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat, eylemChipStili, ParaGirdisi, useKademelıGoster, DahaFazlaGosterButonu, DahaFazlaMenu, TabloIskeleti, MALIYET_TIP_METIN, ManuelMaliyetKalemiEkleFormu, BelgeYoneticisi, MaliyetGecmisiPaneli, MaliyetEkleModal } from '../components/Ortak';
 import { excelIndir } from '../utils/disaAktarma';
 import BelgeSablonu from '../components/BelgeSablonu';
 import AramaliSecici from '../components/AramaliSecici';
@@ -415,6 +415,11 @@ function SiparisOdemeleriPaneli({ siparis, onKapat }) {
         <div style={{ fontWeight: 600, fontSize: 13.5 }}>{siparis.siparis_no} — Tedarikçi ödemeleri</div>
         <Buton variant="ikincil" onClick={onKapat}>Kapat</Buton>
       </div>
+      <div style={{ fontSize: 11.5, color: 'var(--metin-ikincil)', background: 'var(--zemin)', border: '1px solid var(--kenarlik)', borderRadius: 6, padding: '7px 10px', marginBottom: 12 }}>
+        ℹ Bu ödemeler yalnızca "tedarikçiye ne kadar borcumuz kaldı"yı takip eder — ürünün kayıtlı maliyetini
+        <strong> değiştirmez</strong>. Satınalma maliyeti, ürün teslim alınırken sözleşme fiyatı üzerinden otomatik
+        hesaplanır ve sabitlenir.
+      </div>
       <HataMesaji>{hata}</HataMesaji>
       {uyari && (
         <div style={{ background: 'var(--amber-acik, #fdf0d5)', color: '#8a5a00', padding: '10px 14px', borderRadius: 8, fontSize: 12.5, marginBottom: 12 }}>
@@ -599,6 +604,7 @@ export default function SiparislerSayfasi() {
   const [stokKartlari, setStokKartlari] = useState([]);
   const [cariler, setCariler] = useState([]);
   const [gecmisAcikUrunId, setGecmisAcikUrunId] = useState(null);
+  const [maliyetModalAcik, setMaliyetModalAcik] = useState(false);
   const [yukleniyor, setYukleniyor] = useState(true);
   const [hata, setHata] = useState(null);
   const [odemelerAcikSiparisId, setOdemelerAcikSiparisId] = useState(null);
@@ -853,10 +859,17 @@ export default function SiparislerSayfasi() {
             <DahaFazlaMenu ogeler={[
               { etiket: 'Excel İndir', onClick: tumunuExceleAktar },
             ]} />
+            <Buton variant="ikincil" onClick={() => setMaliyetModalAcik(true)}>+ Maliyet Ekle</Buton>
             <Link to="/siparisler/yeni"><Buton>+ Yeni sipariş</Buton></Link>
           </div>
         )}
       />
+      {maliyetModalAcik && (
+        <MaliyetEkleModal
+          onKapat={() => setMaliyetModalAcik(false)}
+          onTamamlandi={() => { setMaliyetModalAcik(false); listeyiYukle(); }}
+        />
+      )}
       <HataMesaji>{hata}</HataMesaji>
       {bilgiMesaji && (
         <div style={{ background: 'var(--yesil-acik)', color: 'var(--yesil)', padding: '10px 14px', borderRadius: 7, fontSize: 13, marginBottom: 16 }}>
