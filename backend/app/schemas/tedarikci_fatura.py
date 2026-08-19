@@ -17,26 +17,30 @@ class TedarikciFaturaOlusturIstegi(BaseModel):
 
 
 class TedarikciFaturaGuncelleIstegi(BaseModel):
+    sifre: str  # kullanicinin kendi giris sifresi - degisiklik onayi icin zorunlu
+    tedarikci_cari_id: int | None = None
     fatura_no: str | None = None
     tarih: date | None = None
     tutar: Decimal | None = None
     para_birimi: str | None = None
     aciklama: str | None = None
     varsayilan_maliyet_tipi: str | None = None
-    sifre: str  # duzenleme onayi icin zorunlu
 
 
 class TedarikciFaturaOdemeIstegi(BaseModel):
-    tutar: Decimal  # bu odemede fiilen odenen tutar (faturanin kendi para biriminde) - kismi odeme desteklenir
+    tutar: Decimal  # faturanin kendi para biriminde, bu odemede odenen kisim
     odeme_tarihi: date
     odeme_yontemi: str  # "NAKIT" | "BANKA"
     banka_hesap_id: int | None = None
-    kur: Decimal = Decimal("1")  # fatura para birimi TRY degilse zorunlu (o gunku kur)
-    dagitim_tipi: str  # "SIPARIS" (orantili dagit) | "URUN" (tek urune tamami)
-    siparis_id: int | None = None
-    stok_seri_no_id: int | None = None
-    maliyet_tipi: str  # MaliyetTip enum degeri (SATINALMA/NAKLIYE/GUMRUK/ANTREPO/MILLILESTIRME/LEASING/DIGER)
-    aciklama: str | None = None  # StokMaliyetKalemi'ne eklenirken kullanilacak not (orn. "TSE ücreti")
+    kur: Decimal = Decimal("1")  # fatura TRY disi ise, o gunku kur
+    # Dagitim: bu odeme HANGI urune/siparise maliyet olarak yansiyacak.
+    dagitim_tipi: str  # "SIPARIS" (tum siparise orantili/esit dagit) | "URUN" (tek urune tamami) | "URUNLER" (secili birkac urune dagit)
+    siparis_id: int | None = None  # dagitim_tipi == "SIPARIS" ise zorunlu
+    stok_seri_no_id: int | None = None  # dagitim_tipi == "URUN" ise zorunlu
+    stok_seri_no_idleri: list[int] | None = None  # dagitim_tipi == "URUNLER" ise zorunlu
+    yontem: str = "ORANSAL"  # "ORANSAL" (satinalma maliyetine gore) | "ESIT" - SIPARIS/URUNLER icin kullanilir
+    maliyet_tipi: str
+    aciklama: str | None = None
 
 
 class TedarikciFaturaOdemeYanit(BaseModel):
@@ -45,14 +49,15 @@ class TedarikciFaturaOdemeYanit(BaseModel):
     tutar: Decimal
     odeme_tarihi: date
     odeme_yontemi: str
-    banka_hesap_id: int | None
+    banka_hesap_id: int | None = None
     kur: Decimal
     dagitim_tipi: str
-    siparis_id: int | None
-    siparis_no: str | None = None      # backend'de doldurulur
-    stok_seri_no_id: int | None
-    seri_no: str | None = None         # backend'de doldurulur
+    siparis_id: int | None = None
+    stok_seri_no_id: int | None = None
     maliyet_tipi: str
+    # Router'da _detayli_getir icinde SONRADAN atanan, insan-okunabilir alanlar:
+    siparis_no: str | None = None
+    seri_no: str | None = None
 
     class Config:
         from_attributes = True
@@ -61,16 +66,17 @@ class TedarikciFaturaOdemeYanit(BaseModel):
 class TedarikciFaturaYanit(BaseModel):
     id: int
     tedarikci_cari_id: int
-    tedarikci_unvan: str | None = None
-    fatura_no: str | None
+    fatura_no: str | None = None
     tarih: date
     tutar: Decimal
     para_birimi: str
-    aciklama: str | None
+    aciklama: str | None = None
     varsayilan_maliyet_tipi: str
-    toplam_odenen: Decimal = Decimal("0")  # backend'de hesaplanir
-    kalan_bakiye: Decimal = Decimal("0")   # backend'de hesaplanir
+    # Router'da _detayli_getir icinde SONRADAN atanan alanlar:
+    tedarikci_unvan: str | None = None
     odemeler: list[TedarikciFaturaOdemeYanit] = []
+    toplam_odenen: Decimal = Decimal("0")
+    kalan_bakiye: Decimal = Decimal("0")
 
     class Config:
         from_attributes = True
