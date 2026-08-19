@@ -8,34 +8,27 @@
   --kirmizi-acik: #FCEBEB;
   --amber: #854F0B;
   --amber-acik: #FAEEDA;
-
   --zemin: #F5F6F8;
   --yuzey: #FFFFFF;
   --kenarlik: #E2E5EA;
   --kenarlik-koyu: #C9CDD6;
-
   --metin-birincil: #1A1D24;
   --metin-ikincil: #5A5F6A;
   --metin-soluk: #9098A6;
-
   --radius: 8px;
   --radius-buyuk: 12px;
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
-
   --golge-sm: 0 1px 2px rgba(20, 24, 35, 0.06);
   --golge-md: 0 4px 12px rgba(20, 24, 35, 0.08);
 }
-
 * {
   box-sizing: border-box;
 }
-
 html, body {
   margin: 0;
   padding: 0;
 }
-
 body {
   font-family: var(--font-sans);
   background: var(--zemin);
@@ -44,35 +37,42 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
-
 #root {
   min-height: 100vh;
 }
-
 a {
   color: var(--lacivert);
   text-decoration: none;
 }
-
 button {
   font-family: inherit;
   cursor: pointer;
 }
-
 table {
   border-collapse: collapse;
   width: 100%;
 }
-
+/* Genis/uzun tablolarda basliklar, sayfa (main) asagi kaydirilirken
+   gorunur kalsin diye - main elementi "overflow: auto" oldugu icin,
+   thead bu scroll alanina gore "yapisir" (sticky). Kart bilesenindeki
+   overflowX: auto ile birlikte, hem dikey hem yatay kaydirma sorunu
+   tek yerden (global) cozulur - tek tek her sayfaya dokunmaya gerek
+   kalmaz. */
+thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+thead tr {
+  background: var(--zemin);
+}
 input, select, textarea, button {
   font-size: 14px;
 }
-
 ::selection {
   background: var(--lacivert-acik);
   color: white;
 }
-
 /* Klavye odak gorunurlugu - erisilebilirlik */
 :focus-visible {
   outline: 2px solid var(--lacivert-acik);
