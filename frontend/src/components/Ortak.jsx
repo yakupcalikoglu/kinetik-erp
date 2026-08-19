@@ -978,8 +978,13 @@ export function ManuelMaliyetKalemiEkleFormu({ urun, onKaydedildi, onVazgec, var
 
   return (
     <form onSubmit={kaydet} style={{ padding: 14, background: 'var(--zemin)', borderRadius: 8, marginTop: 8 }}>
-      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>
+      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
         {urun.seri_no} — Manuel maliyet kalemi ekle
+      </div>
+      <div style={{ fontSize: 11.5, color: 'var(--amber, #b8860b)', background: 'var(--amber-acik, #fff8e1)', borderRadius: 6, padding: '7px 10px', marginBottom: 10 }}>
+        ⚠ Bu form banka/kasadan para düşmez — sadece ürünün kayıtlı maliyetini günceller. Bu masraf için bir tedarikçi
+        faturanız/dekontunuz varsa, çift sayım olmaması için buradan değil <strong>"Tedarikçi/Hizmet Faturaları"</strong> sayfasından girin
+        (o hem ürüne yansıtır hem banka/kasadan düşer). Bu form yalnızca faturasız/nakit ödenen istisnai masraflar içindir.
       </div>
       <HataMesaji>{hata}</HataMesaji>
 
