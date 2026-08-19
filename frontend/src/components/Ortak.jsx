@@ -938,6 +938,31 @@ export function ManuelMaliyetKalemiEkleFormu({ urun, onKaydedildi, onVazgec, var
       setHata('En az bir ürün seçilmelidir.');
       return;
     }
+
+    // Kaydetmeden ONCE - bu urune, son 30 gunde, AYNI turde ve BENZER
+    // tutarda, Tedarikci Faturalari'ndan (bankadan zaten dusmus) bir kayit
+    // var mi diye SESSIZCE kontrol et. Varsa, kullaniciyi durdurup sorar -
+    // "faturasiz masraf" sanip GIRDIGI seyin aslinda daha once baska bir
+    // yoldan zaten girilmis olabilecegi COK KOLAY unutulan bir durumdur.
+    const kontrolTutarTry = form.para_birimi === 'TRY'
+      ? Number(form.tutar) : Number(form.tutar) * Number(form.kur);
+    if (kontrolTutarTry > 0) {
+      try {
+        const { data: cakisma } = await api.get(`/stok-seri-no/${urun.id}/olasi-cakisma`, {
+          params: { tip: form.tip, tutar_try: kontrolTutarTry },
+        });
+        if (cakisma.bulundu) {
+          const mesaj = `Bu ürüne ${cakisma.tarih} tarihinde ${paraFormat(cakisma.tutar_try)} tutarında, `
+            + `${cakisma.tedarikci_unvan ? `"${cakisma.tedarikci_unvan}" firmasından ` : ''}`
+            + `Tedarikçi Faturaları üzerinden zaten benzer bir masraf girilmiş görünüyor. `
+            + `Yine de bu manuel kaydı eklemek istediğinize emin misiniz? (Aynı masrafı iki kez eklerseniz ürün maliyeti şişer.)`;
+          if (!(await ozelOnayIste(mesaj))) return;
+        }
+      } catch {
+        // Kontrol basarisiz olursa (ag hatasi vb.) kullaniciyi ENGELLEMEDEN devam et.
+      }
+    }
+
     setKaydediliyor(true);
     try {
       const girilenTutar = Number(form.tutar);
