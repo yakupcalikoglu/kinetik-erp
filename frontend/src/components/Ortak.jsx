@@ -1168,7 +1168,7 @@ export function MaliyetEkleModal({ onKapat, onTamamlandi, varsayilanSiparisId = 
   const [form, setForm] = useState({
     tip: 'NAKLIYE', tutar: '', para_birimi: 'TRY', kur: '1',
     odeme_yontemi: 'BANKA', banka_hesap_id: '', yontem: 'ORANSAL',
-    tarih: new Date().toISOString().slice(0, 10), aciklama: '',
+    tarih: new Date().toISOString().slice(0, 10), aciklama: '', fatura_no: '',
   });
   const [hata, setHata] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
@@ -1247,7 +1247,7 @@ export function MaliyetEkleModal({ onKapat, onTamamlandi, varsayilanSiparisId = 
     setKaydediliyor(true);
     try {
       const { data: yeniFatura } = await api.post('/tedarikci-faturalari', {
-        tedarikci_cari_id: siparis.tedarikci_cari_id,
+        tedarikci_cari_id: siparis.tedarikci_cari_id, fatura_no: form.fatura_no || null,
         tarih: form.tarih, tutar: Number(form.tutar), para_birimi: form.para_birimi,
         aciklama: form.aciklama || null, varsayilan_maliyet_tipi: form.tip,
       });
@@ -1376,6 +1376,10 @@ export function MaliyetEkleModal({ onKapat, onTamamlandi, varsayilanSiparisId = 
               </div>
             </div>
           )}
+
+          <Alan etiket="Fatura No (opsiyonel — faturasız/nakit masraflarda boş bırakın)">
+            <input value={form.fatura_no} onChange={(e) => setForm((f) => ({ ...f, fatura_no: e.target.value }))} style={girdiStili} />
+          </Alan>
 
           <Alan etiket="Açıklama (opsiyonel)">
             <input value={form.aciklama} onChange={(e) => setForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
