@@ -436,6 +436,7 @@ class DuzenlemeKaydiYanit(BaseModel):
     kullanici_adi: str
     tablo_adi: str
     kayit_id: int
+    islem_tipi: str = "DUZENLEME"
     degisiklikler: str | None
     tarih: datetime | None
 
@@ -463,7 +464,7 @@ def duzenleme_gecmisini_listele(
         DuzenlemeKaydiYanit(
             id=k.id,
             kullanici_adi=kullanici_haritasi.get(k.kullanici_id, f"Kullanıcı #{k.kullanici_id}"),
-            tablo_adi=k.tablo_adi, kayit_id=k.kayit_id,
+            tablo_adi=k.tablo_adi, kayit_id=k.kayit_id, islem_tipi=k.islem_tipi or "DUZENLEME",
             degisiklikler=k.degisiklikler, tarih=k.tarih,
         )
         for k in kayitlar
