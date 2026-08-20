@@ -92,13 +92,14 @@ def stok_karti_guncelle(
 def stok_karti_sil(
     stok_karti_id: int,
     sirket_id: int = Depends(aktif_sirket_id_getir),
+    kullanici: Kullanici = Depends(aktif_kullanici_getir),
     db: Session = Depends(get_db),
 ):
     """Karti GERCEKTEN silmez - soft-delete yapar, boylece her zaman geri getirilebilir."""
     kart = db.get(StokKarti, stok_karti_id)
     if kart is None or kart.sirket_id != sirket_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Stok kartı bulunamadı.")
-    yumusak_sil(db, kart)
+    yumusak_sil(db, kart, kullanici_id=kullanici.id, tablo_adi="stok_kartlari", sirket_id=sirket_id)
     return {"silindi": True}
 
 
@@ -524,6 +525,7 @@ def stok_seri_no_duzenle(
 def stok_seri_no_sil(
     seri_id: int,
     sirket_id: int = Depends(aktif_sirket_id_getir),
+    kullanici: Kullanici = Depends(aktif_kullanici_getir),
     db: Session = Depends(get_db),
 ):
     """
@@ -548,7 +550,7 @@ def stok_seri_no_sil(
     ).scalars()):
         db.delete(kalem)
 
-    yumusak_sil(db, kayit)
+    yumusak_sil(db, kayit, kullanici_id=kullanici.id, tablo_adi="stok_seri_no", sirket_id=sirket_id)
     return {"silindi": True}
 
 
