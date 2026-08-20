@@ -385,6 +385,184 @@ function OdemeFormu({ fatura, kalanBakiye, onKaydedildi, onVazgec }) {
   );
 }
 
+// Daha once yapilmis bir odemeyi (Geri Al + Tekrar Ode yerine) TEK ADIMDA
+// duzeltmek icin. Odeme.stok_seri_no_idleri'nden (yeni eklenen alan) hangi
+// siparise ait oldugunu COZUP, o siparisin urunlerini onceden secili
+// olarak gosterir - OdemeFormu ile AYNI checkbox akisini kullanir.
+function OdemeDuzenleFormu({ fatura, odeme, onKaydedildi, onVazgec }) {
+  const [bankaHesaplari, setBankaHesaplari] = useState([]);
+  const [stokKartlari, setStokKartlari] = useState([]);
+  const [cariler, setCariler] = useState([]);
+  const [siparisUrunleri, setSiparisUrunleri] = useState(null);
+  const [secilenUrunIdleri, setSecilenUrunIdleri] = useState(new Set(odeme.stok_seri_no_idleri || []));
+  const [form, setForm] = useState({
+    tutar: String(odeme.tutar), odeme_tarihi: odeme.odeme_tarihi,
+    odeme_yontemi: odeme.odeme_yontemi, banka_hesap_id: odeme.banka_hesap_id ? String(odeme.banka_hesap_id) : '',
+    kur: String(odeme.kur), yontem: 'ORANSAL', maliyet_tipi: odeme.maliyet_tipi, aciklama: '', sifre: '',
+  });
+  const [hata, setHata] = useState(null);
+  const [kaydediliyor, setKaydediliyor] = useState(false);
+
+  function urunEtiketiOlustur(u) {
+    const kart = stokKartlari.find((k) => k.id === u.stok_karti_id);
+    const urunAdi = kart ? `${kart.marka} ${kart.model}` : '';
+    let etiket = `${u.seri_no}${urunAdi ? ' — ' + urunAdi : ''}`;
+    if (u.musteri_cari_id) {
+      const musteri = cariler.find((c) => c.id === u.musteri_cari_id);
+      etiket += ` — SATILDI (${musteri ? musteri.unvan : 'müşteri #' + u.musteri_cari_id})`;
+    }
+    return etiket;
+  }
+
+  useEffect(() => {
+    api.get('/banka-hesaplari').then((r) => setBankaHesaplari(r.data)).catch(() => {});
+    api.get('/stok-kartlari').then((r) => setStokKartlari(r.data)).catch(() => {});
+    api.get('/cariler').then((r) => setCariler(r.data)).catch(() => {});
+  }, []);
+
+  // Onceden secili urunlerden (odeme.stok_seri_no_idleri) BIRINI cekip,
+  // hangi siparise ait oldugunu bulup, o siparisin TUM urunlerini getirir.
+  useEffect(() => {
+    const ilkUrunId = (odeme.stok_seri_no_idleri || [])[0];
+    if (!ilkUrunId) { setSiparisUrunleri([]); return; }
+    api.get(`/stok-seri-no/${ilkUrunId}`).then((r) => {
+      const siparisId = r.data.siparis_id;
+      if (!siparisId) { setSiparisUrunleri([]); return; }
+      api.get('/stok-seri-no', { params: { siparis_id: siparisId } }).then((r2) => setSiparisUrunleri(r2.data)).catch(() => setSiparisUrunleri([]));
+    }).catch(() => setSiparisUrunleri([]));
+  }, [odeme.id]); // eslint-disable-line
+
+  function tumunuSecToggle(e) {
+    if (e.target.checked) setSecilenUrunIdleri(new Set((siparisUrunleri || []).map((u) => u.id)));
+    else setSecilenUrunIdleri(new Set());
+  }
+  function urunSecimDegistir(id) {
+    setSecilenUrunIdleri((mevcut) => {
+      const yeni = new Set(mevcut);
+      if (yeni.has(id)) yeni.delete(id); else yeni.add(id);
+      return yeni;
+    });
+  }
+  const tumuSecili = siparisUrunleri && siparisUrunleri.length > 0 && secilenUrunIdleri.size === siparisUrunleri.length;
+
+  async function kaydet(e) {
+    e.preventDefault();
+    setHata(null);
+    if (secilenUrunIdleri.size === 0) { setHata('En az bir ürün seçmelisiniz.'); return; }
+    setKaydediliyor(true);
+    try {
+      await api.put(`/tedarikci-faturalari/odemeler/${odeme.id}/duzenle`, {
+        sifre: form.sifre,
+        tutar: Number(form.tutar), odeme_tarihi: form.odeme_tarihi, odeme_yontemi: form.odeme_yontemi,
+        banka_hesap_id: form.odeme_yontemi === 'BANKA' ? Number(form.banka_hesap_id) : null,
+        kur: Number(form.kur), stok_seri_no_idleri: Array.from(secilenUrunIdleri),
+        yontem: form.yontem, maliyet_tipi: form.maliyet_tipi, aciklama: form.aciklama || null,
+      });
+      onKaydedildi();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setKaydediliyor(false);
+    }
+  }
+
+  return (
+    <div style={{ padding: 14, background: 'var(--zemin)', borderRadius: 8, marginTop: 8, borderLeft: '4px solid var(--amber)' }}>
+      <form onSubmit={kaydet}>
+        <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 10 }}>Ödemeyi Düzenle</div>
+        <HataMesaji>{hata}</HataMesaji>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+          <Alan etiket={`Tutar (${fatura.para_birimi})`}>
+            <ParaGirdisi required value={form.tutar} onChange={(v) => setForm((f) => ({ ...f, tutar: v }))} />
+          </Alan>
+          <Alan etiket="Ödeme tarihi">
+            <input required type="date" value={form.odeme_tarihi} onChange={(e) => setForm((f) => ({ ...f, odeme_tarihi: e.target.value }))} style={girdiStili} />
+          </Alan>
+          <Alan etiket="Ödeme yöntemi">
+            <select value={form.odeme_yontemi} onChange={(e) => setForm((f) => ({ ...f, odeme_yontemi: e.target.value }))} style={girdiStili}>
+              <option value="BANKA">Banka</option>
+              <option value="NAKIT">Kasa (Nakit)</option>
+            </select>
+          </Alan>
+          {form.odeme_yontemi === 'BANKA' && (
+            <Alan etiket="Banka hesabı">
+              <select required value={form.banka_hesap_id} onChange={(e) => setForm((f) => ({ ...f, banka_hesap_id: e.target.value }))} style={girdiStili}>
+                <option value="">Seçin...</option>
+                {bankaHesaplari.map((h) => (
+                  <option key={h.id} value={h.id}>{h.banka_adi} — {h.hesap_adi || h.para_birimi}</option>
+                ))}
+              </select>
+            </Alan>
+          )}
+          {fatura.para_birimi !== 'TRY' && (
+            <Alan etiket={`Kur (${fatura.para_birimi}/TRY)`}>
+              <input required type="number" step="0.0001" value={form.kur} onChange={(e) => setForm((f) => ({ ...f, kur: e.target.value }))} style={girdiStili} />
+            </Alan>
+          )}
+          <Alan etiket="Maliyet tipi">
+            <select value={form.maliyet_tipi} onChange={(e) => setForm((f) => ({ ...f, maliyet_tipi: e.target.value }))} style={girdiStili}>
+              {Object.entries(MALIYET_TIP_METIN).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+          </Alan>
+          <Alan etiket="Açıklama (opsiyonel)">
+            <input value={form.aciklama} onChange={(e) => setForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
+          </Alan>
+        </div>
+
+        <div style={{ marginTop: 4, marginBottom: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <span style={{ fontSize: 12, color: 'var(--metin-ikincil)' }}>Bu masraf hangi ürün(ler)e yansısın?</span>
+            {siparisUrunleri && siparisUrunleri.length > 0 && (
+              <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                <input type="checkbox" checked={tumuSecili} onChange={tumunuSecToggle} /> Tümünü seç
+              </label>
+            )}
+          </div>
+          <div style={{ background: 'white', border: '1px solid var(--kenarlik)', borderRadius: 7, padding: '6px 12px', maxHeight: 180, overflowY: 'auto' }}>
+            {siparisUrunleri === null ? (
+              <div style={{ fontSize: 12.5, color: 'var(--metin-soluk)', padding: '6px 0' }}>Yükleniyor...</div>
+            ) : siparisUrunleri.length === 0 ? (
+              <div style={{ fontSize: 12.5, color: 'var(--metin-soluk)', padding: '6px 0' }}>Ürün bilgisi bulunamadı.</div>
+            ) : (
+              siparisUrunleri.map((u) => (
+                <label key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', fontSize: 13, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={secilenUrunIdleri.has(u.id)} onChange={() => urunSecimDegistir(u.id)} />
+                  {urunEtiketiOlustur(u)}
+                </label>
+              ))
+            )}
+          </div>
+        </div>
+
+        {secilenUrunIdleri.size > 1 && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 12, color: 'var(--metin-ikincil)', marginBottom: 6 }}>Dağıtım yöntemi</div>
+            <div style={{ display: 'flex', gap: 14 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
+                <input type="radio" name={`od-duzenle-yontem-${odeme.id}`} checked={form.yontem === 'ORANSAL'} onChange={() => setForm((f) => ({ ...f, yontem: 'ORANSAL' }))} />
+                Ürün fiyatına oranla
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
+                <input type="radio" name={`od-duzenle-yontem-${odeme.id}`} checked={form.yontem === 'ESIT'} onChange={() => setForm((f) => ({ ...f, yontem: 'ESIT' }))} />
+                Eşit bölüştür
+              </label>
+            </div>
+          </div>
+        )}
+
+        <Alan etiket="Şifreniz (onay için zorunlu)">
+          <input required type="password" value={form.sifre} onChange={(e) => setForm((f) => ({ ...f, sifre: e.target.value }))} style={girdiStili} />
+        </Alan>
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+          <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Kaydediliyor...' : 'Değişiklikleri Kaydet'}</Buton>
+          <Buton type="button" variant="ikincil" onClick={onVazgec}>Vazgeç</Buton>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 export default function TedarikciFaturalariSayfasi() {
   const [faturalar, setFaturalar] = useState([]);
   const [yukleniyor, setYukleniyor] = useState(true);
@@ -392,6 +570,7 @@ export default function TedarikciFaturalariSayfasi() {
   const [formAcik, setFormAcik] = useState(false);
   const [odemeAcikId, setOdemeAcikId] = useState(null);
   const [detayAcikId, setDetayAcikId] = useState(null);
+  const [duzenleAcikOdemeId, setDuzenleAcikOdemeId] = useState(null);
   const [duzenleAcikId, setDuzenleAcikId] = useState(null);
   const [belgeAcikId, setBelgeAcikId] = useState(null);
   const [secilenIdler, setSecilenIdler] = useState(new Set());
@@ -621,7 +800,8 @@ export default function TedarikciFaturalariSayfasi() {
                             </thead>
                             <tbody>
                               {f.odemeler.map((o) => (
-                                <tr key={o.id} style={{ borderTop: '1px solid var(--kenarlik)' }}>
+                                <Fragment key={o.id}>
+                                <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
                                   <td style={{ padding: '6px 8px', fontSize: 12.5 }}>{o.odeme_tarihi}</td>
                                   <td style={{ padding: '6px 8px', fontSize: 12.5 }}>{paraFormat(o.tutar, f.para_birimi)}</td>
                                   <td style={{ padding: '6px 8px', fontSize: 12.5 }}>{o.odeme_yontemi === 'BANKA' ? 'Banka' : 'Kasa'}</td>
@@ -635,9 +815,28 @@ export default function TedarikciFaturalariSayfasi() {
                                   </td>
                                   <td style={{ padding: '6px 8px', fontSize: 12.5 }}>{MALIYET_TIP_METIN[o.maliyet_tipi] || o.maliyet_tipi}</td>
                                   <td style={{ padding: '6px 8px', fontSize: 12.5 }}>
-                                    <button onClick={() => odemeGeriAl(o)} style={eylemChipStili('kirmizi')}>Geri Al</button>
+                                    <div style={{ display: 'flex', gap: 6 }}>
+                                      {o.dagitim_tipi === 'URUNLER' && (
+                                        <button onClick={() => setDuzenleAcikOdemeId((m) => (m === o.id ? null : o.id))} style={eylemChipStili('lacivert')}>
+                                          {duzenleAcikOdemeId === o.id ? 'Kapat' : 'Düzenle'}
+                                        </button>
+                                      )}
+                                      <button onClick={() => odemeGeriAl(o)} style={eylemChipStili('kirmizi')}>Geri Al</button>
+                                    </div>
                                   </td>
                                 </tr>
+                                {duzenleAcikOdemeId === o.id && (
+                                  <tr>
+                                    <td colSpan={7} style={{ padding: 0 }}>
+                                      <OdemeDuzenleFormu
+                                        fatura={f} odeme={o}
+                                        onKaydedildi={() => { setDuzenleAcikOdemeId(null); yukle(); }}
+                                        onVazgec={() => setDuzenleAcikOdemeId(null)}
+                                      />
+                                    </td>
+                                  </tr>
+                                )}
+                                </Fragment>
                               ))}
                             </tbody>
                           </table>
