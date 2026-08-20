@@ -1,6 +1,6 @@
 import { useEffect, useState, Fragment } from 'react';
 import { api, hataMesajiCikar, ozelOnayIste } from '../api/client';
-import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, BosDurum, paraFormat, eylemChipStili, ParaGirdisi, TabloIskeleti, MALIYET_TIP_METIN, DahaFazlaMenu, useTarihGruplama, YilBasligi, AyBasligi, BelgeYoneticisi } from '../components/Ortak';
+import { Kart, SayfaBasligi, Buton, Alan, girdiStili, HataMesaji, BosDurum, paraFormat, eylemChipStili, ParaGirdisi, TabloIskeleti, MALIYET_TIP_METIN, STOK_DURUM_METIN, DahaFazlaMenu, useTarihGruplama, YilBasligi, AyBasligi, BelgeYoneticisi } from '../components/Ortak';
 import { excelIndir } from '../utils/disaAktarma';
 import AramaliSecici from '../components/AramaliSecici';
 
@@ -181,6 +181,8 @@ function OdemeFormu({ fatura, kalanBakiye, onKaydedildi, onVazgec }) {
     if (u.musteri_cari_id) {
       const musteri = cariler.find((c) => c.id === u.musteri_cari_id);
       etiket += ` — SATILDI (${musteri ? musteri.unvan : 'müşteri #' + u.musteri_cari_id})`;
+    } else {
+      etiket += ` · ${STOK_DURUM_METIN[u.durum] || u.durum}`;
     }
     return etiket;
   }
@@ -410,6 +412,8 @@ function OdemeDuzenleFormu({ fatura, odeme, onKaydedildi, onVazgec }) {
     if (u.musteri_cari_id) {
       const musteri = cariler.find((c) => c.id === u.musteri_cari_id);
       etiket += ` — SATILDI (${musteri ? musteri.unvan : 'müşteri #' + u.musteri_cari_id})`;
+    } else {
+      etiket += ` · ${STOK_DURUM_METIN[u.durum] || u.durum}`;
     }
     return etiket;
   }
