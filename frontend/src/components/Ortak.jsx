@@ -1211,6 +1211,31 @@ export function MaliyetEkleModal({ onKapat, onTamamlandi, varsayilanSiparisId = 
     const siparis = siparisler.find((s) => String(s.id) === String(seciliSiparisId));
     if (!siparis) { setHata('Sipariş bulunamadı.'); return; }
 
+    // Kaydetmeden ONCE - secili ILK urun icin, AYNI turde/tutarda daha
+    // once (Tedarikci Faturalari uzerinden) girilmis bir kayit var mi
+    // SESSIZCE kontrol et. "+ Maliyet Ekle" modali TAM olarak bu akisin
+    // (Tedarikci Faturalari) kendisini kullandigi icin, kullanicinin AYNI
+    // masrafi yanlislikla IKINCI kez bu modalden girmesi COK KOLAY
+    // unutulan bir durumdur - butona iki kez basmak gibi.
+    const ilkUrunId = Array.from(secilenUrunIdleri)[0];
+    const kontrolTutarTry = form.para_birimi === 'TRY' ? Number(form.tutar) : Number(form.tutar) * Number(form.kur);
+    if (ilkUrunId && kontrolTutarTry > 0) {
+      try {
+        const { data: cakisma } = await api.get(`/stok-seri-no/${ilkUrunId}/olasi-cakisma`, {
+          params: { tip: form.tip, tutar_try: kontrolTutarTry },
+        });
+        if (cakisma.bulundu) {
+          const mesaj = `Bu ürün(ler)e ${cakisma.tarih} tarihinde ${paraFormat(cakisma.tutar_try)} tutarında, `
+            + `${cakisma.tedarikci_unvan ? `"${cakisma.tedarikci_unvan}" firmasından ` : ''}`
+            + `benzer bir masraf zaten girilmiş görünüyor. Yine de devam etmek istediğinize emin misiniz? `
+            + `(Aynı masrafı iki kez eklerseniz ürün maliyeti şişer.)`;
+          if (!(await ozelOnayIste(mesaj))) return;
+        }
+      } catch {
+        // Kontrol basarisiz olursa (ag hatasi vb.) kullaniciyi ENGELLEMEDEN devam et.
+      }
+    }
+
     setKaydediliyor(true);
     try {
       const { data: yeniFatura } = await api.post('/tedarikci-faturalari', {
@@ -1360,15 +1385,27 @@ export function MaliyetEkleModal({ onKapat, onTamamlandi, varsayilanSiparisId = 
   );
 }
 
-export function MaliyetGecmisiPaneli({ urun, cariler = [], onKapat }) {
+export function MaliyetGecmisiPaneli({ urun, cariler = [], onKapat, onDegisti }) {
   const [kalemler, setKalemler] = useState(null);
   const [hata, setHata] = useState(null);
 
-  useEffect(() => {
+  function yukle() {
     api.get(`/stok-seri-no/${urun.id}/maliyet-kalemleri`)
       .then((r) => setKalemler(r.data))
       .catch((e) => setHata(hataMesajiCikar(e)));
-  }, [urun.id]);
+  }
+  useEffect(yukle, [urun.id]); // eslint-disable-line
+
+  async function sil(kalem) {
+    if (!(await ozelOnayIste(`${MALIYET_TIP_METIN[kalem.tip] || kalem.tip} — ${paraFormat(kalem.tutar_try)} tutarındaki bu maliyet kalemini silmek istediğinize emin misiniz? Ürünün toplam maliyeti buna göre azalacak.`))) return;
+    try {
+      await api.delete(`/stok-seri-no/${urun.id}/maliyet-kalemi/${kalem.id}`);
+      yukle();
+      onDegisti && onDegisti();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    }
+  }
 
   function tedarikciAdi(id) {
     if (!id) return null;
@@ -1394,7 +1431,7 @@ export function MaliyetGecmisiPaneli({ urun, cariler = [], onKapat }) {
           <table>
             <thead>
               <tr style={{ background: 'white' }}>
-                {['Tarih', 'Tür', 'Tutar', 'Tedarikçi', 'Belge No', 'Açıklama', 'Ödendi mi'].map((b) => (
+                {['Tarih', 'Tür', 'Tutar', 'Tedarikçi', 'Belge No', 'Açıklama', 'Ödendi mi', 'İşlem'].map((b) => (
                   <th key={b} style={{ textAlign: 'left', padding: '6px 10px', fontSize: 11.5, color: 'var(--metin-ikincil)' }}>{b}</th>
                 ))}
               </tr>
@@ -1412,6 +1449,15 @@ export function MaliyetGecmisiPaneli({ urun, cariler = [], onKapat }) {
                   <td style={{ padding: '6px 10px', fontSize: 12.5, color: 'var(--metin-ikincil)' }}>{k.belge_no || '—'}</td>
                   <td style={{ padding: '6px 10px', fontSize: 12.5, color: 'var(--metin-ikincil)' }}>{k.aciklama || '—'}</td>
                   <td style={{ padding: '6px 10px', fontSize: 12.5 }}>{k.odendi_mi ? '✅' : '—'}</td>
+                  <td style={{ padding: '6px 10px', fontSize: 12.5 }}>
+                    {k.tedarikci_fatura_odeme_id ? (
+                      <span style={{ color: 'var(--metin-soluk)', fontSize: 11 }} title="Bu kalem Tedarikçi Faturaları üzerinden eklendi — silmek için o sayfadan ödemeyi geri alın.">
+                        Tedarikçi Faturası'ndan
+                      </span>
+                    ) : (
+                      <button onClick={() => sil(k)} style={{ background: 'none', border: 'none', color: 'var(--kirmizi)', cursor: 'pointer', fontSize: 12 }}>Sil</button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
