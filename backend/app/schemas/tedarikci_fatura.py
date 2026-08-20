@@ -43,6 +43,19 @@ class TedarikciFaturaOdemeIstegi(BaseModel):
     aciklama: str | None = None
 
 
+class TedarikciFaturaOdemeDuzenleIstegi(BaseModel):
+    sifre: str  # kullanicinin kendi giris sifresi - degisiklik onayi icin zorunlu
+    tutar: Decimal
+    odeme_tarihi: date
+    odeme_yontemi: str
+    banka_hesap_id: int | None = None
+    kur: Decimal = Decimal("1")
+    stok_seri_no_idleri: list[int]
+    yontem: str = "ORANSAL"
+    maliyet_tipi: str
+    aciklama: str | None = None
+
+
 class TedarikciFaturaOdemeYanit(BaseModel):
     id: int
     fatura_id: int
@@ -58,6 +71,10 @@ class TedarikciFaturaOdemeYanit(BaseModel):
     # Router'da _detayli_getir icinde SONRADAN atanan, insan-okunabilir alanlar:
     siparis_no: str | None = None
     seri_no: str | None = None
+    # "URUNLER" dagitiminda, bu odemenin GERCEKTEN hangi urun(ler)e
+    # dagitildigini (ID olarak) tasir - duzenleme formunun onceden hangi
+    # urunlerin secili oldugunu gosterebilmesi icin gereklidir.
+    stok_seri_no_idleri: list[int] = []
 
     class Config:
         from_attributes = True
