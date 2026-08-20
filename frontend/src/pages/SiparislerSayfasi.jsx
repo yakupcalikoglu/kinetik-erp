@@ -560,12 +560,13 @@ const BEKLENEN_MALIYET_KATEGORILERI = [
 ];
 
 // Bir siparisteki TUM urunlerin maliyet ozet sutunlarini TOPLAYIP, hangi
-// kategorinin HENUZ HIC girilmedigini (toplam sifir) gosteren kontrol
-// listesi - "hangi masraf unutulmus" sorusuna hizli bir bakista cevap verir.
-// Herhangi bir kategoriye tiklaninca, onMaliyetEkle(tip) cagrilir - sayfa
-// bunu kullanarak asagidaki "Maliyet Ekle" formunu o tip onceden secili
-// olarak acar.
-function MaliyetKontrolListesi({ urunler, onMaliyetEkle }) {
+// kategorinin HENUZ HIC girilmedigini (toplam sifir) gosteren SALT
+// GORUNTULEME paneli - "hangi masraf unutulmus" sorusuna hizli bir bakista
+// cevap verir. Giris noktasi DEGILDIR (tiklanamaz) - masraf eklemek icin
+// yukaridaki "+ Maliyet Ekle" (genel modal) veya asagidaki urun satirindaki
+// "Maliyet Ekle" (manuel) kullanilmalidir - boylece TEK bir yerden buraya
+// TIKLAYIP farkinda olmadan ucuncu bir giris yolu acilmis olmuyor.
+function MaliyetKontrolListesi({ urunler }) {
   const toplamlar = {};
   BEKLENEN_MALIYET_KATEGORILERI.forEach(({ anahtar }) => {
     toplamlar[anahtar] = urunler.reduce((acc, u) => acc + Number(u[anahtar] || 0), 0);
@@ -578,15 +579,10 @@ function MaliyetKontrolListesi({ urunler, onMaliyetEkle }) {
         Maliyet Kalemi Kontrolü {eksikSayisi > 0 ? `— ${eksikSayisi} kalem eksik olabilir` : '— tüm kategoriler girilmiş'}
       </div>
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 12 }}>
-        {BEKLENEN_MALIYET_KATEGORILERI.map(({ anahtar, tip, ad }) => (
-          <div
-            key={anahtar}
-            onClick={() => onMaliyetEkle(tip)}
-            title="Bu kalemi eklemek için tıklayın"
-            style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}
-          >
-            <span>{tip === 'DIGER' ? '➕' : toplamlar[anahtar] > 0 ? '✅' : '⚠️'}</span>
-            <span style={{ color: 'var(--metin-ikincil)', textDecoration: tip !== 'DIGER' && toplamlar[anahtar] === 0 ? 'underline' : 'none' }}>{ad}</span>
+        {BEKLENEN_MALIYET_KATEGORILERI.filter(({ tip, anahtar }) => tip !== 'DIGER' || toplamlar[anahtar] > 0).map(({ anahtar, tip, ad }) => (
+          <div key={anahtar} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <span>{toplamlar[anahtar] > 0 ? '✅' : '⚠️'}</span>
+            <span style={{ color: 'var(--metin-ikincil)' }}>{tip === 'DIGER' ? 'Diğer' : ad}</span>
             {toplamlar[anahtar] > 0 && <strong>({paraFormat(toplamlar[anahtar])})</strong>}
           </div>
         ))}
@@ -1241,7 +1237,15 @@ export default function SiparislerSayfasi() {
                                           {gecmisAcikUrunId === u.id && (
                                             <tr>
                                               <td colSpan={18} style={{ padding: '0 10px 10px' }}>
-                                                <MaliyetGecmisiPaneli urun={u} cariler={cariler} onKapat={() => setGecmisAcikUrunId(null)} />
+                                                <MaliyetGecmisiPaneli
+                                                  urun={u} cariler={cariler}
+                                                  onKapat={() => setGecmisAcikUrunId(null)}
+                                                  onDegisti={() => {
+                                                    api.get('/stok-seri-no', { params: { siparis_id: s.id } })
+                                                      .then((r) => setSiparisUrunleriHaritasi((h) => ({ ...h, [s.id]: r.data })))
+                                                      .catch(() => {});
+                                                  }}
+                                                />
                                               </td>
                                             </tr>
                                           )}
