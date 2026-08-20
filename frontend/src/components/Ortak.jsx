@@ -1008,7 +1008,7 @@ export function ManuelMaliyetKalemiEkleFormu({ urun, onKaydedildi, onVazgec, var
   const onizlemeDagitim = onizlemeTutarTry > 0 && hedefUrunler.length > 1 ? payHesapla(onizlemeTutarTry) : null;
 
   return (
-    <form onSubmit={kaydet} style={{ padding: 14, background: 'var(--zemin)', borderRadius: 8, marginTop: 8 }}>
+    <form onSubmit={kaydet} style={{ padding: 14, background: 'var(--zemin)', borderRadius: 8, marginTop: 8, maxWidth: 900, boxSizing: 'border-box' }}>
       <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
         {urun.seri_no} — Manuel maliyet kalemi ekle
       </div>
@@ -1080,7 +1080,7 @@ export function ManuelMaliyetKalemiEkleFormu({ urun, onKaydedildi, onVazgec, var
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
         <Alan etiket="Maliyet tipi">
           <select value={form.tip} onChange={(e) => setForm((f) => ({ ...f, tip: e.target.value }))} style={girdiStili}>
             {Object.entries(MALIYET_TIP_METIN).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
