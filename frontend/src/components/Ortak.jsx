@@ -1492,7 +1492,11 @@ export function MaliyetGecmisiPaneli({ urun, cariler = [], onKapat, onDegisti })
   );
 }
 
-export function SatisMaliyetKontrolListesi({ urun, odemeTipi, onMaliyetEkle, kalemler = null }) {
+// Satis-sonrasi (Ardiye, KDV, TSE Ucreti vb.) masraflarin durumunu gosteren
+// SALT GORUNTULEME paneli. Giris noktasi DEGILDIR (tiklanamaz) - Maliyet
+// Kalemi Kontrolu (ithalat asamasi) ile TUTARLI olmasi icin, masraf eklemek
+// icin urunun kendi satirindaki "Maliyet Ekle" (manuel) kullanilmalidir.
+export function SatisMaliyetKontrolListesi({ urun, odemeTipi, kalemler = null }) {
   const beklenenTipler = odemeTipi === 'LEASINGLI' ? LEASING_SATIS_MALIYET_TIPLERI : FATURALI_SATIS_MALIYET_TIPLERI;
   const SUTUN_ESLEME = {
     ARDIYE: 'ardiye_maliyeti_try', GUMRUK: 'gumruk_maliyeti_try', ILAVE_GUMRUK_VERGISI: 'ilave_gumruk_vergisi_try',
@@ -1516,15 +1520,10 @@ export function SatisMaliyetKontrolListesi({ urun, odemeTipi, onMaliyetEkle, kal
           const deger = Number(urun[SUTUN_ESLEME[tip]] || 0);
           const aciklamalar = aciklamalariGetir(tip);
           return (
-            <div
-              key={tip}
-              onClick={onMaliyetEkle ? () => onMaliyetEkle(tip) : undefined}
-              title={onMaliyetEkle ? 'Bu kalemi eklemek için tıklayın' : undefined}
-              style={{ display: 'flex', flexDirection: 'column', gap: 1, cursor: onMaliyetEkle ? 'pointer' : 'default' }}
-            >
+            <div key={tip} style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                 <span>{deger > 0 ? '✅' : '⚠️'}</span>
-                <span style={{ color: 'var(--metin-ikincil)', textDecoration: onMaliyetEkle && deger === 0 ? 'underline' : 'none' }}>{MALIYET_TIP_METIN[tip]}</span>
+                <span style={{ color: 'var(--metin-ikincil)' }}>{MALIYET_TIP_METIN[tip]}</span>
                 {deger > 0 && <strong>({paraFormat(deger)})</strong>}
               </div>
               {aciklamalar.length > 0 && (
