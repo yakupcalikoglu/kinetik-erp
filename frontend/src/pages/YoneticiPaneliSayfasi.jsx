@@ -485,10 +485,14 @@ function DuzenlemeGecmisiSekmesi() {
     }
   }
 
+  const ISLEM_TIPI_METIN = { OLUSTURMA: 'Oluşturma', DUZENLEME: 'Düzenleme', SILME: 'Silme' };
+  const ISLEM_TIPI_TON = { OLUSTURMA: 'yesil', DUZENLEME: 'amber', SILME: 'kirmizi' };
+
   return (
     <div>
       <div style={{ fontSize: 13, color: 'var(--metin-ikincil)', marginBottom: 12 }}>
-        Şifre onayı gerektiren tüm düzenleme işlemlerinin kaydı — kim, ne zaman, hangi kaydı, hangi alanları değiştirdi.
+        Şifre onayı gerektiren düzenlemelerin ve (kayıt altına alınmış) oluşturma/silme işlemlerinin kaydı —
+        kim, ne zaman, hangi kaydı, ne yaptı.
       </div>
       <HataMesaji>{hata}</HataMesaji>
       <Kart style={{ padding: 0 }}>
@@ -500,7 +504,7 @@ function DuzenlemeGecmisiSekmesi() {
           <table>
             <thead>
               <tr style={{ background: 'var(--zemin)' }}>
-                {['Tarih', 'Kullanıcı', 'Tablo', 'Kayıt No', 'Değişiklikler'].map((b) => (
+                {['Tarih', 'Kullanıcı', 'İşlem', 'Tablo', 'Kayıt No', 'Değişiklikler'].map((b) => (
                   <th key={b} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
                 ))}
               </tr>
@@ -512,8 +516,12 @@ function DuzenlemeGecmisiSekmesi() {
                     {k.tarih ? new Date(k.tarih).toLocaleString('tr-TR') : '—'}
                   </td>
                   <td style={{ padding: '10px 16px', fontWeight: 500 }}>{k.kullanici_adi}</td>
+                  <td style={{ padding: '10px 16px' }}>
+                    <Etiket ton={ISLEM_TIPI_TON[k.islem_tipi] || 'notr'}>{ISLEM_TIPI_METIN[k.islem_tipi] || k.islem_tipi || 'Düzenleme'}</Etiket>
+                  </td>
                   <td style={{ padding: '10px 16px' }}><Etiket ton="notr">{TABLO_ADI_METIN[k.tablo_adi] || k.tablo_adi}</Etiket></td>
                   <td style={{ padding: '10px 16px', color: 'var(--metin-ikincil)' }}>#{k.kayit_id}</td>
+
                   <td style={{ padding: '10px 16px', fontSize: 12.5, color: 'var(--metin-ikincil)' }}>{degisiklikleriGoster(k.degisiklikler)}</td>
                 </tr>
               ))}
