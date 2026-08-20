@@ -1161,6 +1161,7 @@ export function ManuelMaliyetKalemiEkleFormu({ urun, onKaydedildi, onVazgec, var
 export function MaliyetEkleModal({ onKapat, onTamamlandi, varsayilanSiparisId = null }) {
   const [siparisler, setSiparisler] = useState([]);
   const [bankaHesaplari, setBankaHesaplari] = useState([]);
+  const [stokKartlari, setStokKartlari] = useState([]);
   const [seciliSiparisId, setSeciliSiparisId] = useState(varsayilanSiparisId ? String(varsayilanSiparisId) : '');
   const [siparisUrunleri, setSiparisUrunleri] = useState([]);
   const [secilenUrunIdleri, setSecilenUrunIdleri] = useState(new Set());
@@ -1172,12 +1173,19 @@ export function MaliyetEkleModal({ onKapat, onTamamlandi, varsayilanSiparisId = 
   const [hata, setHata] = useState(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
 
+  function urunEtiketi(u) {
+    const kart = stokKartlari.find((k) => k.id === u.stok_karti_id);
+    const urunAdi = kart ? `${kart.marka || ''} ${kart.model || ''}`.trim() : '';
+    return `${urunAdi ? urunAdi + ' — ' : ''}${u.seri_no}`;
+  }
+
   useEffect(() => {
     api.get('/siparisler').then((r) => {
       const siralanmis = [...r.data].sort((a, b) => (b.siparis_tarihi || '').localeCompare(a.siparis_tarihi || ''));
       setSiparisler(siralanmis);
     }).catch(() => {});
     api.get('/banka-bakiyeleri').then((r) => setBankaHesaplari(r.data)).catch(() => {});
+    api.get('/stok-kartlari').then((r) => setStokKartlari(r.data)).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -1297,7 +1305,7 @@ export function MaliyetEkleModal({ onKapat, onTamamlandi, varsayilanSiparisId = 
                   siparisUrunleri.map((u) => (
                     <label key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', fontSize: 13, cursor: 'pointer' }}>
                       <input type="checkbox" checked={secilenUrunIdleri.has(u.id)} onChange={() => urunSecimDegistir(u.id)} />
-                      {u.seri_no}
+                      {urunEtiketi(u)}
                     </label>
                   ))
                 )}
