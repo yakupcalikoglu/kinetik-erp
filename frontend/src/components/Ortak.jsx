@@ -866,6 +866,14 @@ export const MALIYET_TIP_METIN = {
   BANKA_MASRAFI: 'Banka Masrafı', KDV: 'KDV', LEASING: 'Leasing', DIGER: 'Diğer',
 };
 
+// Bir urunun (StokSeriNo) fiziksel/satis durumu - genel amacli, ürün
+// seçim listelerinde (orn. Maliyet Ekle modallerinde) hangi urunun HANGI
+// asamada oldugunu (Antrepoda / Depoda / Satildi vb.) gostermek icin.
+export const STOK_DURUM_METIN = {
+  DEPODA: 'Depoda', SIPARISTE: 'Siparişte', YOLDA: 'Yolda', GUMRUKTE: 'Gümrükte',
+  ANTREPODA: 'Antrepoda', SATILDI: 'Satıldı', KIRADA: 'Kirada', BAKIMDA: 'Bakımda', HURDA: 'Hurda',
+};
+
 // Satis turune gore (Leasing / Faturali) BEKLENEN maliyet kategorileri -
 // SatisYapSayfasi'ndaki kontrol listesinde kullanilir.
 export const LEASING_SATIS_MALIYET_TIPLERI = ['ARDIYE', 'GUMRUK', 'ILAVE_GUMRUK_VERGISI', 'DAMGA_VERGISI', 'TSE_UCRETI', 'LEASING', 'BANKA_MASRAFI'];
@@ -1176,7 +1184,8 @@ export function MaliyetEkleModal({ onKapat, onTamamlandi, varsayilanSiparisId = 
   function urunEtiketi(u) {
     const kart = stokKartlari.find((k) => k.id === u.stok_karti_id);
     const urunAdi = kart ? `${kart.marka || ''} ${kart.model || ''}`.trim() : '';
-    return `${urunAdi ? urunAdi + ' — ' : ''}${u.seri_no}`;
+    const durum = STOK_DURUM_METIN[u.durum] || u.durum;
+    return `${urunAdi ? urunAdi + ' — ' : ''}${u.seri_no} · ${durum}`;
   }
 
   useEffect(() => {
