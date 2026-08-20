@@ -1146,7 +1146,7 @@ export default function SiparislerSayfasi() {
                               <div style={{ fontWeight: 600, fontSize: 12.5, marginBottom: 6, marginTop: 14 }}>
                                 Teslim Alınmış Ürünler — Maliyet Kalemi Ekle (manuel/istisnai giriş)
                               </div>
-                              <div style={{ background: 'white', border: '1px solid var(--kenarlik)', borderRadius: 6, overflowX: 'auto' }}>
+                              <div style={{ background: 'white', border: '1px solid var(--kenarlik)', borderRadius: 6, maxHeight: 480, overflow: 'auto' }}>
                                 <table style={{ width: '100%', minWidth: 1900 }}>
                                   <thead>
                                     <tr style={{ background: 'var(--zemin)' }}>
