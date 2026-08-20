@@ -233,6 +233,30 @@ function OdemeFormu({ fatura, kalanBakiye, onKaydedildi, onVazgec }) {
     setHata(null);
     if (!form.siparis_id) { setHata('Lütfen bir sipariş seçin.'); return; }
     if (secilenUrunIdleri.size === 0) { setHata('En az bir ürün seçmelisiniz.'); return; }
+
+    // Kaydetmeden ONCE - secili ILK urun icin, AYNI turde/tutarda daha
+    // once girilmis bir kayit var mi SESSIZCE kontrol et. Bu sayfa da
+    // "Tedarikci Faturalari" akisinin kendisi oldugu icin, ayni faturayi
+    // yanlislikla iki kez odemek COK KOLAY unutulan bir durumdur.
+    const ilkUrunId = Array.from(secilenUrunIdleri)[0];
+    const kontrolTutarTry = fatura.para_birimi === 'TRY' ? Number(form.tutar) : Number(form.tutar) * Number(form.kur);
+    if (ilkUrunId && kontrolTutarTry > 0) {
+      try {
+        const { data: cakisma } = await api.get(`/stok-seri-no/${ilkUrunId}/olasi-cakisma`, {
+          params: { tip: form.maliyet_tipi, tutar_try: kontrolTutarTry },
+        });
+        if (cakisma.bulundu) {
+          const mesaj = `Bu ürün(ler)e ${cakisma.tarih} tarihinde ${paraFormat(cakisma.tutar_try)} tutarında, `
+            + `${cakisma.tedarikci_unvan ? `"${cakisma.tedarikci_unvan}" firmasından ` : ''}`
+            + `benzer bir masraf zaten girilmiş görünüyor. Yine de devam etmek istediğinize emin misiniz? `
+            + `(Aynı masrafı iki kez öderseniz ürün maliyeti şişer.)`;
+          if (!(await ozelOnayIste(mesaj))) return;
+        }
+      } catch {
+        // Kontrol basarisiz olursa (ag hatasi vb.) kullaniciyi ENGELLEMEDEN devam et.
+      }
+    }
+
     setKaydediliyor(true);
     try {
       await api.post(`/tedarikci-faturalari/${fatura.id}/ode`, {
