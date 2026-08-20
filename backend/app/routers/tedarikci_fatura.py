@@ -154,6 +154,17 @@ def fatura_guncelle(
     if not sifre_dogrula(istek.sifre, kullanici.sifre_hash):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Şifreniz yanlış.")
     veriler = istek.model_dump(exclude={"sifre"}, exclude_unset=True)
+    # YENI tutar, faturaya ZATEN yapilmis odemelerin toplamindan az olamaz -
+    # aksi halde "kalan bakiye" NEGATIF bir degere duser (mantiksal
+    # tutarsizlik, kar/zarar raporlarini da yanlis etkiler).
+    if "tutar" in veriler:
+        toplam_odenen = _toplam_odenen_hesapla(db, fatura_id)
+        if veriler["tutar"] < toplam_odenen:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"Yeni tutar ({veriler['tutar']}), bu faturaya zaten yapılmış ödemelerin toplamından "
+                f"({toplam_odenen}) az olamaz. Önce ilgili ödemeleri gözden geçirin."
+            )
     if "varsayilan_maliyet_tipi" in veriler:
         try:
             veriler["varsayilan_maliyet_tipi"] = MaliyetTip(veriler["varsayilan_maliyet_tipi"])
