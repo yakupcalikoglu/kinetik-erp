@@ -11,12 +11,16 @@ export function Kart({ children, style }) {
         borderRadius: 'var(--radius-buyuk)',
         padding: 20,
         boxShadow: 'var(--golge-sm)',
-        // Genis tablolar KENDI icinde yatay scroll etsin - boylece
-        // yatay kaydirma cubugu tablonun HEMEN ALTINDA cikar, sayfanin
-        // (main'in) en altina gitmeye gerek kalmaz. Icerik tasmiyorsa
-        // hicbir gorsel etkisi yoktur, bu yuzden TUM Kart kullanimlarina
-        // guvenle uygulanabilir.
-        overflowX: 'auto',
+        // Kartin KENDI icinde sinirli bir yukseklige sahip olmasi (ve o
+        // sinirin ICINDE hem yatay hem dikey kaydirmasi) icin. Boylece
+        // yatay kaydirma cubugu, sayfanin en altinda DEGIL, Kart'in KENDI
+        // alt kenarinda kalir - ekranin HANGI noktasinda olursa olsun
+        // erisilebilir. sticky thead de artik bu SINIRLI alana gore
+        // calisir, sayfa (main) kaydirilirken degil, Kart'in KENDI
+        // icerigi kaydirilirken basliklar sabit kalir. Icerik bu
+        // yukseklikten kisaysa hicbir gorsel etkisi yoktur.
+        maxHeight: '75vh',
+        overflow: 'auto',
         ...style,
       }}
     >
@@ -1008,7 +1012,7 @@ export function ManuelMaliyetKalemiEkleFormu({ urun, onKaydedildi, onVazgec, var
   const onizlemeDagitim = onizlemeTutarTry > 0 && hedefUrunler.length > 1 ? payHesapla(onizlemeTutarTry) : null;
 
   return (
-    <form onSubmit={kaydet} style={{ padding: 14, background: 'var(--zemin)', borderRadius: 8, marginTop: 8, maxWidth: 900, boxSizing: 'border-box' }}>
+    <form onSubmit={kaydet} style={{ padding: 14, background: 'var(--zemin)', borderRadius: 8, marginTop: 8, maxWidth: 900, maxHeight: '70vh', overflow: 'auto', boxSizing: 'border-box' }}>
       <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
         {urun.seri_no} — Manuel maliyet kalemi ekle
       </div>
