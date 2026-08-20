@@ -29,7 +29,7 @@ from app.models.tedarikci_fatura import TedarikciFaturasi, TedarikciFaturaOdemes
 from app.models.stok import StokSeriNo, StokMaliyetKalemi, Siparis, MALIYET_TIP_SUTUN_ESLEME, MaliyetTip
 from app.schemas.tedarikci_fatura import (
     TedarikciFaturaOlusturIstegi, TedarikciFaturaGuncelleIstegi,
-    TedarikciFaturaOdemeIstegi, TedarikciFaturaYanit, TedarikciFaturaOdemeYanit,
+    TedarikciFaturaOdemeIstegi, TedarikciFaturaOdemeDuzenleIstegi, TedarikciFaturaYanit, TedarikciFaturaOdemeYanit,
 )
 from app.services.para_hareketi import para_hareketi_olustur
 from app.core.security import sifre_dogrula
@@ -77,6 +77,7 @@ def _detayli_getir(db: Session, fatura: TedarikciFaturasi) -> TedarikciFaturasi:
                 ).scalars())
                 seri_nolari = [u.seri_no for u in urunler]
                 o.seri_no = ", ".join(seri_nolari) if len(seri_nolari) <= 3 else f"{len(seri_nolari)} ürün"
+                o.stok_seri_no_idleri = [u.id for u in urunler]
                 siparis_idleri = {u.siparis_id for u in urunler if u.siparis_id}
                 if len(siparis_idleri) == 1:
                     s = db.get(Siparis, next(iter(siparis_idleri)))
@@ -332,6 +333,136 @@ def _maliyet_kalemi_ekle_ve_ozet_guncelle(
     ozet_sutun = MALIYET_TIP_SUTUN_ESLEME[tip]
     mevcut_deger = getattr(urun, ozet_sutun) or 0
     setattr(urun, ozet_sutun, mevcut_deger + tutar_try)
+
+
+@router.put("/odemeler/{odeme_id}/duzenle", response_model=TedarikciFaturaOdemeYanit,
+            dependencies=[Depends(izin_gerektir("FATURA_DUZENLE"))])
+def odeme_duzenle(
+    odeme_id: int,
+    istek: TedarikciFaturaOdemeDuzenleIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    kullanici: Kullanici = Depends(aktif_kullanici_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Daha once yapilmis bir odemeyi (tutar, urun(ler), dagitim yontemi,
+    maliyet tipi vb.) TEK ADIMDA duzeltir. Sifre onayi zorunludur.
+
+    Ic mantik: ONCE bu odemeye ait ESKI StokMaliyetKalemi kayitlarini ve
+    Kasa/Banka hareketini geri alir (odeme_geri_al ile AYNI mantik), SONRA
+    ayni TedarikciFaturaOdemesi kaydi UZERINDE, YENI bilgilerle tekrar
+    dagitim yapar ve YENI bir Kasa/Banka hareketi olusturur. Boylece
+    kullanici "Geri Al + Tekrar Ode" iki adimini TEK BIR ONAYLI islemde
+    yapabilir - odeme_id, siparis_no gibi referanslar DEGISMEDEN kalir.
+    """
+    if not sifre_dogrula(istek.sifre, kullanici.sifre_hash):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Şifreniz yanlış.")
+
+    odeme = db.get(TedarikciFaturaOdemesi, odeme_id)
+    if odeme is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ödeme bulunamadı.")
+    fatura = db.get(TedarikciFaturasi, odeme.fatura_id)
+    if fatura is None or fatura.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ödeme bulunamadı.")
+
+    if not istek.stok_seri_no_idleri:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "En az bir ürün seçilmelidir.")
+    if istek.yontem not in ("ORANSAL", "ESIT"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "yontem 'ORANSAL' veya 'ESIT' olmalıdır.")
+    try:
+        maliyet_tipi_enum = MaliyetTip(istek.maliyet_tipi)
+    except ValueError:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Geçersiz maliyet tipi: {istek.maliyet_tipi}")
+
+    # Bu odeme HARIC diger odemelerin toplami, YENI tutarla birlikte
+    # faturanin toplam tutarini asmamali.
+    diger_odenen = db.execute(
+        select(TedarikciFaturaOdemesi).where(
+            TedarikciFaturaOdemesi.fatura_id == fatura.id, TedarikciFaturaOdemesi.id != odeme_id
+        )
+    ).scalars()
+    diger_toplam = sum((o.tutar for o in diger_odenen), Decimal("0"))
+    if istek.tutar <= 0:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ödeme tutarı sıfırdan büyük olmalıdır.")
+    if diger_toplam + istek.tutar > fatura.tutar:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Girilen tutar, faturanın toplam tutarını ({fatura.tutar}) aşıyor."
+        )
+
+    from app.models.finansal import KasaHareketi, BankaHareketi
+
+    # ---- 1) ESKI durumu geri al: StokMaliyetKalemi kayitlari + ozet sutunlar ----
+    eski_kalemler = list(db.execute(
+        select(StokMaliyetKalemi).where(StokMaliyetKalemi.tedarikci_fatura_odeme_id == odeme_id)
+    ).scalars())
+    for kalem in eski_kalemler:
+        urun = db.get(StokSeriNo, kalem.stok_seri_no_id)
+        if urun is not None:
+            ozet_sutun = MALIYET_TIP_SUTUN_ESLEME[kalem.tip]
+            mevcut_deger = getattr(urun, ozet_sutun) or 0
+            setattr(urun, ozet_sutun, max(Decimal("0"), mevcut_deger - kalem.tutar_try))
+        db.delete(kalem)
+
+    # ---- 2) ESKI Kasa/Banka hareketini sil ----
+    for Model in (KasaHareketi, BankaHareketi):
+        hareket = db.execute(
+            select(Model).where(Model.kaynak_tablo == "TEDARIKCI_FATURA_ODEME", Model.kaynak_id == odeme_id)
+        ).scalar_one_or_none()
+        if hareket is not None:
+            db.delete(hareket)
+    db.flush()
+
+    # ---- 3) Odeme kaydinin KENDISINI YENI bilgilerle guncelle ----
+    tutar_try = istek.tutar * istek.kur if fatura.para_birimi != "TRY" else istek.tutar
+    odeme.tutar = istek.tutar
+    odeme.odeme_tarihi = istek.odeme_tarihi
+    odeme.odeme_yontemi = istek.odeme_yontemi
+    odeme.banka_hesap_id = istek.banka_hesap_id
+    odeme.kur = istek.kur
+    odeme.dagitim_tipi = "URUNLER"
+    odeme.siparis_id = None
+    odeme.stok_seri_no_id = None
+    odeme.maliyet_tipi = maliyet_tipi_enum
+
+    # ---- 4) YENI dagitim: secili urun(ler)e StokMaliyetKalemi ekle ----
+    urunler = list(db.execute(
+        select(StokSeriNo).where(StokSeriNo.id.in_(istek.stok_seri_no_idleri), StokSeriNo.sirket_id == sirket_id)
+    ).scalars())
+    if len(urunler) != len(set(istek.stok_seri_no_idleri)):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Seçilen ürünlerden biri veya birkaçı bulunamadı.")
+
+    if istek.yontem == "ESIT":
+        pay_try_liste = [(u, tutar_try / len(urunler)) for u in urunler]
+    else:
+        toplam_satinalma = sum((u.satinalma_maliyeti_try or 0) for u in urunler)
+        if toplam_satinalma == 0:
+            pay_try_liste = [(u, tutar_try / len(urunler)) for u in urunler]
+        else:
+            pay_try_liste = [(u, tutar_try * (u.satinalma_maliyeti_try or 0) / toplam_satinalma) for u in urunler]
+
+    for urun, pay_try in pay_try_liste:
+        pay_orijinal = istek.tutar * (pay_try / tutar_try) if tutar_try else Decimal("0")
+        _maliyet_kalemi_ekle_ve_ozet_guncelle(
+            db, urun, maliyet_tipi_enum, pay_orijinal, fatura.para_birimi, istek.kur, pay_try,
+            fatura.tedarikci_cari_id, fatura.fatura_no, istek.odeme_tarihi,
+            istek.aciklama or f"Fatura ödemesi (düzenlendi) — {fatura.fatura_no or '#' + str(fatura.id)}",
+            tedarikci_fatura_odeme_id=odeme.id,
+        )
+
+    # ---- 5) YENI Kasa/Banka hareketi ----
+    tedarikci = db.get(CariHesap, fatura.tedarikci_cari_id)
+    para_hareketi_olustur(
+        db, sirket_id, kullanici.id, "CIKIS", istek.tutar,
+        istek.odeme_yontemi, istek.banka_hesap_id,
+        aciklama=f"Tedarikçi faturası (düzenlendi) — {tedarikci.unvan if tedarikci else ''} ({fatura.fatura_no or '#' + str(fatura.id)})",
+        kaynak_tablo="TEDARIKCI_FATURA_ODEME", kaynak_id=odeme.id,
+        para_birimi=fatura.para_birimi, kur=istek.kur if fatura.para_birimi != "TRY" else None,
+    )
+
+    db.commit()
+    db.refresh(odeme)
+    return odeme
 
 
 @router.put("/odemeler/{odeme_id}/geri-al", dependencies=[Depends(izin_gerektir("FATURA_DUZENLE"))])
