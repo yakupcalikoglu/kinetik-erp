@@ -18,7 +18,9 @@ from app.schemas.cari import (
     CariTopluIceAktarIstegi, CariTopluIceAktarSonucu, CariOzetYaniti, CariOzetKalemi,
     CariHareketSatiri, TedarikciOzetiYaniti, TedarikciSonSiparisSatiri,
     MusteriOzetiYaniti, MusteriSonSatisSatiri,
+    CariAcilisBakiyesiIstegi, CariAcilisBakiyesiYanit,
 )
+from app.models.acilis_bakiyesi import CariAcilisBakiyesi
 from app.services import uyumsoft_mock
 
 router = APIRouter(prefix="/cariler", tags=["Cari"])
@@ -36,10 +38,6 @@ def _degisiklikleri_kaydet(db: Session, sirket_id: int, kullanici_id: int, tablo
 @router.post("/vergi-no-sorgula", response_model=VergiNoSorguYaniti,
              dependencies=[Depends(izin_gerektir("CARI_DUZENLE"))])
 def vergi_no_sorgula(istek: VergiNoSorguIstegi):
-    """
-    Mukellef sorgu servisini cagirir. Cari kaydi BU asamada olusturulmaz;
-    kullanici donen bilgileri onayladiktan sonra POST /cariler cagrilir.
-    """
     sonuc = uyumsoft_mock.sorgula(istek.vergi_no)
     return VergiNoSorguYaniti(**sonuc)
 
@@ -80,12 +78,6 @@ def cari_toplu_ice_aktar(
     istek: CariTopluIceAktarIstegi,
     sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
 ):
-    """
-    Excel'den (orn. Akinsoft Wolvox gibi baska bir sistemden aktarilan)
-    cari listesini toplu olarak ekler. Her satir AYRI AYRI commit edilir -
-    boylece bir satirda hata olsa bile diger satirlar etkilenmez, sadece
-    hatali olanlar 'hatali_satirlar' listesinde geri bildirilir.
-    """
     basarili = 0
     hatalar = []
     gecerli_tipler = {"MUSTERI", "TEDARIKCI", "PERSONEL", "ORTAK", "DIGER"}
@@ -117,13 +109,6 @@ def cari_toplu_ice_aktar(
 async def tum_carilerin_ozeti(
     sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
 ):
-    """
-    Ana Cariler listesindeki Bakiye sutunu icin, TUM carilerin net
-    alacak/borc TL karsiligini TEK seferde (cari basina ayri sorgu
-    ATMADAN) hesaplar - /{cari_id}/ozet ile ayni mantik, ama N+1 sorgu
-    yerine her kategori icin BIR sorgu atip Python'da cari_id'ye gore
-    gruplar. Doner: { cari_id: net_try }.
-    """
     from decimal import Decimal as _Decimal
     from app.models.stok import Siparis, SiparisDetay, SiparisOdeme
     from app.models.finansal import (
@@ -150,7 +135,17 @@ async def tum_carilerin_ozeti(
             return
         net[cari_id] = net.get(cari_id, _Decimal("0")) + tutar
 
-    # Taksit alacagi
+    # Acilis bakiyeleri - sisteme gecmeden ONCE devreden alacak/borc.
+    for cari_id, tutar, para_birimi, kur in db.execute(
+        select(CariAcilisBakiyesi.cari_id, CariAcilisBakiyesi.tutar, CariAcilisBakiyesi.para_birimi, CariAcilisBakiyesi.kur)
+        .where(CariAcilisBakiyesi.sirket_id == sirket_id)
+    ).all():
+        pb = para_birimi.value if hasattr(para_birimi, "value") else para_birimi
+        if pb == "TRY":
+            ekle(cari_id, tutar)
+        else:
+            ekle(cari_id, tutar * kur)
+
     for cari_id, tutar in db.execute(
         select(TaksitliSatisPlani.musteri_cari_id, TaksitDetay.tutar)
         .join(TaksitDetay, TaksitDetay.plan_id == TaksitliSatisPlani.id)
@@ -158,7 +153,6 @@ async def tum_carilerin_ozeti(
     ).all():
         ekle(cari_id, tutar)
 
-    # Kredi karti (POS) bekleyen alacagi - henuz bankaya yatmamis taksitler
     from app.models.finansal import PosTaksitPlani, PosTaksitDetay
     for cari_id, tutar in db.execute(
         select(PosTaksitPlani.musteri_cari_id, PosTaksitDetay.tutar)
@@ -167,7 +161,6 @@ async def tum_carilerin_ozeti(
     ).all():
         ekle(cari_id, tutar)
 
-    # Kira alacagi
     kira_sozlesmeler = {
         s.id: s for s in db.execute(select(KiralamaSozlesme).where(KiralamaSozlesme.sirket_id == sirket_id)).scalars()
     }
@@ -180,7 +173,6 @@ async def tum_carilerin_ozeti(
             kur = await kur_getir(pb)
             ekle(s.kiraci_cari_id, o.tutar * kur)
 
-    # Leasing borcu (leasing firmasina, odenmemis taksitler)
     leasing_sozlesmeler = {
         s.id: s for s in db.execute(select(LeasingSozlesme).where(LeasingSozlesme.sirket_id == sirket_id)).scalars()
     }
@@ -193,7 +185,6 @@ async def tum_carilerin_ozeti(
             kur = await kur_getir(pb)
             ekle(s.leasing_firmasi_cari_id, -(o.tutar * kur))
 
-    # Siparis borcu + Akreditif dususu
     siparisler = list(db.execute(
         select(Siparis).where(Siparis.sirket_id == sirket_id, Siparis.durum.notin_(["TASLAK", "IPTAL"]))
     ).scalars())
@@ -232,14 +223,12 @@ async def tum_carilerin_ozeti(
     for cari_id, tutar in akreditif_borc_per_cari.items():
         ekle(cari_id, -tutar)
 
-    # Cekler
     for c in db.execute(select(Cek).where(Cek.sirket_id == sirket_id, Cek.durum == CekDurum.PORTFOYDE)).scalars():
         pb = c.para_birimi.value if hasattr(c.para_birimi, "value") else c.para_birimi
         kur = await kur_getir(pb)
         isaret = 1 if c.tip == CekTip.ALINAN else -1
         ekle(c.cari_id, isaret * c.tutar * kur)
 
-    # Ortak/Dis Borc
     for b in db.execute(select(Borc).where(Borc.sirket_id == sirket_id)).scalars():
         odenen = db.execute(select(func.coalesce(func.sum(BorcOdeme.tutar), 0)).where(BorcOdeme.borc_id == b.id)).scalar_one()
         kalan = b.tutar - odenen
@@ -251,8 +240,6 @@ async def tum_carilerin_ozeti(
         ekle(b.cari_id, isaret * kalan * kur)
 
     return {str(k): v for k, v in net.items()}
-
-
 
 
 @router.get("/{cari_id}", response_model=CariYanit,
@@ -277,7 +264,6 @@ def cari_guncelle(
     kullanici: Kullanici = Depends(aktif_kullanici_getir),
     db: Session = Depends(get_db),
 ):
-    """Bir cari kaydini duzenler. Sifre onayi zorunludur; degisiklikler denetim_kayitlari'na islenir."""
     if not sifre_dogrula(istek.sifre, kullanici.sifre_hash):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Şifre yanlış, düzenleme yapılamadı.")
 
@@ -370,11 +356,6 @@ def cari_sil(
     sirket_id: int = Depends(aktif_sirket_id_getir),
     db: Session = Depends(get_db),
 ):
-    """
-    Cariyi GERCEKTEN silmez - "silindi" olarak isaretler (soft-delete).
-    Boylece iliskili kayitlarda (siparis, cek, hareket vb.) FK ihlali
-    olusmaz ve yanlislikla silinen bir cari HER ZAMAN geri getirilebilir.
-    """
     cari = db.get(CariHesap, cari_id)
     if cari is None or cari.sirket_id != sirket_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Cari kayıt bulunamadı.")
@@ -397,19 +378,84 @@ def cari_geri_getir(
     return cari
 
 
+@router.put("/{cari_id}/acilis-bakiyesi", response_model=CariAcilisBakiyesiYanit,
+            dependencies=[Depends(izin_gerektir("CARI_DUZENLE"))])
+def acilis_bakiyesi_belirle(
+    cari_id: int,
+    istek: CariAcilisBakiyesiIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Bu cari icin, sisteme gecmeden ONCE var olan (baska bir muhasebe
+    programindan devrolan) acilis alacak/borc bakiyesini belirler.
+    Zaten bir kaydi VARSA GUNCELLER (upsert) - her cari icin en fazla
+    BIR acilis bakiyesi kaydi olur. tutar POZITIF ise bu cari bize
+    borclu (alacagimiz), NEGATIF ise biz bu cariye borcluyuz.
+    """
+    cari = db.get(CariHesap, cari_id)
+    if cari is None or cari.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Cari kayıt bulunamadı.")
+
+    mevcut = db.execute(
+        select(CariAcilisBakiyesi).where(CariAcilisBakiyesi.cari_id == cari_id)
+    ).scalar_one_or_none()
+
+    if mevcut is None:
+        mevcut = CariAcilisBakiyesi(sirket_id=sirket_id, cari_id=cari_id)
+        db.add(mevcut)
+
+    mevcut.tutar = istek.tutar
+    mevcut.para_birimi = istek.para_birimi
+    mevcut.kur = istek.kur
+    mevcut.tarih = istek.tarih
+    mevcut.aciklama = istek.aciklama
+
+    db.commit()
+    db.refresh(mevcut)
+    return mevcut
+
+
+@router.get("/{cari_id}/acilis-bakiyesi", response_model=CariAcilisBakiyesiYanit | None,
+            dependencies=[Depends(izin_gerektir("CARI_GORUNTULE"))])
+def acilis_bakiyesi_getir(
+    cari_id: int,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    cari = db.get(CariHesap, cari_id)
+    if cari is None or cari.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Cari kayıt bulunamadı.")
+    return db.execute(
+        select(CariAcilisBakiyesi).where(CariAcilisBakiyesi.cari_id == cari_id)
+    ).scalar_one_or_none()
+
+
+@router.delete("/{cari_id}/acilis-bakiyesi",
+               dependencies=[Depends(izin_gerektir("CARI_DUZENLE"))])
+def acilis_bakiyesi_sil(
+    cari_id: int,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    cari = db.get(CariHesap, cari_id)
+    if cari is None or cari.sirket_id != sirket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Cari kayıt bulunamadı.")
+    mevcut = db.execute(
+        select(CariAcilisBakiyesi).where(CariAcilisBakiyesi.cari_id == cari_id)
+    ).scalar_one_or_none()
+    if mevcut is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Bu cari için açılış bakiyesi kaydı yok.")
+    db.delete(mevcut)
+    db.commit()
+    return {"silindi": True}
+
+
 @router.get("/{cari_id}/ozet", response_model=CariOzetYaniti,
             dependencies=[Depends(izin_gerektir("CARI_GORUNTULE"))])
 async def cari_ozet(
     cari_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
 ):
-    """
-    Bu carinin GERCEK alacak/borc durumunu, ilgili TUM modulleri (Taksitli
-    Satis, Kiralama, Siparis, Akreditif, Cek, Ortak/Dis Borc) bu cari_id'ye
-    gore filtreleyerek hesaplar. CariHesap.bakiye_try/CariHareket
-    alanlarina GUVENILMEZ (bunlar sistemde genel olarak doldurulmuyor) -
-    bunun yerine /raporlar/net-durum'daki AYNI mantik, TEK bir cari icin
-    calistirilir.
-    """
     from datetime import date as _date
     from decimal import Decimal as _Decimal
     from app.models.stok import Siparis, SiparisDetay, SiparisOdeme
@@ -436,7 +482,19 @@ async def cari_ozet(
             kur_cache[pb] = _Decimal(str(k)) if k else _Decimal("0")
         return kur_cache[pb]
 
-    # 1) Taksitli satis alacagi (bu cari MUSTERI ise)
+    acilis_alacak_try = _Decimal("0")
+    acilis_borc_try = _Decimal("0")
+    acilis = db.execute(
+        select(CariAcilisBakiyesi).where(CariAcilisBakiyesi.cari_id == cari_id)
+    ).scalar_one_or_none()
+    if acilis is not None:
+        acilis_pb = acilis.para_birimi.value if hasattr(acilis.para_birimi, "value") else acilis.para_birimi
+        acilis_try = acilis.tutar if acilis_pb == "TRY" else acilis.tutar * acilis.kur
+        if acilis_try > 0:
+            acilis_alacak_try = acilis_try
+        elif acilis_try < 0:
+            acilis_borc_try = -acilis_try
+
     taksit_alacak_try = _Decimal("0")
     taksitler = list(db.execute(
         select(TaksitDetay)
@@ -446,9 +504,6 @@ async def cari_ozet(
     ).scalars())
     taksit_alacak_try = sum((t.tutar for t in taksitler), _Decimal("0"))
 
-    # 1b) Kredi karti (POS) bekleyen alacagi (bu cari MUSTERI ise) - henuz
-    # bankaya yatmamis taksitler, satis aninda ZATEN Stok'tan dustugu icin
-    # bu kalem eklenmezse tutar hicbir yerde gorunmeden kaybolurdu.
     from app.models.finansal import PosTaksitPlani, PosTaksitDetay
     pos_taksit_alacak_try = _Decimal("0")
     pos_taksitler = list(db.execute(
@@ -459,7 +514,6 @@ async def cari_ozet(
     ).scalars())
     pos_taksit_alacak_try = sum((t.tutar for t in pos_taksitler), _Decimal("0"))
 
-    # 2) Kiralama tahsilat alacagi (bu cari KIRACI ise)
     kira_alacak_try = _Decimal("0")
     kira_sozlesmeler = {
         s.id: s for s in db.execute(
@@ -476,7 +530,6 @@ async def cari_ozet(
             kur = await kur_getir(pb)
             kira_alacak_try += o.tutar * kur
 
-    # 2b) Leasing borcu (bu cari LEASING FIRMASI ise)
     leasing_borc_try = _Decimal("0")
     leasing_sozlesmeler_bu_cari = {
         s.id: s for s in db.execute(
@@ -493,7 +546,6 @@ async def cari_ozet(
             kur = await kur_getir(pb)
             leasing_borc_try += o.tutar * kur
 
-    # 3) Tedarikciye olan siparis borcu (bu cari TEDARIKCI ise)
     siparis_borc_try = _Decimal("0")
     siparisler = list(db.execute(
         select(Siparis).where(Siparis.sirket_id == sirket_id, Siparis.tedarikci_cari_id == cari_id, Siparis.durum.notin_(["TASLAK", "IPTAL"]))
@@ -519,7 +571,6 @@ async def cari_ozet(
         if kalan_try > 0:
             siparis_borc_try += kalan_try
 
-    # 4) Akreditif (ayni sipariste zaten dusuldu, burada ayrica ekliyoruz)
     akreditif_borc_try = _Decimal("0")
     for ak in acik_akreditifler_bu_cari:
         kalemler = list(db.execute(select(AkreditifKalemi).where(AkreditifKalemi.akreditif_id == ak.id)).scalars())
@@ -536,7 +587,6 @@ async def cari_ozet(
         if kalan > 0:
             akreditif_borc_try += kalan * kur
 
-    # 5) Cekler (bu cariye ait, portfoyde)
     cek_alacak_try = _Decimal("0")
     cek_borc_try = _Decimal("0")
     cekler = list(db.execute(
@@ -550,7 +600,6 @@ async def cari_ozet(
         else:
             cek_borc_try += c.tutar * kur
 
-    # 6) Ortak/Dis Borc (bu cari ile iliskili)
     ortak_alacak_try = _Decimal("0")
     ortak_borc_try = _Decimal("0")
     borclar = list(db.execute(select(Borc).where(Borc.sirket_id == sirket_id, Borc.cari_id == cari_id)).scalars())
@@ -568,6 +617,7 @@ async def cari_ozet(
             ortak_borc_try += kalan_try
 
     alacaklar = [
+        CariOzetKalemi(kategori="Açılış Bakiyesi (Alacak)", tutar_try=acilis_alacak_try),
         CariOzetKalemi(kategori="Taksitli Satış Alacağı", tutar_try=taksit_alacak_try),
         CariOzetKalemi(kategori="Kredi Kartı (POS) Bekleyen Alacağı", tutar_try=pos_taksit_alacak_try),
         CariOzetKalemi(kategori="Kiralama Tahsilat Alacağı", tutar_try=kira_alacak_try),
@@ -575,6 +625,7 @@ async def cari_ozet(
         CariOzetKalemi(kategori="Ortağa Verilen Borç (Alacak)", tutar_try=ortak_alacak_try),
     ]
     borclar_listesi = [
+        CariOzetKalemi(kategori="Açılış Bakiyesi (Borç)", tutar_try=acilis_borc_try),
         CariOzetKalemi(kategori="Tedarikçiye Olan Borç (Sipariş)", tutar_try=siparis_borc_try),
         CariOzetKalemi(kategori="Akreditif (Ödenmemiş)", tutar_try=akreditif_borc_try),
         CariOzetKalemi(kategori="Leasing (Ödenmemiş Taksitler)", tutar_try=leasing_borc_try),
@@ -597,11 +648,6 @@ async def cari_ozet(
 def cari_tum_hareketler(
     cari_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
 ):
-    """
-    Bu carinin GERCEK GECMISINI (satis, kiralama, bakim, taksitli satis,
-    cek, siparis) TEK bir kronolojik listede toplar. Cari detay panelinde
-    "bu musteriyle simdiye kadar ne is yaptik" sorusuna cevap verir.
-    """
     from app.models.stok import StokSeriNo, StokKarti, Siparis
     from app.models.finansal import (
         TaksitliSatisPlani, KiralamaSozlesme, Cek, CekTip, BakimKaydi, BakimTip, LeasingSozlesme,
@@ -610,7 +656,6 @@ def cari_tum_hareketler(
 
     satirlar: list[CariHareketSatiri] = []
 
-    # 0) Leasing sozlesmeleri (bu cari LEASING FIRMASI ise)
     leasing_sozlesmeler = list(db.execute(
         select(LeasingSozlesme).where(LeasingSozlesme.sirket_id == sirket_id, LeasingSozlesme.leasing_firmasi_cari_id == cari_id)
     ).scalars())
@@ -622,7 +667,6 @@ def cari_tum_hareketler(
             tutar_try=0, kaynak_tablo="LEASING", kaynak_id=ls.id,
         ))
 
-    # 1) Stok satislari (bu cari MUSTERI ise)
     urunler = list(db.execute(
         select(StokSeriNo).where(StokSeriNo.sirket_id == sirket_id, StokSeriNo.musteri_cari_id == cari_id, StokSeriNo.satis_tarihi.isnot(None))
     ).scalars())
@@ -636,7 +680,6 @@ def cari_tum_hareketler(
             kaynak_tablo="STOK_SATIS", kaynak_id=u.id,
         ))
 
-    # 2) Kiralama sozlesmeleri (bu cari KIRACI ise)
     sozlesmeler = list(db.execute(
         select(KiralamaSozlesme).where(KiralamaSozlesme.sirket_id == sirket_id, KiralamaSozlesme.kiraci_cari_id == cari_id)
     ).scalars())
@@ -648,7 +691,6 @@ def cari_tum_hareketler(
             durum=s.durum, kaynak_tablo="KIRALAMA_SOZLESME", kaynak_id=s.id,
         ))
 
-    # 3) Bakim kayitlari
     bakimlar = list(db.execute(
         select(BakimKaydi).where(BakimKaydi.sirket_id == sirket_id, BakimKaydi.ilgili_cari_id == cari_id)
     ).scalars())
@@ -662,7 +704,6 @@ def cari_tum_hareketler(
             tutar_try=b.tutar, kaynak_tablo="BAKIM_KAYDI", kaynak_id=b.id,
         ))
 
-    # 4) Taksitli satis planlari
     planlar = list(db.execute(
         select(TaksitliSatisPlani).where(TaksitliSatisPlani.sirket_id == sirket_id, TaksitliSatisPlani.musteri_cari_id == cari_id)
     ).scalars())
@@ -673,7 +714,6 @@ def cari_tum_hareketler(
             tutar_try=0, kaynak_tablo="TAKSITLI_SATIS_PLANI", kaynak_id=p.id,
         ))
 
-    # 4b) Kredi karti (POS) taksitli satislar
     pos_planlar = list(db.execute(
         select(PosTaksitPlani).where(PosTaksitPlani.sirket_id == sirket_id, PosTaksitPlani.musteri_cari_id == cari_id)
     ).scalars())
@@ -687,7 +727,6 @@ def cari_tum_hareketler(
             tutar_try=pp.toplam_tutar, kaynak_tablo="POS_TAKSIT", kaynak_id=pp.id,
         ))
 
-    # 5) Cekler
     cekler = list(db.execute(select(Cek).where(Cek.sirket_id == sirket_id, Cek.cari_id == cari_id)).scalars())
     for c in cekler:
         pb = c.para_birimi.value if hasattr(c.para_birimi, "value") else c.para_birimi
@@ -698,7 +737,6 @@ def cari_tum_hareketler(
             kaynak_tablo="CEKLER", kaynak_id=c.id,
         ))
 
-    # 6) Siparisler (bu cari TEDARIKCI ise)
     siparisler = list(db.execute(
         select(Siparis).where(Siparis.sirket_id == sirket_id, Siparis.tedarikci_cari_id == cari_id)
     ).scalars())
@@ -709,7 +747,6 @@ def cari_tum_hareketler(
             tutar_try=0, durum=s.durum, kaynak_tablo="SIPARIS", kaynak_id=s.id,
         ))
 
-    # 7) Tedarikci/Hizmet Faturalari (bu cari faturayi KESEN firma ise)
     from app.models.tedarikci_fatura import TedarikciFaturasi
     tedarikci_faturalari = list(db.execute(
         select(TedarikciFaturasi).where(TedarikciFaturasi.sirket_id == sirket_id, TedarikciFaturasi.tedarikci_cari_id == cari_id)
@@ -732,13 +769,6 @@ def cari_tum_hareketler(
 async def tedarikci_ozeti(
     cari_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
 ):
-    """
-    Bir tedarikcinin GECMISTEKI performansini ozetler: toplam kac siparis
-    verildi, toplam ne kadar harcandi (TL karsiligi, guncel kurla), guncel
-    kalan borc ve en son verilen siparislerin kisa bir listesi. Yeni bir
-    siparis olustururken tedarikci secilince "bu firmayla daha once ne is
-    yaptik" sorusuna hizlica cevap vermek icin.
-    """
     from decimal import Decimal as _Decimal
     from app.models.stok import Siparis, SiparisDetay, StokKarti, SiparisOdeme
     from app.services.kur_servisi import guncel_kur_getir
@@ -807,13 +837,6 @@ async def tedarikci_ozeti(
 async def musteri_ozeti(
     cari_id: int, sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
 ):
-    """
-    Bir musterinin GECMISTEKI satis performansini ozetler: toplam kac
-    satis yapildi, toplam ne kadar (TL), guncel alacagimiz ne kadar, ve
-    en son yapilan satislarin kisa bir listesi. Satis Yap / Proforma
-    olustururken musteri secilince "bu musteriye daha once ne fiyata
-    sattik, bizde borcu var mi" sorusuna hizlica cevap vermek icin.
-    """
     from decimal import Decimal as _Decimal
     from app.models.stok import StokSeriNo, StokKarti, StokDurum
 
