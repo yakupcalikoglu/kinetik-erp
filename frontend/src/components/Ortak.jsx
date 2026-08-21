@@ -119,6 +119,10 @@ export function BelgeYoneticisi({ kaynakTablo, kaynakId }) {
   const [belgeler, setBelgeler] = useState(null);
   const [hata, setHata] = useState(null);
   const [yukleniyor, setYukleniyor] = useState(false);
+  // null = "Genel" (klasorsuz) grup secili.
+  const [seciliKlasor, setSeciliKlasor] = useState(null);
+  const [yeniKlasorAcik, setYeniKlasorAcik] = useState(false);
+  const [yeniKlasorAdi, setYeniKlasorAdi] = useState('');
 
   function yukle() {
     api.get('/belgeler', { params: { kaynak_tablo: kaynakTablo, kaynak_id: kaynakId } })
@@ -126,6 +130,22 @@ export function BelgeYoneticisi({ kaynakTablo, kaynakId }) {
       .catch((e) => setHata(hataMesajiCikar(e)));
   }
   useEffect(yukle, [kaynakTablo, kaynakId]); // eslint-disable-line
+
+  // Klasor listesi, AYRI bir tablo/kayit olarak TUTULMAZ - mevcut
+  // belgelerin klasor_adi degerlerinden (benzersiz olarak) TURETILIR.
+  // Boylece "bos bir klasor olustur" islemi de, sadece "seciliKlasor"u
+  // o isme ayarlayip HENUZ hicbir belge olmadan gostermekle saglanir -
+  // ilk belge o klasore yuklendiginde GERCEK KILINMIS olur.
+  const klasorler = belgeler ? [...new Set(belgeler.map((b) => b.klasor_adi).filter(Boolean))].sort() : [];
+  const gorunenBelgeler = (belgeler || []).filter((b) => (b.klasor_adi || null) === seciliKlasor);
+
+  function yeniKlasorEkle() {
+    const isim = yeniKlasorAdi.trim();
+    if (!isim) return;
+    setSeciliKlasor(isim);
+    setYeniKlasorAdi('');
+    setYeniKlasorAcik(false);
+  }
 
   async function dosyaSecildi(e) {
     const dosya = e.target.files?.[0];
@@ -135,7 +155,9 @@ export function BelgeYoneticisi({ kaynakTablo, kaynakId }) {
     try {
       const form = new FormData();
       form.append('dosya', dosya);
-      await api.post('/belgeler', form, { params: { kaynak_tablo: kaynakTablo, kaynak_id: kaynakId } });
+      const params = { kaynak_tablo: kaynakTablo, kaynak_id: kaynakId };
+      if (seciliKlasor) params.klasor_adi = seciliKlasor;
+      await api.post('/belgeler', form, { params });
       yukle();
     } catch (err) {
       setHata(hataMesajiCikar(err));
@@ -187,14 +209,59 @@ export function BelgeYoneticisi({ kaynakTablo, kaynakId }) {
           <input type="file" onChange={dosyaSecildi} disabled={yukleniyor} style={{ display: 'none' }} />
         </label>
       </div>
+
+      {/* Klasor sekmeleri - "Genel" her zaman var, sonra mevcut klasorler, en sonda "+ Yeni klasor". */}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+        <button
+          onClick={() => setSeciliKlasor(null)}
+          style={{
+            padding: '4px 10px', borderRadius: 6, fontSize: 11.5, border: '1px solid var(--kenarlik)', cursor: 'pointer',
+            background: seciliKlasor === null ? 'var(--lacivert)' : 'white', color: seciliKlasor === null ? 'white' : 'var(--metin-birincil)',
+          }}
+        >
+          Genel
+        </button>
+        {klasorler.map((k) => (
+          <button
+            key={k}
+            onClick={() => setSeciliKlasor(k)}
+            style={{
+              padding: '4px 10px', borderRadius: 6, fontSize: 11.5, border: '1px solid var(--kenarlik)', cursor: 'pointer',
+              background: seciliKlasor === k ? 'var(--lacivert)' : 'white', color: seciliKlasor === k ? 'white' : 'var(--metin-birincil)',
+            }}
+          >
+            📁 {k}
+          </button>
+        ))}
+        {!yeniKlasorAcik ? (
+          <button
+            onClick={() => setYeniKlasorAcik(true)}
+            style={{ padding: '4px 10px', borderRadius: 6, fontSize: 11.5, border: '1px dashed var(--kenarlik-koyu)', cursor: 'pointer', background: 'white', color: 'var(--metin-ikincil)' }}
+          >
+            + Yeni klasör
+          </button>
+        ) : (
+          <div style={{ display: 'flex', gap: 4 }}>
+            <input
+              autoFocus value={yeniKlasorAdi} onChange={(e) => setYeniKlasorAdi(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') yeniKlasorEkle(); if (e.key === 'Escape') { setYeniKlasorAcik(false); setYeniKlasorAdi(''); } }}
+              placeholder="Klasör adı..." style={{ ...girdiStili, width: 140, fontSize: 11.5, padding: '3px 8px' }}
+            />
+            <button onClick={yeniKlasorEkle} style={eylemChipStili('yesil')}>Ekle</button>
+          </div>
+        )}
+      </div>
+
       {hata && <div style={{ fontSize: 11.5, color: 'var(--kirmizi)', marginBottom: 6 }}>{hata}</div>}
       {belgeler === null ? (
         <div style={{ fontSize: 12, color: 'var(--metin-soluk)' }}>Yükleniyor...</div>
-      ) : belgeler.length === 0 ? (
-        <div style={{ fontSize: 12, color: 'var(--metin-soluk)' }}>Henüz belge eklenmemiş — gümrük evrakı, sözleşme kopyası vb. ekleyebilirsiniz.</div>
+      ) : gorunenBelgeler.length === 0 ? (
+        <div style={{ fontSize: 12, color: 'var(--metin-soluk)' }}>
+          {seciliKlasor ? `"${seciliKlasor}" klasöründe henüz belge yok — yukarıdan ekleyebilirsiniz.` : 'Henüz belge eklenmemiş — gümrük evrakı, sözleşme kopyası vb. ekleyebilirsiniz.'}
+        </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {belgeler.map((b) => (
+          {gorunenBelgeler.map((b) => (
             <div key={b.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 8px', background: 'white', borderRadius: 6, fontSize: 12 }}>
               <div style={{ overflow: 'hidden' }}>
                 <span style={{ fontWeight: 500 }}>{b.dosya_adi}</span>
