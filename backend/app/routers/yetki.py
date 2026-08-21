@@ -552,6 +552,7 @@ def veritabani_yedek_indir(db: Session = Depends(get_db)):
     bulut depolama) saklamak onerilir.
     """
     import json
+    import base64
     from decimal import Decimal
     from datetime import date as _date, datetime as _datetime
     from sqlalchemy import text
@@ -562,6 +563,14 @@ def veritabani_yedek_indir(db: Session = Depends(get_db)):
             return float(obj)
         if isinstance(obj, (_date, _datetime)):
             return obj.isoformat()
+        if isinstance(obj, (bytes, memoryview)):
+            # Belge icerikleri, sirket logosu gibi BYTEA sutunlar - JSON
+            # metne sigmasi icin Base64'e cevrilir. str(bytes_verisi)
+            # kullanilsaydi Python'un "b'\\x00...'" REPR gosterimi
+            # yaziliyor olurdu - bu, GERCEK veriyi KORUMAZ, geri
+            # yuklemede bozuk/acilamayan dosyalara yol acardi.
+            veri = bytes(obj) if isinstance(obj, memoryview) else obj
+            return {"__bytes_b64__": base64.b64encode(veri).decode("ascii")}
         return str(obj)
 
     tablo_adlari = [
@@ -614,7 +623,17 @@ async def veritabani_geri_yukle(
         )
 
     import json
+    import base64
     from sqlalchemy import text
+
+    def _deger_coz(deger):
+        # Yedekleme sirasinda BYTEA sutunlar {"__bytes_b64__": "..."}
+        # seklinde Base64'e cevrilmisti - geri yuklerken bunlari TEKRAR
+        # ham binary veriye (bytes) donduruyoruz, aksi halde belge/logo
+        # icerikleri metin olarak (bozuk) yazilirdi.
+        if isinstance(deger, dict) and "__bytes_b64__" in deger:
+            return base64.b64decode(deger["__bytes_b64__"])
+        return deger
 
     icerik = await dosya.read()
     try:
@@ -652,7 +671,8 @@ async def veritabani_geri_yukle(
             kolon_str = ', '.join(f'"{k}"' for k in kolonlar)
             deger_str = ', '.join(f':{k}' for k in kolonlar)
             for satir in satirlar:
-                db.execute(text(f'INSERT INTO "{tablo_adi}" ({kolon_str}) VALUES ({deger_str})'), satir)
+                cozulmus_satir = {k: _deger_coz(v) for k, v in satir.items()}
+                db.execute(text(f'INSERT INTO "{tablo_adi}" ({kolon_str}) VALUES ({deger_str})'), cozulmus_satir)
             toplam_satir += len(satirlar)
 
             if 'id' in kolonlar:
