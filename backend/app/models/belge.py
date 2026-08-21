@@ -1,6 +1,5 @@
 """
 Genel amacli belge/dosya eki modulu.
-
 Herhangi bir kayda (Siparis, Leasing/Kiralama sozlesmesi, Cek, Fatura vb.)
 gumruk beyannamesi, sozlesme kopyasi, fatura taramasi gibi belgeler
 eklenebilmesi icin - kaynak_tablo + kaynak_id ikilisi, kaynak_detay.py'deki
@@ -16,14 +15,18 @@ from app.db.session import Base
 
 class Belge(Base):
     __tablename__ = "belgeler"
-
     id = Column(BigInteger, primary_key=True)
     sirket_id = Column(BigInteger, ForeignKey("sirketler.id"), nullable=False)
     # Hangi kayda ait - orn. "SIPARIS", "LEASING", "KIRALAMA", "CEKLER",
-    # "TEDARIKCI_FATURA" - kaynak_detay.py'deki kaynak_tablo degerleriyle
-    # AYNI isimlendirme kullanilir (tutarlilik icin).
+    # "TEDARIKCI_FATURA", "STOK_SERI_NO" - kaynak_detay.py'deki kaynak_tablo
+    # degerleriyle AYNI isimlendirme kullanilir (tutarlilik icin).
     kaynak_tablo = Column(String(50), nullable=False)
     kaynak_id = Column(BigInteger, nullable=False)
+    # Ayni kaynak_tablo/kaynak_id altinda, kullanicinin KENDI olusturdugu
+    # (orn. "Gümrük Evrakları", "Garanti Belgesi") alt gruplama - GERCEK bir
+    # dosya sistemi klasoru degil, sadece bir ETIKET/kategori metni. NULL
+    # ise "Genel" (kok, klasorsuz) grup altinda gosterilir.
+    klasor_adi = Column(String(100), nullable=True)
     dosya_adi = Column(String(255), nullable=False)
     icerik = Column(LargeBinary, nullable=False)
     content_type = Column(String(100))
