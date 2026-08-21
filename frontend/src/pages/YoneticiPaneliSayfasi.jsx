@@ -573,6 +573,81 @@ function AciklamalariYenidenUretKarti() {
   );
 }
 
+function GeriYuklemeKarti() {
+  const [dosya, setDosya] = useState(null);
+  const [onayMetni, setOnayMetni] = useState('');
+  const [calisiyor, setCalisiyor] = useState(false);
+  const [sonuc, setSonuc] = useState(null);
+  const [hata, setHata] = useState(null);
+
+  async function geriYukle() {
+    if (!dosya) { setHata('Lütfen bir yedek dosyası (.json) seçin.'); return; }
+    if (onayMetni !== 'EVET GERİ YÜKLE') {
+      setHata('Devam etmek için kutuya tam olarak "EVET GERİ YÜKLE" yazmalısınız.');
+      return;
+    }
+    if (!(await ozelOnayIste('Bu işlem, veritabanındaki TÜM MEVCUT veriyi silip, seçtiğiniz dosyadaki veriyle değiştirecek. Bu işlem GERİ ALINAMAZ. Emin misiniz?'))) return;
+    setHata(null);
+    setSonuc(null);
+    setCalisiyor(true);
+    try {
+      const formData = new FormData();
+      formData.append('dosya', dosya);
+      formData.append('onay_metni', onayMetni);
+      const { data } = await api.post('/yonetim/veritabani-geri-yukle', formData);
+      setSonuc(data);
+      setOnayMetni('');
+      setDosya(null);
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setCalisiyor(false);
+    }
+  }
+
+  return (
+    <Kart style={{ borderLeft: '4px solid var(--kirmizi)', marginBottom: 16 }}>
+      <div style={{ fontWeight: 600, fontSize: 14.5, marginBottom: 8, color: 'var(--kirmizi)' }}>
+        Yedekten Geri Yükle
+      </div>
+      <div style={{ fontSize: 13, color: 'var(--metin-ikincil)', marginBottom: 16 }}>
+        "Veritabanını Yedekle" ile daha önce indirdiğiniz bir .json dosyasını seçin. Bu işlem, veritabanındaki
+        <strong> tüm mevcut veriyi siler</strong> ve yerine bu dosyadaki veriyi yazar — bir felaket/yanlışlık
+        durumunda (örn. "Test Verilerini Temizle" yanlışlıkla çalıştırılırsa) hızlıca eski duruma dönmek içindir.
+        Bu işlem <strong>geri alınamaz</strong>.
+      </div>
+      <HataMesaji>{hata}</HataMesaji>
+      {sonuc && (
+        <div style={{ background: 'var(--yesil-acik)', color: 'var(--yesil)', padding: '10px 14px', borderRadius: 8, fontSize: 13, marginBottom: 14 }}>
+          Geri yükleme tamamlandı. {sonuc.yuklenen_tablo_sayisi} tablo, toplam {sonuc.toplam_satir} satır yüklendi.
+        </div>
+      )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 480 }}>
+        <Alan etiket="Yedek dosyası (.json)">
+          <input type="file" accept=".json" onChange={(e) => setDosya(e.target.files[0] || null)} style={girdiStili} />
+        </Alan>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
+          <div style={{ flex: 1 }}>
+            <Alan etiket='Devam etmek için "EVET GERİ YÜKLE" yazın'>
+              <input value={onayMetni} onChange={(e) => setOnayMetni(e.target.value)} style={girdiStili} />
+            </Alan>
+          </div>
+          <button
+            onClick={geriYukle}
+            disabled={calisiyor}
+            style={{
+              padding: '10px 18px', borderRadius: 8, border: 'none', background: 'var(--kirmizi)', color: 'white',
+              fontWeight: 600, cursor: calisiyor ? 'default' : 'pointer', marginBottom: 14,
+            }}
+          >
+            {calisiyor ? 'Yükleniyor...' : 'Geri Yükle'}
+          </button>
+        </div>
+      </div>
+    </Kart>
+  );
+}
+
 function TehlikeliIslemlerSekmesi() {
   const [onayMetni, setOnayMetni] = useState('');
   const [calisiyor, setCalisiyor] = useState(false);
@@ -602,6 +677,7 @@ function TehlikeliIslemlerSekmesi() {
   return (
     <div>
       <AciklamalariYenidenUretKarti />
+      <GeriYuklemeKarti />
       <Kart style={{ borderLeft: '4px solid var(--kirmizi)' }}>
       <div style={{ fontWeight: 600, fontSize: 14.5, marginBottom: 8, color: 'var(--kirmizi)' }}>
         Test Verilerini Temizle
