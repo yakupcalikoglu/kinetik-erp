@@ -213,6 +213,7 @@ export function BelgeYoneticisi({ kaynakTablo, kaynakId }) {
       {/* Klasor sekmeleri - "Genel" her zaman var, sonra mevcut klasorler, en sonda "+ Yeni klasor". */}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
         <button
+          type="button"
           onClick={() => setSeciliKlasor(null)}
           style={{
             padding: '4px 10px', borderRadius: 6, fontSize: 11.5, border: '1px solid var(--kenarlik)', cursor: 'pointer',
@@ -223,6 +224,7 @@ export function BelgeYoneticisi({ kaynakTablo, kaynakId }) {
         </button>
         {klasorler.map((k) => (
           <button
+            type="button"
             key={k}
             onClick={() => setSeciliKlasor(k)}
             style={{
@@ -235,6 +237,7 @@ export function BelgeYoneticisi({ kaynakTablo, kaynakId }) {
         ))}
         {!yeniKlasorAcik ? (
           <button
+            type="button"
             onClick={() => setYeniKlasorAcik(true)}
             style={{ padding: '4px 10px', borderRadius: 6, fontSize: 11.5, border: '1px dashed var(--kenarlik-koyu)', cursor: 'pointer', background: 'white', color: 'var(--metin-ikincil)' }}
           >
@@ -244,10 +247,10 @@ export function BelgeYoneticisi({ kaynakTablo, kaynakId }) {
           <div style={{ display: 'flex', gap: 4 }}>
             <input
               autoFocus value={yeniKlasorAdi} onChange={(e) => setYeniKlasorAdi(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') yeniKlasorEkle(); if (e.key === 'Escape') { setYeniKlasorAcik(false); setYeniKlasorAdi(''); } }}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); yeniKlasorEkle(); } if (e.key === 'Escape') { setYeniKlasorAcik(false); setYeniKlasorAdi(''); } }}
               placeholder="Klasör adı..." style={{ ...girdiStili, width: 140, fontSize: 11.5, padding: '3px 8px' }}
             />
-            <button onClick={yeniKlasorEkle} style={eylemChipStili('yesil')}>Ekle</button>
+            <button type="button" onClick={yeniKlasorEkle} style={eylemChipStili('yesil')}>Ekle</button>
           </div>
         )}
       </div>
@@ -270,8 +273,8 @@ export function BelgeYoneticisi({ kaynakTablo, kaynakId }) {
                 </span>
               </div>
               <div style={{ display: 'flex', gap: 8, flexShrink: 0, marginLeft: 8 }}>
-                <button onClick={() => indir(b)} style={{ background: 'none', border: 'none', color: 'var(--lacivert)', cursor: 'pointer', fontSize: 11.5, padding: 0 }}>İndir</button>
-                <button onClick={() => sil(b)} style={{ background: 'none', border: 'none', color: 'var(--kirmizi)', cursor: 'pointer', fontSize: 11.5, padding: 0 }}>Sil</button>
+                <button type="button" onClick={() => indir(b)} style={{ background: 'none', border: 'none', color: 'var(--lacivert)', cursor: 'pointer', fontSize: 11.5, padding: 0 }}>İndir</button>
+                <button type="button" onClick={() => sil(b)} style={{ background: 'none', border: 'none', color: 'var(--kirmizi)', cursor: 'pointer', fontSize: 11.5, padding: 0 }}>Sil</button>
               </div>
             </div>
           ))}
