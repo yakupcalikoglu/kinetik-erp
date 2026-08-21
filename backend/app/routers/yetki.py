@@ -1,5 +1,5 @@
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from pydantic import BaseModel, EmailStr
@@ -582,3 +582,97 @@ def veritabani_yedek_indir(db: Session = Depends(get_db)):
         media_type="application/json",
         headers={"Content-Disposition": f'attachment; filename="{dosya_adi}"'},
     )
+
+
+@router.post("/yonetim/veritabani-geri-yukle", dependencies=[Depends(izin_gerektir("KULLANICI_YONET"))])
+async def veritabani_geri_yukle(
+    dosya: UploadFile = File(...),
+    onay_metni: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    """
+    "Yedek Indir" ile alinmis bir JSON dosyasini okuyup, VERITABANINDAKI
+    TUM tablolari SIFIRDAN bu dosyadaki veriyle DOLDURUR - mevcut TUM veri
+    SILINIR ve yerine dosyadaki veri yazilir.
+
+    GERI ALINAMAZ - onay_metni tam olarak "EVET GERI YUKLE" olmalidir.
+
+    Teknik not: PostgreSQL'in "session_replication_role = replica" ayari
+    ile, geri yukleme SIRASINDA foreign-key kontrolleri GECICI olarak
+    devre disi birakilir - boylece tablolar HANGI sirada islense de
+    (once cocuk, sonra ebeveyn gibi) FK ihlali OLUSMAZ. Islem bitince bu
+    ayar mutlaka eski haline (DEFAULT) dondurulur - basarili da olsa
+    hata da alsa. Her tablo icin id/serial sequence'i de, o tablonun
+    en buyuk id degerine gore YENIDEN ayarlanir - aksi halde bu
+    islemden SONRA eklenecek yeni kayitlar eski (kullanilmis) ID
+    degerleriyle CAKISABILIRDI.
+    """
+    if onay_metni != "EVET GERİ YÜKLE":
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Onay metni hatalı. Devam etmek için tam olarak 'EVET GERİ YÜKLE' yazmalısınız."
+        )
+
+    import json
+    from sqlalchemy import text
+
+    icerik = await dosya.read()
+    try:
+        veri = json.loads(icerik)
+    except json.JSONDecodeError:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Geçersiz JSON dosyası - bu sistemin ürettiği yedek dosyası olduğundan emin olun.")
+    if not isinstance(veri, dict):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Geçersiz yedek dosyası formatı.")
+
+    # Guvenlik: sadece GERCEKTEN var olan tablo adlarini isleme al - JSON
+    # dosyasindaki anahtarlar (tablo adlari) dogrudan SQL'e gomulecegi
+    # icin, veritabaninda GERCEKTEN var olmayan bir "tablo adi" gorursek
+    # o girdiyi SESSIZCE atlariz (enjeksiyon riskini engeller).
+    gecerli_tablolar = {
+        row[0] for row in db.execute(text(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"
+        )).fetchall()
+    }
+
+    yuklenen_tablo_sayisi = 0
+    toplam_satir = 0
+    try:
+        db.execute(text("SET session_replication_role = replica"))
+
+        for tablo_adi, satirlar in veri.items():
+            if tablo_adi not in gecerli_tablolar:
+                continue
+            db.execute(text(f'TRUNCATE TABLE "{tablo_adi}" CASCADE'))
+            yuklenen_tablo_sayisi += 1
+
+            if not satirlar:
+                continue
+
+            kolonlar = list(satirlar[0].keys())
+            kolon_str = ', '.join(f'"{k}"' for k in kolonlar)
+            deger_str = ', '.join(f':{k}' for k in kolonlar)
+            for satir in satirlar:
+                db.execute(text(f'INSERT INTO "{tablo_adi}" ({kolon_str}) VALUES ({deger_str})'), satir)
+            toplam_satir += len(satirlar)
+
+            if 'id' in kolonlar:
+                db.execute(text(
+                    f"SELECT setval(pg_get_serial_sequence('\"{tablo_adi}\"', 'id'), "
+                    f"COALESCE((SELECT MAX(id) FROM \"{tablo_adi}\"), 1))"
+                ))
+
+        db.execute(text("SET session_replication_role = DEFAULT"))
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        try:
+            db.execute(text("SET session_replication_role = DEFAULT"))
+            db.commit()
+        except Exception:
+            pass
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            f"Geri yükleme sırasında hata oluştu, işlem geri alındı (veritabanınız eski haliyle korundu): {str(e)}"
+        )
+
+    return {"basarili": True, "yuklenen_tablo_sayisi": yuklenen_tablo_sayisi, "toplam_satir": toplam_satir}
