@@ -2,12 +2,8 @@ from datetime import date, datetime
 from decimal import Decimal
 from pydantic import BaseModel
 from app.models.cari import CariTip, ParaBirimi, HareketYon
-
-
 class VergiNoSorguIstegi(BaseModel):
     vergi_no: str
-
-
 class VergiNoSorguYaniti(BaseModel):
     bulundu: bool
     unvan: str | None = None
@@ -15,8 +11,6 @@ class VergiNoSorguYaniti(BaseModel):
     adres: str | None = None
     telefon: str | None = None
     mesaj: str | None = None
-
-
 class CariOlusturIstegi(BaseModel):
     tip: CariTip
     unvan: str
@@ -26,8 +20,6 @@ class CariOlusturIstegi(BaseModel):
     telefon: str | None = None
     email: str | None = None
     otomatik_dolduruldu: bool = False
-
-
 class CariGuncelleIstegi(BaseModel):
     sifre: str  # kullanicinin kendi giris sifresi - degisiklik onayi icin zorunlu
     unvan: str | None = None
@@ -37,8 +29,6 @@ class CariGuncelleIstegi(BaseModel):
     telefon: str | None = None
     email: str | None = None
     aktif: bool | None = None
-
-
 class CariYanit(BaseModel):
     id: int
     tip: CariTip
@@ -53,11 +43,8 @@ class CariYanit(BaseModel):
     bakiye_usd: Decimal
     bakiye_eur: Decimal
     aktif: bool
-
     class Config:
         from_attributes = True
-
-
 class CariHareketYanit(BaseModel):
     id: int
     tarih: date
@@ -68,18 +55,13 @@ class CariHareketYanit(BaseModel):
     tutar_try_karsiligi: Decimal | None
     kaynak_tablo: str | None
     kaynak_id: int | None
-
     class Config:
         from_attributes = True
-
-
 class CariBakiyeYanit(BaseModel):
     para_birimi: ParaBirimi
     toplam_giris: Decimal
     toplam_cikis: Decimal
     net_bakiye: Decimal
-
-
 # ---------------------------------------------------------- Toplu İçe Aktarma
 class CariTopluIceAktarSatiri(BaseModel):
     tip: str = "DIGER"
@@ -89,30 +71,20 @@ class CariTopluIceAktarSatiri(BaseModel):
     adres: str | None = None
     telefon: str | None = None
     email: str | None = None
-
-
 class CariTopluIceAktarIstegi(BaseModel):
     satirlar: list[CariTopluIceAktarSatiri]
-
-
 class CariTopluIceAktarSonucu(BaseModel):
     basarili_sayisi: int
     hatali_satirlar: list[dict]
-
-
 # ---------------------------------------------------------- Cari Özet (Alacak/Borç)
 class CariOzetKalemi(BaseModel):
     kategori: str
     tutar_try: Decimal
-
-
 class MusteriSonSatisSatiri(BaseModel):
     tarih: date
     seri_no: str
     urun_adi: str
     tutar_try: Decimal
-
-
 class MusteriOzetiYaniti(BaseModel):
     cari_id: int
     unvan: str
@@ -120,16 +92,12 @@ class MusteriOzetiYaniti(BaseModel):
     toplam_satis_tutari_try: Decimal
     guncel_alacak_try: Decimal  # musterinin bize olan guncel borcu (pozitif: bize borclu)
     son_satislar: list[MusteriSonSatisSatiri]
-
-
 class TedarikciSonSiparisSatiri(BaseModel):
     tarih: date
     siparis_no: str
     urun_ozeti: str  # "2x JAC 3.5 Ton, 1x Transpalet" gibi
     tutar: Decimal
     para_birimi: str
-
-
 class TedarikciOzetiYaniti(BaseModel):
     cari_id: int
     unvan: str
@@ -137,8 +105,6 @@ class TedarikciOzetiYaniti(BaseModel):
     toplam_harcama_try: Decimal
     kalan_bakiye_try: Decimal  # tedarikciye olan guncel borc (TL karsiligi)
     son_siparisler: list[TedarikciSonSiparisSatiri]
-
-
 class CariHareketSatiri(BaseModel):
     tarih: date
     tur: str  # "SATIS", "KIRALAMA", "BAKIM", "TAKSITLI_SATIS", "CEK", "SIPARIS"
@@ -147,8 +113,6 @@ class CariHareketSatiri(BaseModel):
     durum: str | None = None
     kaynak_tablo: str | None = None
     kaynak_id: int | None = None
-
-
 class CariOzetYaniti(BaseModel):
     cari_id: int
     unvan: str
@@ -157,3 +121,25 @@ class CariOzetYaniti(BaseModel):
     toplam_alacak_try: Decimal
     toplam_borc_try: Decimal
     net_try: Decimal  # pozitif: bize borclu, negatif: biz borcluyuz
+
+
+# ---------------------------------------------------------- Açılış Bakiyesi
+class CariAcilisBakiyesiIstegi(BaseModel):
+    tutar: Decimal  # pozitif: bu cari bize borclu, negatif: biz bu cariye borcluyuz
+    para_birimi: str = "TRY"
+    kur: Decimal = Decimal("1")
+    tarih: date
+    aciklama: str | None = None
+
+
+class CariAcilisBakiyesiYanit(BaseModel):
+    id: int
+    cari_id: int
+    tutar: Decimal
+    para_birimi: str
+    kur: Decimal
+    tarih: date
+    aciklama: str | None
+
+    class Config:
+        from_attributes = True
