@@ -2,7 +2,7 @@ import { useEffect, useState, Fragment } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, hataMesajiCikar, ozelOnayIste, ozelPrompt, geriAlBildirimGoster } from '../api/client';
-import { Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat, eylemChipStili, ParaGirdisi, useKademelıGoster, DahaFazlaGosterButonu, DahaFazlaMenu, TabloIskeleti, MALIYET_TIP_METIN, ManuelMaliyetKalemiEkleFormu, BelgeYoneticisi, MaliyetGecmisiPaneli, MaliyetEkleModal } from '../components/Ortak';
+import { Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat, eylemChipStili, ParaGirdisi, useKademelıGoster, DahaFazlaGosterButonu, DahaFazlaMenu, TabloIskeleti, MALIYET_TIP_METIN, ManuelMaliyetKalemiEkleFormu, MaliyetGecmisiPaneli, MaliyetEkleModal } from '../components/Ortak';
 import { excelIndir } from '../utils/disaAktarma';
 import BelgeSablonu from '../components/BelgeSablonu';
 import AramaliSecici from '../components/AramaliSecici';
@@ -600,7 +600,6 @@ export default function SiparislerSayfasi() {
   const [stokKartlari, setStokKartlari] = useState([]);
   const [cariler, setCariler] = useState([]);
   const [gecmisAcikUrunId, setGecmisAcikUrunId] = useState(null);
-  const [belgeAcikUrunId, setBelgeAcikUrunId] = useState(null);
   const [maliyetModalAcik, setMaliyetModalAcik] = useState(false);
   const [yukleniyor, setYukleniyor] = useState(true);
   const [hata, setHata] = useState(null);
@@ -1115,10 +1114,6 @@ export default function SiparislerSayfasi() {
                             </div>
                           )}
 
-                          <div style={{ marginTop: 12 }}>
-                            <BelgeYoneticisi kaynakTablo="SIPARIS" kaynakId={s.id} />
-                          </div>
-
                           {siparisUrunleriHaritasi[s.id] && siparisUrunleriHaritasi[s.id].length > 0 && (
                             <div style={{ marginTop: 12 }}>
                               <MaliyetKontrolListesi
@@ -1227,13 +1222,6 @@ export default function SiparislerSayfasi() {
                                                   {gecmisAcikUrunId === u.id ? 'Geçmişi Kapat' : 'Geçmiş'}
                                                 </button>
                                                 <button
-                                                  onClick={() => setBelgeAcikUrunId((mevcut) => (mevcut === u.id ? null : u.id))}
-                                                  style={eylemChipStili(belgeAcikUrunId === u.id ? 'lacivert' : 'notr')}
-                                                  title="Bu ürüne ait evrakları (fatura, garanti belgesi vb.) yönet"
-                                                >
-                                                  {belgeAcikUrunId === u.id ? 'Belgeleri Kapat' : 'Belgeler'}
-                                                </button>
-                                                <button
                                                   onClick={() => setMaliyetAcikUrunId((mevcut) => (mevcut === u.id ? null : u.id))}
                                                   style={eylemChipStili('lacivert')}
                                                 >
@@ -1242,13 +1230,6 @@ export default function SiparislerSayfasi() {
                                               </div>
                                             </td>
                                           </tr>
-                                          {belgeAcikUrunId === u.id && (
-                                            <tr>
-                                              <td colSpan={18} style={{ padding: '0 10px 10px' }}>
-                                                <BelgeYoneticisi kaynakTablo="STOK_SERI_NO" kaynakId={u.id} />
-                                              </td>
-                                            </tr>
-                                          )}
                                           {gecmisAcikUrunId === u.id && (
                                             <tr>
                                               <td colSpan={18} style={{ padding: '0 10px 10px' }}>
