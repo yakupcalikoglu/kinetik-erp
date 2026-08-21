@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react';
 import {
   LayoutDashboard, Wallet, Users, Boxes, ShoppingCart, Landmark, ArrowLeftRight,
   Receipt, FileSpreadsheet, BarChart3, HandCoins, Tag, Wrench, Settings, Search,
-  Building2, Bell, ClipboardList, ChevronDown, ChevronRight, HelpCircle,
+  Building2, Bell, ClipboardList, ChevronDown, ChevronRight, HelpCircle, Folder,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { api, hataMesajiCikar, basariBildirimDinle, geriAlBildirimDinle, yuklemeDurumuDinle, onayIstegiDinle, _onayYaniti, alertIstegiDinle, _alertYaniti, promptIstegiDinle, _promptYaniti } from '../api/client';
@@ -486,6 +486,7 @@ const MODUL_GRUPLARI = [
   {
     baslik: 'Genel',
     moduller: [
+      { yol: '/belgeler', ad: 'Belgeler', Simge: Folder },
       { yol: '/raporlar', ad: 'Raporlar', Simge: BarChart3 },
       { yol: '/yardim', ad: 'Yardım', Simge: HelpCircle },
       { yol: '/yonetici-paneli', ad: 'Yönetici Paneli', Simge: Settings, gerekliIzin: 'KULLANICI_YONET' },
