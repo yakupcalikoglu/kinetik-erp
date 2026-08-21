@@ -4,12 +4,15 @@ ILISKILI herhangi bir kayda (Siparis, Leasing, Kiralama, Cek, Tedarikci
 Faturasi vb.) belge eklenip listelenip indirilebilir. Ayni Sirket.logo_verisi
 mantigi: icerik DOGRUDAN veritabaninda (BYTEA) saklanir - Render'da /tmp
 diski KALICI OLMADIGI icin.
+
+Klasor destegi: ayni kaynak_tablo/kaynak_id altinda, kullanicinin KENDI
+olusturdugu (orn. "Gümrük Evrakları") isimde alt gruplar - GERCEK bir dosya
+sistemi degil, sadece belgeler.klasor_adi sutununa yazilan bir etiket.
 """
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from sqlalchemy import select
-
 from app.db.session import get_db
 from app.core.deps import aktif_sirket_id_getir, aktif_kullanici_getir
 from app.models.auth import Kullanici
@@ -38,6 +41,14 @@ def belgeleri_listele(
     sirket_id: int = Depends(aktif_sirket_id_getir),
     db: Session = Depends(get_db),
 ):
+    """
+    Bu kaynaga (orn. bir Siparis ya da bir StokSeriNo/urun) ait TUM
+    belgeleri, hangi klasorde olurlarsa olsunlar, tek listede doner.
+    Klasor GRUPLAMASI frontend tarafinda (klasor_adi alanina gore) yapilir -
+    boylece "hangi klasorler var" bilgisi de otomatik olarak buradan
+    (mevcut belgelerin klasor_adi'lerinden) cikarilabilir, ayri bir
+    "klasor olustur" kaydi TUTULMASINA gerek kalmaz.
+    """
     belgeler = list(db.execute(
         select(Belge).where(
             Belge.sirket_id == sirket_id, Belge.kaynak_tablo == kaynak_tablo, Belge.kaynak_id == kaynak_id,
@@ -54,6 +65,7 @@ async def belge_yukle(
     kaynak_tablo: str,
     kaynak_id: int,
     dosya: UploadFile = File(...),
+    klasor_adi: str | None = None,
     sirket_id: int = Depends(aktif_sirket_id_getir),
     kullanici: Kullanici = Depends(aktif_kullanici_getir),
     db: Session = Depends(get_db),
@@ -61,9 +73,10 @@ async def belge_yukle(
     icerik = await dosya.read()
     if len(icerik) > MAKS_DOSYA_BOYUTU:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Dosya boyutu 10 MB'ı aşamaz.")
-
+    # Bos string ("") gelirse "Genel" (klasorsuz) grup olarak degerlendir.
+    temiz_klasor = (klasor_adi or "").strip() or None
     yeni = Belge(
-        sirket_id=sirket_id, kaynak_tablo=kaynak_tablo, kaynak_id=kaynak_id,
+        sirket_id=sirket_id, kaynak_tablo=kaynak_tablo, kaynak_id=kaynak_id, klasor_adi=temiz_klasor,
         dosya_adi=dosya.filename or "belge", icerik=icerik,
         content_type=dosya.content_type or "application/octet-stream",
         boyut_bayt=len(icerik), yukleyen_kullanici_id=kullanici.id,
