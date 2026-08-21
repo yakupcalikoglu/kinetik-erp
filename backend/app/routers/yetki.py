@@ -316,7 +316,7 @@ def test_verilerini_temizle(istek: TemizlikOnayIstegi, db: Session = Depends(get
     from app.models.stok import Siparis, SiparisDetay, StokSeriNo, StokMaliyetKalemi, SiparisOdeme
     from app.models.cari import CariHesap, CariHareket
     from app.models.tedarikci_fatura import TedarikciFaturasi, TedarikciFaturaOdemesi
-    from app.models.yedek_parca import YedekParcaHareketi
+    from app.models.yedek_parca import YedekParcaHareketi, YedekParca
     from app.models.demirbas import Demirbas
     from app.models.banka import KasaHareketi, BankaHareketi
     from app.models.virman import UrunSahiplikGecmisi
@@ -425,6 +425,14 @@ def test_verilerini_temizle(istek: TemizlikOnayIstegi, db: Session = Depends(get
         adet = sonuc.rowcount or 0
         sonuclar[model.__tablename__] = adet
         toplam += adet
+
+    # YedekParca'nin KENDISI (urun tanimi - ad, birim, min_stok_seviyesi vb.)
+    # BILEREK silinmiyor (test verisi degil) - ama HAREKETLERI (yukarida)
+    # silindigi icin, "mevcut_miktar" (ve dolayisiyla o urunun toplam
+    # degeri) de SIFIRLANMALI, aksi halde Net Durum (Bilanco) raporunda,
+    # artik hicbir hareketi olmayan bir mevcut_miktar/deger yanlislikla
+    # gorunmeye devam eder.
+    db.execute(sa_update(YedekParca).values(mevcut_miktar=0))
 
     db.commit()
     return {"toplam_silinen": toplam, "detaylar": sonuclar}
