@@ -20,6 +20,7 @@ from app.models.akreditif_taksit import AkreditifKalemTaksiti
 from app.models.diger import PersonelOdeme, Personel, SabitGider, BorcOdeme, Borc, BorcTip
 from app.models.yedek_parca import YedekParca
 from app.models.demirbas import Demirbas
+from app.models.acilis_bakiyesi import CariAcilisBakiyesi
 from app.services.kur_servisi import guncel_kur_getir
 from app.schemas.raporlama import (
     SeriNoRaporYaniti, HareketTuruRaporYaniti, HareketTuruSatiri,
@@ -60,11 +61,6 @@ def harcama_turleri_ozeti(
     sirket_id: int = Depends(aktif_sirket_id_getir),
     db: Session = Depends(get_db),
 ):
-    """
-    Diger Giderler'deki (SabitGider) her bir harcama turu/kategori icin
-    (Elektrik, Su, Kira, Nakliye vb. - serbest metin oldugu icin kullanici
-    ne yazdiysa o) toplam, odenen ve odenmemis tutari TL cinsinden ozetler.
-    """
     sorgu = select(SabitGider).where(SabitGider.sirket_id == sirket_id)
     if baslangic:
         sorgu = sorgu.where(SabitGider.donem >= baslangic)
@@ -95,11 +91,6 @@ def harcama_turleri_ozeti(
 @router.get("/kar-marji-analizi", response_model=list[KarMarjiSatiri],
             dependencies=[Depends(izin_gerektir("RAPOR_GORUNTULE"))])
 def kar_marji_analizi(sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db)):
-    """
-    Urun tanimi (stok karti) basina, simdiye kadar SATILMIS urunlerin
-    toplam maliyet/satis/kar rakamlarini ve ortalama kar marji yuzdesini
-    hesaplar. En kazancli urun turunden en aza dogru siralanir.
-    """
     satilan_urunler = list(db.execute(
         select(StokSeriNo).where(
             StokSeriNo.sirket_id == sirket_id,
@@ -145,10 +136,6 @@ def seri_no_raporu(
     sirket_id: int = Depends(aktif_sirket_id_getir),
     db: Session = Depends(get_db),
 ):
-    """
-    Tek bir urunun (seri numarasi) tum maliyet, satis ve bakim gecmisini
-    birlestirip getirir. Stok + Bakim modullerini birlestiren ilk rapor.
-    """
     kayit = db.execute(
         select(StokSeriNo, StokKarti)
         .join(StokKarti, StokKarti.id == StokSeriNo.stok_karti_id)
@@ -190,8 +177,6 @@ def seri_no_raporu(
     )
 
 
-# Hareket turu -> bu turun hangi tablodan nasil cekilecegini bilen fonksiyon eslemesi.
-# Yeni bir hareket turu eklemek istendiginde sadece bu sozluge bir fonksiyon eklenir.
 def _maas_satirlari(db, sirket_id, baslangic, bitis):
     sorgu = (
         select(PersonelOdeme, Personel.ad_soyad)
@@ -506,12 +491,6 @@ def hareket_turu_raporu(
     sirket_id: int = Depends(aktif_sirket_id_getir),
     db: Session = Depends(get_db),
 ):
-    """
-    Sistemdeki farkli tablolara dagilmis hareketleri tek bir 'tur' uzerinden
-    raporlar. Bu, Personel/Kiralama/SabitGider/Borc/Bakim/Akreditif/Leasing/
-    Taksit/Cek/Stok modullerinin hepsinin ortak bir raporlama arayuzu
-    altinda birlesmesini saglar.
-    """
     fonksiyon = _HAREKET_TURU_FONKSIYONLARI.get(tur)
     if fonksiyon is None:
         raise HTTPException(
@@ -583,10 +562,6 @@ def genel_bakis(
     sirket_id: int = Depends(aktif_sirket_id_getir),
     db: Session = Depends(get_db),
 ):
-    """
-    Dashboard ekrani icin tek cagrida ozet bilgi: ana kasa bakiyesi,
-    yaklasan cek vadeleri, geciken taksitler, depo durumu, aktif kiralamalar.
-    """
     from app.models.banka import HareketYon
 
     tum_kasa = list(db.execute(select(KasaHareketi).where(KasaHareketi.sirket_id == sirket_id)).scalars())
@@ -644,24 +619,10 @@ def genel_bakis(
             dependencies=[Depends(izin_gerektir("RAPOR_GORUNTULE"))])
 def yaklasan_vadeler(
     gun: int = Query(30, description="Kac gun ileriye kadar vadeler getirilsin"),
-    # NOT: burada Query(...) KASITLI OLARAK KULLANILMADI - bu fonksiyon
-    # sadece FastAPI route handler'i olarak DEGIL, ayrica baska bir Python
-    # fonksiyonu (nakit_akis_tahmini) icinden DOGRUDAN da cagriliyor. Query()
-    # sadece HTTP istegi baglaminda gercek degere donusur; dogrudan
-    # cagrildiginda deger EXPLICIT verilmezse Query nesnesinin KENDISI
-    # (int degil) kalir ve timedelta(days=...) hesaplamasi COKER - bu da
-    # worker'in cokup "Sunucuya baglanilamadi" hatasi vermesine yol acmisti.
     baslangic_gun: int = 0,
     sirket_id: int = Depends(aktif_sirket_id_getir),
     db: Session = Depends(get_db),
 ):
-    """
-    Genel Bakis ekrani icin: onumuzdeki `gun` gun icinde vadesi gelecek
-    (ve istenirse `baslangic_gun` ile GECMISTEKI vadesi gecmis) tum
-    odemeleri (para cikisi) ve tahsilatlari (para girisi) tek bir listede,
-    kaynagi ne olursa olsun (cek/leasing/akreditif/taksit/kira) birlestirip
-    tarihe gore siralar.
-    """
     from app.models.finansal import CekTip, LeasingSozlesme, LeasingOdeme
     from app.models.akreditif import Akreditif, AkreditifKalemi
 
@@ -678,7 +639,6 @@ def yaklasan_vadeler(
     odemeler: list[YaklasanVadeSatiri] = []
     tahsilatlar: list[YaklasanVadeSatiri] = []
 
-    # --- Çek: VERİLEN -> odeme, ALINAN -> tahsilat
     cekler = list(db.execute(
         select(Cek).where(
             Cek.sirket_id == sirket_id,
@@ -696,7 +656,6 @@ def yaklasan_vadeler(
         )
         (odemeler if c.tip == CekTip.VERILEN else tahsilatlar).append(satir)
 
-    # --- Leasing ödemeleri -> odeme
     leasing_odemeleri = list(db.execute(
         select(LeasingOdeme, LeasingSozlesme.sozlesme_no, LeasingSozlesme.para_birimi, LeasingSozlesme.leasing_firmasi_cari_id)
         .join(LeasingSozlesme, LeasingSozlesme.id == LeasingOdeme.leasing_id)
@@ -715,7 +674,6 @@ def yaklasan_vadeler(
             cari_unvan=cari_unvani(leasing_firmasi_cari_id), kaynak_tablo="LEASING_ODEME", kaynak_id=odeme.id,
         ))
 
-    # --- Akreditif kalemleri -> odeme
     akreditif_kalemleri = list(db.execute(
         select(AkreditifKalemi, Akreditif.akreditif_no, Akreditif.para_birimi, Akreditif.siparis_id)
         .join(Akreditif, Akreditif.id == AkreditifKalemi.akreditif_id)
@@ -739,7 +697,6 @@ def yaklasan_vadeler(
             kaynak_tablo="AKREDITIF_KALEMI", kaynak_id=kalem.id,
         ))
 
-    # --- Taksitli satış taksitleri -> tahsilat
     taksitler = list(db.execute(
         select(TaksitDetay, TaksitliSatisPlani.para_birimi, TaksitliSatisPlani.musteri_cari_id)
         .join(TaksitliSatisPlani, TaksitliSatisPlani.id == TaksitDetay.plan_id)
@@ -759,7 +716,6 @@ def yaklasan_vadeler(
             cari_unvan=musteri_adi, kaynak_tablo="TAKSIT_DETAY", kaynak_id=taksit.id,
         ))
 
-    # --- Kiralama ödemeleri -> tahsilat (donem_sonu vade kabul edilir)
     kira_odemeleri = list(db.execute(
         select(KiralamaOdeme, KiralamaSozlesme.para_birimi, KiralamaSozlesme.kiraci_cari_id)
         .join(KiralamaSozlesme, KiralamaSozlesme.id == KiralamaOdeme.sozlesme_id)
@@ -795,12 +751,6 @@ def yaklasan_vadeler(
 async def nakit_akis_tahmini(
     sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
 ):
-    """
-    Mevcut Kasa+Banka bakiyesi (TL) + onumuzdeki 30/60/90 gunde (kumulatif)
-    beklenen tahsilat/odeme netlestirilerek tahmini gelecek bakiye hesaplanir.
-    Nakit planlamasi icin: "onumuzdeki ay sonunda kasam yaklasik ne kadar
-    olacak" sorusuna cevap verir.
-    """
     from app.services.kur_servisi import guncel_kur_getir
     from app.models.banka import BankaHesabi, BankaHareketi
 
@@ -815,14 +765,12 @@ async def nakit_akis_tahmini(
                 kur_cache[pb] = Decimal("1")
         return kur_cache[pb]
 
-    # Mevcut Kasa bakiyesi (TL)
     tum_kasa = list(db.execute(select(KasaHareketi).where(KasaHareketi.sirket_id == sirket_id)).scalars())
     kasa_net = sum(
         ((h.tutar_try_karsiligi or 0) if h.yon.value == "GIRIS" else -(h.tutar_try_karsiligi or 0) for h in tum_kasa),
         Decimal("0"),
     )
 
-    # Mevcut Banka bakiyeleri - her hesap kendi para biriminde, TL'ye cevrilir
     banka_sorgu = (
         select(BankaHesabi.para_birimi, func.coalesce(func.sum(BankaHareketi.tutar), 0).label("bakiye"))
         .outerjoin(BankaHareketi, BankaHareketi.banka_hesap_id == BankaHesabi.id)
@@ -865,11 +813,6 @@ def depo_envanteri(
     sirket_id: int = Depends(aktif_sirket_id_getir),
     db: Session = Depends(get_db),
 ):
-    """
-    Depodaki (durum=DEPODA) urunleri stok karti bazinda gruplar; her grup
-    icin adet ve toplam maliyet degerini hesaplar. Genel Bakis ekraninda
-    'urun turune gore depo degeri' gorunumu icin kullanilir.
-    """
     kayitlar = list(db.execute(
         select(StokSeriNo, StokKarti)
         .join(StokKarti, StokKarti.id == StokSeriNo.stok_karti_id)
@@ -898,16 +841,6 @@ def aktif_kiralamalar(
     sirket_id: int = Depends(aktif_sirket_id_getir),
     db: Session = Depends(get_db),
 ):
-    """
-    Aktif kiralama sozlesmelerini urun bilgisi ve kiraci unvaniyla birlikte
-    getirir. Genel Bakis ekraninda 'kime kiralandi, ne kadara' gorunumu icin.
-    """
-    # ONEMLI: KiralamaSozlesme.stok_seri_no_id ESKI (tekli urun) tasarimdan
-    # kalma bir alan - coklu urun sistemine gectigimizden beri YENI
-    # sozlesmelerde bu alan hep NULL. Gercek urun/seri no baglantisi artik
-    # KiralamaSozlesmeKalemi -> KiralamaKalemUrunu uzerinden kuruluyor. Bu
-    # yuzden dogrudan STokSeriNo'ya JOIN etmek yerine kalemler/kalem_urunu
-    # tablolarini kullaniyoruz.
     sozlesmeler = list(db.execute(
         select(KiralamaSozlesme).where(KiralamaSozlesme.sirket_id == sirket_id, KiralamaSozlesme.durum == "AKTIF")
     ).scalars())
@@ -937,9 +870,6 @@ def aktif_kiralamalar(
                         kiraci_unvan=kiraci_unvan, aylik_kira_tutari=kalem.birim_fiyat, para_birimi=para_birimi,
                     ))
             else:
-                # Bu kalem icin spesifik seri no secilmemis (sadece urun turu +
-                # miktar girilmis) - yine de "kimde ne kadarlik urun kirada"
-                # bilgisi kaybolmasin diye genel bir satir olarak gosteriyoruz.
                 sonuc.append(AktifKiralamaSatiri(
                     stok_seri_no_id=kalem.id, marka=kart.marka if kart else None,
                     model=kart.model if kart else None,
@@ -970,14 +900,6 @@ async def net_durum(
     sirket_id: int = Depends(aktif_sirket_id_getir),
     db: Session = Depends(get_db),
 ):
-    """
-    Sirketin genel mali durumunun (bilanco benzeri) ozeti: nakit + stok
-    (VARLIK), musteri/cek/taksit/kiralama alacaklari (ALACAK), akreditif/
-    leasing/cek/ortak-dis borc/tedarikci (BORC) kalemlerini TL karsiligi
-    olarak toplar. Dovizli kalemler icin GUNCEL kur kullanilir (gecmis
-    kur degil) - bu yuzden rakam gunden gune kur hareketine gore
-    degisebilir, sadece 'su an' icin yaklasik bir gostergedir.
-    """
     kur_cache: dict[str, Decimal] = {}
 
     async def kur_getir(pb: str) -> Decimal:
@@ -988,15 +910,12 @@ async def net_durum(
             kur_cache[pb] = Decimal(str(k)) if k else Decimal("0")
         return kur_cache[pb]
 
-    # ------------------------------------------------------------- VARLIKLAR
-    # 1) Ana Kasa (nakit)
     kasa_hareketleri = list(db.execute(select(KasaHareketi).where(KasaHareketi.sirket_id == sirket_id)).scalars())
     kasa_bakiye_try = Decimal("0")
     for h in kasa_hareketleri:
         tutar_try = h.tutar_try_karsiligi if h.tutar_try_karsiligi is not None else h.tutar
         kasa_bakiye_try += tutar_try if h.yon == "GIRIS" else -tutar_try
 
-    # 2) Banka (guncel kurla TL karsiligi)
     banka_sorgu = (
         select(BankaHesabi.para_birimi, func.coalesce(func.sum(BankaHareketi.tutar), 0).label("bakiye"))
         .outerjoin(BankaHareketi, BankaHareketi.banka_hesap_id == BankaHesabi.id)
@@ -1008,7 +927,6 @@ async def net_durum(
         kur = await kur_getir(r.para_birimi)
         banka_bakiye_try += Decimal(r.bakiye) * kur
 
-    # 3) Stok (henuz SATILMAMIS urunlerin toplam maliyeti)
     stok_urunleri = list(db.execute(
         select(StokSeriNo).where(StokSeriNo.sirket_id == sirket_id, StokSeriNo.durum != StokDurum.SATILDI)
     ).scalars())
@@ -1018,22 +936,9 @@ async def net_durum(
         for u in stok_urunleri
     ), Decimal("0"))
 
-    # 4) Yedek parca / sarf malzeme
     yedek_parcalar = list(db.execute(select(YedekParca).where(YedekParca.sirket_id == sirket_id)).scalars())
     yedek_parca_degeri_try = sum((p.mevcut_miktar * p.birim_fiyat_try for p in yedek_parcalar), Decimal("0"))
 
-    # ------------------------------------------------------------- ALACAKLAR
-    # 5) Cari Arasi Borc Devri (Virman -> Cariden Cariye) bakiyesi.
-    # CariHareket tablosu SADECE bu virman ozelliginde dolduruluyor (baska
-    # hicbir modul - Siparis/Taksit/Kiralama/Cek/Akreditif/vb. - buraya
-    # yazmiyor, o yuzden GENEL bir "Cari Hesaplardan Alacak/Borc" kalemi
-    # eklemiyoruz; bu, o modullerin KENDI "kalan bakiye" hesaplariyla
-    # cift sayima yol acardi). Ama VIRMAN_CARI_CARI kaynakli kayitlar
-    # gercek, ayri bir bakiye olusturuyor (baska hicbir kategoride
-    # yakalanmiyor) - bu yuzden SADECE bu kaynagi ayri bir kalem olarak
-    # sayiyoruz. Isaret kurali: kaynak caride GIRIS acilir (borcu kapanir),
-    # hedef caride CIKIS acilir (borc ona gecer) - yani bir cari icin
-    # net alacak = CIKIS - GIRIS (CIKIS ne kadar cok, o kadar bize borclu).
     virman_hareketleri = list(db.execute(
         select(CariHareket).where(CariHareket.sirket_id == sirket_id, CariHareket.kaynak_tablo == "VIRMAN_CARI_CARI")
     ).scalars())
@@ -1054,7 +959,22 @@ async def net_durum(
         elif net < 0:
             virman_borc_try += -net
 
-    # 6) Taksitli satis - henuz tahsil edilmemis taksitlerin toplami (TRY sabit)
+    # Acilis Bakiyeleri - sisteme gecmeden ONCE (orn. Wolvox gibi baska bir
+    # muhasebe programindan) devreden, herhangi bir islem GECMISI OLMADAN
+    # kayit altina alinmis tek seferlik alacak/borc kalemi.
+    acilis_bakiyeleri = list(db.execute(
+        select(CariAcilisBakiyesi).where(CariAcilisBakiyesi.sirket_id == sirket_id)
+    ).scalars())
+    acilis_alacak_try = Decimal("0")
+    acilis_borc_try = Decimal("0")
+    for ab in acilis_bakiyeleri:
+        pb = ab.para_birimi.value if hasattr(ab.para_birimi, "value") else ab.para_birimi
+        tutar_try = ab.tutar if pb == "TRY" else ab.tutar * ab.kur
+        if tutar_try > 0:
+            acilis_alacak_try += tutar_try
+        elif tutar_try < 0:
+            acilis_borc_try += -tutar_try
+
     taksitli_taksitler = list(db.execute(
         select(TaksitDetay)
         .join(TaksitliSatisPlani, TaksitliSatisPlani.id == TaksitDetay.plan_id)
@@ -1062,11 +982,6 @@ async def net_durum(
     ).scalars())
     taksit_alacak_try = sum((t.tutar for t in taksitli_taksitler), Decimal("0"))
 
-    # 6b) Kredi karti (POS) taksitleri - henuz bankaya YATMAMIS taksitlerin
-    # toplami. Bu urunler ZATEN SATILDI sayilip Stok'tan dustugu icin, bu
-    # kalem eklenmezse tutar hicbir yerde gorunmeden "kaybolurdu" - satis
-    # ani ile paranin GERCEKTEN hesaba yatmasi arasindaki GECIKMIS alacagi
-    # temsil eder (TRY sabit, kart odemesi zaten TRY).
     pos_taksitler = list(db.execute(
         select(PosTaksitDetay)
         .join(PosTaksitPlani, PosTaksitPlani.id == PosTaksitDetay.plan_id)
@@ -1074,7 +989,6 @@ async def net_durum(
     ).scalars())
     pos_taksit_alacak_try = sum((t.tutar for t in pos_taksitler), Decimal("0"))
 
-    # 7) Kiralama - henuz tahsil edilmemis donemlerin toplami
     kiralama_sozlesmeler = {
         s.id: s for s in db.execute(select(KiralamaSozlesme).where(KiralamaSozlesme.sirket_id == sirket_id)).scalars()
     }
@@ -1091,7 +1005,6 @@ async def net_durum(
         kur = await kur_getir(pb)
         kiralama_alacak_try += o.tutar * kur
 
-    # 8) Alinan cekler (portfoyde, henuz tahsil edilmemis)
     alinan_cekler = list(db.execute(
         select(Cek).where(Cek.sirket_id == sirket_id, Cek.durum == CekDurum.PORTFOYDE, Cek.tip == CekTip.ALINAN)
     ).scalars())
@@ -1100,7 +1013,6 @@ async def net_durum(
         kur = await kur_getir(c.para_birimi.value if hasattr(c.para_birimi, "value") else c.para_birimi)
         cek_alacak_try += c.tutar * kur
 
-    # 9) Ortaga verilen borclarin kalan bakiyesi (bize geri donecek)
     tum_borclar = list(db.execute(select(Borc).where(Borc.sirket_id == sirket_id)).scalars())
     ortak_alacak_try = Decimal("0")
     ortak_borc_try = Decimal("0")
@@ -1119,11 +1031,6 @@ async def net_durum(
         else:
             ortak_borc_try += kalan_try
 
-    # --------------------------------------------------------------- BORCLAR
-    # 10) Akreditif - toplam LIMIT (tutar) eksi simdiye kadar fiilen odenen kisim.
-    # Kalem eklenmemis olsa bile acik akreditifin tamami taahhut/borc sayilir -
-    # sadece kalem uzerinden gitmek, henuz kalem girilmemis akreditifleri
-    # bilancodan tamamen dusuruyordu (yanlis olurdu).
     acik_akreditifler = list(db.execute(
         select(Akreditif).where(Akreditif.sirket_id == sirket_id, Akreditif.durum != AkreditifDurum.IPTAL)
     ).scalars())
@@ -1143,7 +1050,6 @@ async def net_durum(
         if kalan_borc > 0:
             akreditif_borc_try += kalan_borc * kur
 
-    # 11) Leasing - odenmemis taksitler
     leasing_sozlesmeler = list(db.execute(select(LeasingSozlesme).where(LeasingSozlesme.sirket_id == sirket_id)).scalars())
     leasing_borc_try = Decimal("0")
     for l in leasing_sozlesmeler:
@@ -1154,7 +1060,6 @@ async def net_durum(
         kur = await kur_getir(pb)
         leasing_borc_try += sum((o.tutar for o in odemeler), Decimal("0")) * kur
 
-    # 12) Verilen cekler (portfoyde, henuz odenmemis)
     verilen_cekler = list(db.execute(
         select(Cek).where(Cek.sirket_id == sirket_id, Cek.durum == CekDurum.PORTFOYDE, Cek.tip == CekTip.VERILEN)
     ).scalars())
@@ -1163,7 +1068,6 @@ async def net_durum(
         kur = await kur_getir(c.para_birimi.value if hasattr(c.para_birimi, "value") else c.para_birimi)
         cek_borc_try += c.tutar * kur
 
-    # 13b) Personele tahakkuk etmis, henuz odenmemis maas/avans/prim (TRY sabit)
     odenmemis_personel_odemeleri = list(db.execute(
         select(PersonelOdeme)
         .join(Personel, Personel.id == PersonelOdeme.personel_id)
@@ -1171,20 +1075,11 @@ async def net_durum(
     ).scalars())
     personel_borc_try = sum((o.tutar for o in odenmemis_personel_odemeleri), Decimal("0"))
 
-    # 13c) Odenmemis diger giderler (dovizli olabilir, tutar_try hazir)
     odenmemis_giderler = list(db.execute(
         select(SabitGider).where(SabitGider.sirket_id == sirket_id, SabitGider.odendi_mi.is_(False))
     ).scalars())
     diger_gider_borc_try = sum((g.tutar_try for g in odenmemis_giderler), Decimal("0"))
 
-    # 13) Tedarikciye olan kalan borc (siparisler)
-    # ONEMLI: Akreditifli bir siparisin odemesi AKREDITIF uzerinden
-    # yapilir (SiparisOdeme uzerinden degil), ve o akreditifin tutari
-    # zaten yukarida (10. adim) "Akreditif (Odenmemis)" kaleminde AYRICA
-    # borc olarak sayiliyor. Bu yuzden bu siparise bagli acik akreditif
-    # varsa, o akreditifin tutarini burada "odenmis" gibi dusuyoruz -
-    # aksi halde AYNI borc iki kere sayilirdi (hem Siparis hem Akreditif
-    # kaleminde).
     siparisler = list(db.execute(
         select(Siparis).where(Siparis.sirket_id == sirket_id, Siparis.durum.notin_(["TASLAK", "IPTAL"]))
     ).scalars())
@@ -1208,11 +1103,6 @@ async def net_durum(
         if kalan_try > 0:
             siparis_borc_try += kalan_try
 
-    # 14) Tedarikci/Hizmet Faturalari (navlun, gumruk, antrepo vb. - Tedarikci
-    # Faturalari modulunden) - HENUZ odenmemis kalan bakiyeleri. Bu, Sipariş'in
-    # KENDI mal bedeli borcundan (13. adim) TAMAMEN AYRI bir kalem - navlun/
-    # gumruk gibi masraflar SIPARIS'in mal bedeli DEGIL, ayrica olusan
-    # hizmet faturalaridir.
     from app.models.tedarikci_fatura import TedarikciFaturasi, TedarikciFaturaOdemesi
 
     tedarikci_faturalari = list(db.execute(
@@ -1238,6 +1128,7 @@ async def net_durum(
         NetDurumKalemi(kategori="Yedek Parça / Sarf Malzeme", tutar_try=yedek_parca_degeri_try),
     ]
     alacaklar = [
+        NetDurumKalemi(kategori="Açılış Bakiyeleri (Alacak)", tutar_try=acilis_alacak_try),
         NetDurumKalemi(kategori="Cari Arası Devir (Bize Borçlu)", tutar_try=virman_alacak_try),
         NetDurumKalemi(kategori="Taksitli Satış Alacağı", tutar_try=taksit_alacak_try),
         NetDurumKalemi(kategori="Kredi Kartı (POS) Bekleyen Alacağı", tutar_try=pos_taksit_alacak_try),
@@ -1246,6 +1137,7 @@ async def net_durum(
         NetDurumKalemi(kategori="Ortağa Verilen Borç (Alacak)", tutar_try=ortak_alacak_try),
     ]
     borclar = [
+        NetDurumKalemi(kategori="Açılış Bakiyeleri (Borç)", tutar_try=acilis_borc_try),
         NetDurumKalemi(kategori="Cari Arası Devir (Biz Borçluyuz)", tutar_try=virman_borc_try),
         NetDurumKalemi(kategori="Akreditif (Ödenmemiş)", tutar_try=akreditif_borc_try),
         NetDurumKalemi(kategori="Leasing (Ödenmemiş Taksitler)", tutar_try=leasing_borc_try),
@@ -1271,7 +1163,7 @@ async def net_durum(
 class YillikKarsilastirmaYaniti(BaseModel):
     bu_yil: int
     gecen_yil: int
-    donem_aciklamasi: str  # "Ocak - Agustos" gibi
+    donem_aciklamasi: str
     bu_yil_net_kar: Decimal
     gecen_yil_net_kar: Decimal
     net_kar_degisim_yuzde: Decimal | None
@@ -1284,7 +1176,7 @@ class YillikKarsilastirmaYaniti(BaseModel):
 
 
 class AylikKarSatiri(BaseModel):
-    ay: str  # "2026-07" formatinda
+    ay: str
     stok_satis_kari: Decimal
     demirbas_satis_kari: Decimal
     yedek_parca_kari: Decimal
@@ -1303,14 +1195,6 @@ def aylik_net_kar(
     sirket_id: int = Depends(aktif_sirket_id_getir),
     db: Session = Depends(get_db),
 ):
-    """
-    Ay ay net kar/zarar ozeti. Gelir kalemleri: stok satis kari (satis
-    fiyati - toplam maliyet), demirbas satis kari, bakim geliri, kira
-    geliri. Gider kalemleri: bakim gideri, odenmis personel maaslari,
-    odenmis diger giderler. Akreditif/Leasing/Cek/Taksit odemeleri BURAYA
-    DAHIL EDILMEZ - bunlar borc/alacak kapatma islemleridir, kar/zarar
-    (gelir tablosu) kalemi degildir.
-    """
     aylik: dict[str, dict] = {}
 
     def satir(ay: str) -> dict:
@@ -1320,7 +1204,6 @@ def aylik_net_kar(
             "kira_geliri": Decimal("0"), "personel_gideri": Decimal("0"), "diger_gider": Decimal("0"),
         })
 
-    # 1) Stok satis kari
     stok_urunleri = list(db.execute(
         select(StokSeriNo).where(
             StokSeriNo.sirket_id == sirket_id, StokSeriNo.durum == StokDurum.SATILDI,
@@ -1336,7 +1219,6 @@ def aylik_net_kar(
         kar = (u.satis_fiyati_try or Decimal("0")) - toplam_maliyet
         satir(ay)["stok_satis_kari"] += kar
 
-    # 2) Demirbas satis kari
     demirbaslar = list(db.execute(
         select(Demirbas).where(Demirbas.sirket_id == sirket_id, Demirbas.durum == "SATILDI", Demirbas.satis_tarihi.isnot(None))
     ).scalars())
@@ -1345,7 +1227,6 @@ def aylik_net_kar(
         kar = (d.satis_fiyati_try or Decimal("0")) - d.maliyet_try
         satir(ay)["demirbas_satis_kari"] += kar
 
-    # 2b) Yedek parca satis kari (Cikis hareketleri, satis fiyati girilmis olanlar)
     from app.models.yedek_parca import YedekParcaHareketi, YedekParcaHareketYon, YedekParca
     yp_satislari = list(db.execute(
         select(YedekParcaHareketi)
@@ -1362,7 +1243,6 @@ def aylik_net_kar(
         kar = (h.birim_fiyat_try - h.maliyet_birim_fiyat_try) * h.miktar
         satir(ay)["yedek_parca_kari"] += kar
 
-    # 3) Bakim geliri/gideri
     bakimlar = list(db.execute(select(BakimKaydi).where(BakimKaydi.sirket_id == sirket_id)).scalars())
     for b in bakimlar:
         if not b.tarih:
@@ -1373,7 +1253,6 @@ def aylik_net_kar(
         else:
             satir(ay)["bakim_gideri"] += b.tutar
 
-    # 4) Kira geliri (tahsil edilmis donemler)
     kira_odemeleri = list(db.execute(
         select(KiralamaOdeme)
         .join(KiralamaSozlesme, KiralamaSozlesme.id == KiralamaOdeme.sozlesme_id)
@@ -1384,7 +1263,6 @@ def aylik_net_kar(
             ay = o.odeme_tarihi.strftime("%Y-%m")
             satir(ay)["kira_geliri"] += o.tutar
 
-    # 5) Odenmis personel maaslari/avanslari
     personel_odemeleri = list(db.execute(
         select(PersonelOdeme)
         .join(Personel, Personel.id == PersonelOdeme.personel_id)
@@ -1395,7 +1273,6 @@ def aylik_net_kar(
             ay = o.odeme_tarihi.strftime("%Y-%m")
             satir(ay)["personel_gideri"] += o.tutar
 
-    # 6) Odenmis diger giderler (TL karsiligi uzerinden)
     giderler = list(db.execute(
         select(SabitGider).where(SabitGider.sirket_id == sirket_id, SabitGider.odendi_mi.is_(True))
     ).scalars())
@@ -1422,12 +1299,6 @@ def aylik_net_kar(
 def yillik_karsilastirma(
     sirket_id: int = Depends(aktif_sirket_id_getir), db: Session = Depends(get_db),
 ):
-    """
-    "Bu yil, gecen yilin AYNI donemine gore" karsilastirmasi: bugune kadar
-    gecen aylarin (orn. Ocak-Agustos) net kar/gelir/gider toplamini, gecen
-    yilin AYNI aylik penceresiyle kiyaslar. Boylece "buyuyor muyuz,
-    kucaliyor muyuz" sorusuna adil (mevsimsellik dahil) bir cevap verir.
-    """
     tum_aylar = aylik_net_kar(ay_sayisi=24, sirket_id=sirket_id, db=db)
 
     bugun = date.today()
@@ -1477,9 +1348,6 @@ class SonIslemSatiri(BaseModel):
     aciklama: str
     tutar: Decimal | None = None
     para_birimi: str | None = None
-    # Bu satirin GERCEKTE hangi kayda ait oldugu - frontend'de "ilgili
-    # sayfaya git" navigasyonu icin kullanilir. Tiklanabilir olmasi
-    # gerekmeyen satirlarda (orn. serbest bir Kasa hareketi) bos kalir.
     kaynak_tablo: str | None = None
     kaynak_id: int | None = None
 
@@ -1491,14 +1359,6 @@ def son_islemler(
     sirket_id: int = Depends(aktif_sirket_id_getir),
     db: Session = Depends(get_db),
 ):
-    """
-    Sistemdeki farkli modullerdeki (Siparis, Tedarikci Faturasi, Stok, Cari
-    vb.) EN SON olusturulan kayitlari, GERCEK kayit zamanina (olusturma_tarihi
-    - saat dahil) gore siralayip birlestirir. "Bugun neler yaptim" sorusuna
-    hizli bir bakista cevap verir. Herhangi bir tablo/alan eksikse (henuz
-    migration calismamis olabilir) o bolum sessizce atlanir, digerleri
-    calismaya devam eder.
-    """
     satirlar: list[SonIslemSatiri] = []
 
     try:
@@ -1568,8 +1428,6 @@ def son_islemler(
                     kaynak_tablo="STOK", kaynak_id=u.id,
                 ))
 
-        # Satislar (durum degisikligi - yeni kayit degil, bu yuzden AYRI bir
-        # zaman damgasi olan satis_kayit_zamani'ni kullanir).
         satilanlar = list(db.execute(
             select(StokSeriNo).where(
                 StokSeriNo.sirket_id == sirket_id,
@@ -1602,12 +1460,6 @@ def son_islemler(
     except Exception:
         pass
 
-    # TUM Kasa/Banka hareketleri - kaynagi ne olursa olsun (Akreditif,
-    # Leasing, Taksit, Kiralama, Bakim, Cek, Stok Satisi, Tedarikci Faturasi
-    # vb.) HER PARA HAREKETI, olusturma_tarihi (saat dahil) ile burada
-    # gorunur. Boylece "Son Islemler" akisina her yeni modul icin AYRI AYRI
-    # kod eklemeye gerek kalmiyor - HANGI MODULDEN GELIRSE GELSIN, bir para
-    # hareketi olusturuldugu an burada listelenir.
     try:
         kasa_hareketleri = list(db.execute(
             select(KasaHareketi).where(KasaHareketi.sirket_id == sirket_id)
