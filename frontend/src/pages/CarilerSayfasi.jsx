@@ -9,8 +9,6 @@ import {
 import { useNavigate, useLocation } from 'react-router-dom';
 import AramaliSecici from '../components/AramaliSecici';
 
-// Herhangi bir listeyi bir sutuna gore tiklanabilir sekilde siralamak icin
-// paylasilan kucuk yardimci - butun sayfalarda ayni sekilde kullanilir.
 function tarihFormat(iso) {
   if (!iso || typeof iso !== 'string' || !iso.includes('-')) return iso || '—';
   const [yil, ay, gun] = iso.slice(0, 10).split('-');
@@ -42,7 +40,6 @@ function useSiralama() {
   return { alan, yon, tikla, sirala };
 }
 
-// Tiklanabilir, siralama okunu gosteren <th> basligi.
 function SiraliBaslik({ children, alanAdi, siralama, style }) {
   const aktif = siralama.alan === alanAdi;
   return (
@@ -561,14 +558,119 @@ function AlimMiniFormu({ cari, onTamamlandi, onVazgec }) {
   );
 }
 
+function AcilisBakiyesiFormu({ cariId, mevcut, onKaydedildi, onVazgec }) {
+  const [isaret, setIsaret] = useState(mevcut && Number(mevcut.tutar) < 0 ? 'BORCLUYUZ' : 'ALACAKLIYIZ');
+  const [tutarMutlak, setTutarMutlak] = useState(mevcut ? String(Math.abs(Number(mevcut.tutar))) : '');
+  const [paraBirimi, setParaBirimi] = useState(mevcut?.para_birimi || 'TRY');
+  const [kur, setKur] = useState(mevcut?.kur ? String(mevcut.kur) : '1');
+  const [tarih, setTarih] = useState(mevcut?.tarih || new Date().toISOString().slice(0, 10));
+  const [aciklama, setAciklama] = useState(mevcut?.aciklama || '');
+  const [hata, setHata] = useState(null);
+  const [kaydediliyor, setKaydediliyor] = useState(false);
+
+  useEffect(() => {
+    if (paraBirimi === 'TRY') { setKur('1'); return; }
+    api.get(`/kur/${paraBirimi}`).then((r) => setKur(String(r.data.kur))).catch(() => {});
+  }, [paraBirimi]);
+
+  async function kaydet(e) {
+    e.preventDefault();
+    setHata(null);
+    setKaydediliyor(true);
+    try {
+      const isaretliTutar = isaret === 'BORCLUYUZ' ? -Math.abs(Number(tutarMutlak)) : Math.abs(Number(tutarMutlak));
+      await api.put(`/cariler/${cariId}/acilis-bakiyesi`, {
+        tutar: isaretliTutar, para_birimi: paraBirimi, kur: Number(kur || 1), tarih, aciklama: aciklama || null,
+      });
+      onKaydedildi();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setKaydediliyor(false);
+    }
+  }
+
+  async function sil() {
+    if (!(await ozelOnayIste('Bu açılış bakiyesi kaydını silmek istediğinize emin misiniz?'))) return;
+    setKaydediliyor(true);
+    try {
+      await api.delete(`/cariler/${cariId}/acilis-bakiyesi`);
+      onKaydedildi();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setKaydediliyor(false);
+    }
+  }
+
+  return (
+    <div style={{ padding: 14, background: 'var(--zemin)', borderRadius: 8, marginTop: 10 }}>
+      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Açılış Bakiyesi</div>
+      <div style={{ fontSize: 11.5, color: 'var(--metin-ikincil)', marginBottom: 10 }}>
+        Bu cari için, sisteme geçmeden önce (başka bir muhasebe programından) devreden alacak/borç tutarı. Sonraki tüm hesaplamalara otomatik dahil edilir.
+      </div>
+      <HataMesaji>{hata}</HataMesaji>
+      <form onSubmit={kaydet} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        <Alan etiket="Durum">
+          <select value={isaret} onChange={(e) => setIsaret(e.target.value)} style={girdiStili}>
+            <option value="ALACAKLIYIZ">Bu cari bize borçlu (alacağımız)</option>
+            <option value="BORCLUYUZ">Biz bu cariye borçluyuz</option>
+          </select>
+        </Alan>
+        <Alan etiket="Tutar">
+          <div style={{ display: 'flex', gap: 6 }}>
+            <ParaGirdisi required value={tutarMutlak} onChange={setTutarMutlak} style={{ flex: 1 }} />
+            <select value={paraBirimi} onChange={(e) => setParaBirimi(e.target.value)} style={{ ...girdiStili, width: 80 }}>
+              <option value="TRY">TL</option>
+              <option value="USD">USD</option>
+              <option value="EUR">EUR</option>
+            </select>
+          </div>
+        </Alan>
+        {paraBirimi !== 'TRY' && (
+          <Alan etiket={`Kur (${paraBirimi} → TL)`}>
+            <input type="number" step="0.0001" value={kur} onChange={(e) => setKur(e.target.value)} style={girdiStili} />
+          </Alan>
+        )}
+        <Alan etiket="Tarih">
+          <input required type="date" value={tarih} onChange={(e) => setTarih(e.target.value)} style={girdiStili} />
+        </Alan>
+        <div style={{ gridColumn: '1 / -1' }}>
+          <Alan etiket="Açıklama (opsiyonel)">
+            <input value={aciklama} onChange={(e) => setAciklama(e.target.value)} placeholder="Örn: Wolvox'tan devir" style={girdiStili} />
+          </Alan>
+        </div>
+        <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 8 }}>
+          <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Kaydediliyor...' : 'Kaydet'}</Buton>
+          {mevcut && <Buton type="button" variant="tehlike" onClick={sil} disabled={kaydediliyor}>Kaydı Sil</Buton>}
+          <Buton type="button" variant="ikincil" onClick={onVazgec}>Vazgeç</Buton>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 function CariOzetKarti({ cari, onKapat }) {
   const [ozet, setOzet] = useState(null);
   const [hata, setHata] = useState(null);
   const [detayAcik, setDetayAcik] = useState(false);
+  const [acilisBakiyesi, setAcilisBakiyesi] = useState(null);
+  const [acilisFormAcik, setAcilisFormAcik] = useState(false);
 
-  useEffect(() => {
+  function ozetiYukle() {
     api.get(`/cariler/${cari.id}/ozet`).then((r) => setOzet(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
-  }, [cari.id]);
+  }
+  function acilisiYukle() {
+    api.get(`/cariler/${cari.id}/acilis-bakiyesi`).then((r) => setAcilisBakiyesi(r.data)).catch(() => setAcilisBakiyesi(null));
+  }
+
+  useEffect(() => { ozetiYukle(); acilisiYukle(); }, [cari.id]); // eslint-disable-line
+
+  function acilisKaydedildi() {
+    setAcilisFormAcik(false);
+    acilisiYukle();
+    ozetiYukle();
+  }
 
   if (hata) return <Kart style={{ marginBottom: 16 }}><HataMesaji>{hata}</HataMesaji></Kart>;
 
@@ -627,6 +729,33 @@ function CariOzetKarti({ cari, onKapat }) {
               </div>
             </div>
           )}
+
+          <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--kenarlik)' }}>
+            {!acilisFormAcik ? (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontSize: 12.5 }}>
+                  <span style={{ color: 'var(--metin-ikincil)' }}>Açılış Bakiyesi: </span>
+                  {acilisBakiyesi ? (
+                    <span style={{ fontWeight: 600, color: Number(acilisBakiyesi.tutar) >= 0 ? 'var(--yesil)' : 'var(--kirmizi)' }}>
+                      {paraFormat(Math.abs(Number(acilisBakiyesi.tutar)), acilisBakiyesi.para_birimi)} {Number(acilisBakiyesi.tutar) >= 0 ? '(bize borçlu)' : '(biz borçluyuz)'}
+                    </span>
+                  ) : (
+                    <span style={{ color: 'var(--metin-soluk)' }}>Belirlenmemiş</span>
+                  )}
+                </div>
+                <button onClick={() => setAcilisFormAcik(true)} style={eylemChipStili('notr')}>
+                  {acilisBakiyesi ? 'Düzenle' : '+ Açılış Bakiyesi Ekle'}
+                </button>
+              </div>
+            ) : (
+              <AcilisBakiyesiFormu
+                cariId={cari.id}
+                mevcut={acilisBakiyesi}
+                onKaydedildi={acilisKaydedildi}
+                onVazgec={() => setAcilisFormAcik(false)}
+              />
+            )}
+          </div>
         </>
       )}
     </Kart>
