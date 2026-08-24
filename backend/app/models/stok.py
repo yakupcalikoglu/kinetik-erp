@@ -27,15 +27,12 @@ class StokDurum(str, enum.Enum):
 
 
 class MaliyetTip(str, enum.Enum):
-    # Ithalat asamasi maliyetleri (siparis bazli, urun antrepoya gelene kadar):
     SATINALMA = "SATINALMA"
     NAKLIYE = "NAKLIYE"
     SIGORTA = "SIGORTA"
     GUMRUK = "GUMRUK"
     ANTREPO = "ANTREPO"
     MILLILESTIRME = "MILLILESTIRME"
-    # Satis asamasi maliyetleri (SADECE o satisa ozel - Leasing/Faturali
-    # satis turune gore hangilerinin beklendigi degisir):
     ARDIYE = "ARDIYE"
     ILAVE_GUMRUK_VERGISI = "ILAVE_GUMRUK_VERGISI"
     DAMGA_VERGISI = "DAMGA_VERGISI"
@@ -85,10 +82,6 @@ class StokKarti(Base, SoftDeleteMixin):
     birim_agirlik_kg = Column(Numeric(10, 2))
     mense_ulke = Column(String(100))
     gtip_kodu = Column(String(20))
-    # Bu urun modeli icin standart bir alt yazi/not sablonu (orn. garanti
-    # sartlari, teslimat kosullari). Proforma/Fatura olustururken bu
-    # modelden kalem eklenince, bu metin otomatik olarak Notlar alanina
-    # onerilir - kullanici isterse duzenler/cikartir.
     standart_alt_metin = Column(Text)
     olusturma_tarihi = Column(DateTime, server_default=func.now())
 
@@ -106,9 +99,6 @@ class StokSeriNo(Base, SoftDeleteMixin):
     siparis_id = Column(BigInteger, ForeignKey("siparisler.id"))
     durum = Column(SAEnum(StokDurum, name="stok_durum_t"), nullable=False, default=StokDurum.SIPARISTE)
     tedarikci_cari_id = Column(BigInteger, ForeignKey("cari_hesaplar.id"))
-    # TICARI: musteriye satmak icin alinan normal stok. OZ_MAL: kendi
-    # kullanimimiz/kiralama icin ayirdigimiz, kendi mulkumuz olan urun -
-    # yine de maliyeti uzerinden ileride satilabilir/hurdaya cikarilabilir.
     sahiplik_tipi = Column(String(20), nullable=False, default="TICARI")
 
     satinalma_maliyeti_try = Column(Numeric(18, 2), default=0)
@@ -119,11 +109,6 @@ class StokSeriNo(Base, SoftDeleteMixin):
     millilestirme_maliyeti_try = Column(Numeric(18, 2), default=0)
     leasing_maliyeti_try = Column(Numeric(18, 2), default=0)
     diger_maliyet_try = Column(Numeric(18, 2), default=0)
-    # toplam_maliyet_try veritabaninda GENERATED ALWAYS AS ... STORED;
-    # SQLAlchemy bu sutunu salt-okunur olarak haritalar (deferred read).
-    # Bu GENERATED sutuna DOKUNMUYORUZ (formulu bilinmiyor, riskli) - asagidaki
-    # YENI satis-asamasi maliyet sutunlari, toplam_maliyet_try'YE DAHIL DEGIL,
-    # backend'de AYRICA "toplam_satis_maliyeti_try" olarak toplanip donuluyor.
     ardiye_maliyeti_try = Column(Numeric(18, 2), default=0)
     ilave_gumruk_vergisi_try = Column(Numeric(18, 2), default=0)
     damga_vergisi_try = Column(Numeric(18, 2), default=0)
@@ -134,29 +119,21 @@ class StokSeriNo(Base, SoftDeleteMixin):
 
     satis_fiyati_try = Column(Numeric(18, 2))
     satis_tarihi = Column(Date)
-    # Satisin GERCEKTEN sisteme islendigi an (saat dahil) - satis_tarihi
-    # kullanicinin sectigi/geriye donuk olabilen bir tarih, bu alan ise
-    # "Son Islemler" akisinda dogru zamanla gorunmesi icin OTOMATIK doldurulur.
     satis_kayit_zamani = Column(DateTime)
     musteri_cari_id = Column(BigInteger, ForeignKey("cari_hesaplar.id"))
-    # Satis turu - "LEASINGLI" veya "FATURALI" (KDV'li/pesin/taksitli/cek
-    # hepsi FATURALI sayilir). Satis-sonrasi maliyet kontrol listesinde
-    # (SatisMaliyetKontrolListesi) hangi kalemlerin beklendigini belirlemek
-    # icin kullanilir.
     satis_odeme_tipi = Column(String(20))
-    # Satisin GERCEK yontemi (PESIN_NAKIT/PESIN_HAVALE/PESIN_KART/TAKSITLI/
-    # LEASINGLI/CEK) - satis_odeme_tipi (LEASINGLI/FATURALI, maliyet
-    # kontrolu icin) ile KARISTIRILMASIN; bu alan SADECE "nasil satildi"
-    # bilgisini Stok listesinde gostermek icindir.
     satis_yontemi = Column(String(20))
-    # Cek ile yapilan satislarda, hangi cekin bu satisa karsilik geldigini
-    # izler - satis geri alinirken (henuz ciro/tahsil edilmemisse) hem
-    # urunu hem cekin kendisini birlikte geri almak icin kullanilir.
     satis_cek_id = Column(BigInteger, ForeignKey("cekler.id"))
 
     giris_tarihi = Column(Date)
     garanti_bitis_tarihi = Column(Date)
     barkod = Column(String(100))
+    # Periyodik bakim hatirlatmasi icin - HER kac GUNDE bir bakim
+    # yapilmasi gerektigini belirtir (orn. 90). Bos birakilirsa, bu urun
+    # icin hicbir bakim hatirlatmasi olusturulmaz. Referans tarih olarak
+    # en son BakimKaydi.tarih (yoksa giris_tarihi) kullanilir - bkz.
+    # raporlar/bakim-hatirlaticilari endpoint'i.
+    bakim_periyodu_gun = Column(Integer, nullable=True)
     olusturma_tarihi = Column(DateTime, server_default=func.now())
 
 
@@ -175,18 +152,10 @@ class StokMaliyetKalemi(Base):
     belge_no = Column(String(100))
     tarih = Column(Date, nullable=False)
     odendi_mi = Column(Boolean, default=False)
-    # TL kalemler icin, odeme tarihindeki GERCEK USD/TRY kuru (referans
-    # bilgi - sadece bu kalemin USD karsiligini dogru hesaplamak icin).
     referans_usd_kuru = Column(Numeric(18, 6))
-    # Bu kalem bir Tedarikci Faturasi odemesinden OTOMATIK olusturulduysa,
-    # hangi odemeden geldigini KESIN olarak izlemek icin (belge_no/tarih
-    # esleştirmesi yerine dogrudan FK - "odemeyi geri al" islemini
-    # guvenilir kilar).
     tedarikci_fatura_odeme_id = Column(BigInteger, ForeignKey("tedarikci_fatura_odemeleri.id"))
 
 
-# Maliyet tipi -> stok_seri_no uzerindeki ozet sutun adi eslemesi.
-# Yeni bir maliyet kalemi eklendiginde ilgili ozet sutun bu sozlukle guncellenir.
 MALIYET_TIP_SUTUN_ESLEME = {
     MaliyetTip.SATINALMA: "satinalma_maliyeti_try",
     MaliyetTip.NAKLIYE: "nakliye_maliyeti_try",
@@ -205,8 +174,6 @@ MALIYET_TIP_SUTUN_ESLEME = {
     MaliyetTip.DIGER: "diger_maliyet_try",
 }
 
-# Satis turune gore, o satisa ozel BEKLENEN maliyet kategorileri (kontrol
-# listesi icin). "Diger" her ikisinde de esneklik icin dahil.
 LEASING_SATIS_MALIYET_TIPLERI = [
     MaliyetTip.ARDIYE, MaliyetTip.GUMRUK, MaliyetTip.ILAVE_GUMRUK_VERGISI,
     MaliyetTip.DAMGA_VERGISI, MaliyetTip.TSE_UCRETI, MaliyetTip.LEASING,
@@ -256,32 +223,19 @@ class SiparisDetay(Base):
 
 
 class SiparisOdeme(Base):
-    """
-    Bir siparise (tedarikciye) yapilan avans/ara/kapama odemelerini takip
-    eder. Bu, stok maliyeti hesabindan (satinalma_maliyeti_try) TAMAMEN
-    BAGIMSIZDIR: bu tablo "ne kadar nakit ciktigini/borcumuz kaldigini",
-    stok maliyeti ise "urunun gercek maliyetini" gosterir - ikisi ayni
-    tutari temsil etmeyebilir (orn. henuz tam odenmemis bir siparis, teslim
-    alindiginda maliyeti zaten sozlesme fiyati uzerinden hesaba yazilir).
-    """
     __tablename__ = "siparis_odemeleri"
 
     id = Column(BigInteger, primary_key=True)
     siparis_id = Column(BigInteger, ForeignKey("siparisler.id"), nullable=False)
     tarih = Column(Date, nullable=False)
-    tutar = Column(Numeric(18, 2), nullable=False)  # siparisin kendi para biriminde (orn. USD)
-    odeme_yontemi = Column(String(10))  # "NAKIT" | "BANKA" | "CEK" | "LEASING"
-    cek_id = Column(BigInteger, ForeignKey("cekler.id"))  # odeme_yontemi == "CEK" ise, olusturulan cek kaydi
+    tutar = Column(Numeric(18, 2), nullable=False)
+    odeme_yontemi = Column(String(10))
+    cek_id = Column(BigInteger, ForeignKey("cekler.id"))
     notlar = Column(String(300))
     olusturma_tarihi = Column(DateTime, server_default=func.now())
 
 
 class GumrukBeyannamesi(Base):
-    """
-    Bir ithalat siparisine ait gumruk beyannamesi kaydi (beyanname no,
-    tarihi, gumruk musaviri cari'si ve odenen tutar). Bir siparise birden
-    fazla beyanname acilabilir (kismi teslimatlarda oldugu gibi).
-    """
     __tablename__ = "gumruk_beyannameleri"
 
     id = Column(BigInteger, primary_key=True)
@@ -294,8 +248,6 @@ class GumrukBeyannamesi(Base):
     para_birimi = Column(String(10), nullable=False, default="TRY")
     kur = Column(Numeric(18, 6), nullable=False, default=1)
     tutar_try = Column(Numeric(18, 2), nullable=False)
-    # Bu tutarin (tutar_try) icinde ne kadarinin KDV oldugu - varsa KDV
-    # Ozeti raporundaki "Indirilecek KDV" hesabina otomatik dahil edilir.
     kdv_tutari = Column(Numeric(18, 2), nullable=False, default=0)
     notlar = Column(String(500))
     olusturma_tarihi = Column(DateTime, server_default=func.now())
