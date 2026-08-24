@@ -1502,3 +1502,68 @@ def son_islemler(
 
     satirlar.sort(key=lambda s: s.zaman, reverse=True)
     return satirlar[:limit]
+
+
+class KiralamaBitisUyarisi(BaseModel):
+    sozlesme_id: int
+    kiraci_unvan: str | None
+    urun_bilgisi: str
+    baslangic_tarihi: date
+    bitis_tarihi: date
+    kalan_gun: int
+    aylik_kira_tutari: Decimal
+    para_birimi: str
+
+
+@router.get("/kiralama-sozlesme-bitisleri", response_model=list[KiralamaBitisUyarisi],
+            dependencies=[Depends(izin_gerektir("RAPOR_GORUNTULE"))])
+def kiralama_sozlesme_bitisleri(
+    gun: int = Query(30, description="Kac gun ileriye kadar biten sozlesmeler getirilsin"),
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    AKTIF durumdaki, bitis_tarihi onumuzdeki `gun` gun icinde olan (ya da
+    zaten GECMIS - kalan_gun negatif donebilir, "suresi dolmus ama hala
+    aktif isaretli" sozlesmeleri de yakalamak icin) kiralama sozlesmelerini
+    listeler. Bu, "odeme vadesi" degil "sozlesme SURESININ dolmasi" -
+    yaklasan_vadeler'deki (tahsilat/odeme) mantiktan tamamen AYRI bir
+    kavram, o yuzden ayri bir endpoint olarak tutuluyor.
+    """
+    from app.models.finansal import KiralamaSozlesme, KiralamaSozlesmeKalemi
+
+    bugun = date.today()
+    son_tarih = bugun + timedelta(days=gun)
+
+    sozlesmeler = list(db.execute(
+        select(KiralamaSozlesme).where(
+            KiralamaSozlesme.sirket_id == sirket_id,
+            KiralamaSozlesme.durum == "AKTIF",
+            KiralamaSozlesme.bitis_tarihi.isnot(None),
+            KiralamaSozlesme.bitis_tarihi <= son_tarih,
+        )
+    ).scalars())
+
+    sonuc = []
+    for s in sozlesmeler:
+        cari = db.get(CariHesap, s.kiraci_cari_id)
+        pb = s.para_birimi.value if hasattr(s.para_birimi, "value") else s.para_birimi
+
+        kalemler = list(db.execute(
+            select(KiralamaSozlesmeKalemi).where(KiralamaSozlesmeKalemi.sozlesme_id == s.id)
+        ).scalars())
+        urun_parcalari = []
+        for k in kalemler:
+            kart = db.get(StokKarti, k.stok_karti_id)
+            urun_parcalari.append(f"{k.miktar}x {kart.marka} {kart.model}" if kart else f"{k.miktar}x ?")
+        urun_bilgisi = ", ".join(urun_parcalari) or "—"
+
+        sonuc.append(KiralamaBitisUyarisi(
+            sozlesme_id=s.id, kiraci_unvan=cari.unvan if cari else None,
+            urun_bilgisi=urun_bilgisi, baslangic_tarihi=s.baslangic_tarihi,
+            bitis_tarihi=s.bitis_tarihi, kalan_gun=(s.bitis_tarihi - bugun).days,
+            aylik_kira_tutari=s.aylik_kira_tutari, para_birimi=pb,
+        ))
+
+    sonuc.sort(key=lambda x: x.bitis_tarihi)
+    return sonuc
