@@ -1,6 +1,5 @@
 import { useEffect, useState, Fragment } from 'react';
-import * as XLSX from 'xlsx';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import AramaliSecici from '../components/AramaliSecici';
 
@@ -49,8 +48,11 @@ function SiraliBaslik({ children, alanAdi, siralama, style }) {
     </th>
   );
 }
+
+import { Link, useNavigate } from 'react-router-dom';
 import { api, hataMesajiCikar, ozelOnayIste, geriAlBildirimGoster } from '../api/client';
 import { excelIndir } from '../utils/disaAktarma';
+import * as XLSX from 'xlsx';
 
 const API_TABAN_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 import {
@@ -79,8 +81,6 @@ const SATIS_YONTEMI_METIN = {
   TAKSITLI: 'Taksitli', LEASINGLI: 'Leasing', CEK: 'Çek',
 };
 
-// Urunun BAGLI OLDUGU kayda (kaynak_tablo) gore gidilecek sayfa - Dashboard/
-// Banka sayfasindaki navigasyon haritalariyla AYNI mantik.
 const BAGLANTI_YOL_HARITASI = {
   SIPARIS: '/siparisler',
   LEASING: '/finansal?sekme=leasing',
@@ -223,8 +223,6 @@ function MaliyetDetayi({ urun, stokKartlari, onKapat, onUrunGuncellendi }) {
     }
   }
 
-  // Kalemleri para birimine gore grupla, hem "kac USD/EUR harcandi" hem
-  // "toplam TL karsiligi" gorunsun diye.
   const dovizToplamlari = {};
   kalemler.forEach((k) => {
     dovizToplamlari[k.para_birimi] = (dovizToplamlari[k.para_birimi] || 0) + Number(k.tutar);
@@ -880,9 +878,6 @@ export default function StokSayfasi() {
   const [stokKartlari, setStokKartlari] = useState([]);
   const [siparisler, setSiparisler] = useState([]);
   const [cariler, setCariler] = useState([]);
-  // stok_seri_no_id -> {kiraci_unvan, sozlesme_id} - "Kirada" durumundaki bir
-  // urunun KIME kiralandigini gostermek icin (bu bilgi StokSeriNo'nun
-  // KENDISINDE degil, KiralamaSozlesme/KiralamaKalemUrunu'nde tutulur).
   const [kiraciHaritasi, setKiraciHaritasi] = useState({});
   const [durumFiltre, setDurumFiltre] = useState('');
   const [satilanlariGoster, setSatilanlariGoster] = useState(false);
@@ -900,13 +895,16 @@ export default function StokSayfasi() {
   const [seciliIdler, setSeciliIdler] = useState([]);
   const [kapaliSiparisGruplari, setKapaliSiparisGruplari] = useState(new Set());
   // Urun turu (stok_karti_id) alt gruplari, siparis grubunun ICINDE -
-  // VARSAYILAN olarak KAPALI (sadece "Elektrikli Forklift - 5 adet" basligi
-  // gorunur), TIKLANINCA acilip o turden urunleri gosterir. Key formati:
-  // "siparisId-stokKartiId".
-  const [acikUrunTuruGruplari, setAcikUrunTuruGruplari] = useState(new Set());
+  // VARSAYILAN olarak ACIK (butun urunler direkt gorunur); kullanici
+  // isterse bir gruba tiklayarak KAPATABILIR (kapaliUrunTuruGruplari
+  // Set'ine eklenir). Key formati: "siparisId-stokKartiId". Onceden bu
+  // TERSI (varsayilan kapali) idi - ozellikle siparissiz (Oz Mal, orn.
+  // sahiplik_tipi=OZ_MAL) urunlerde HICBIR SEY gorunmeden kalabiliyordu,
+  // kullanici "kutuya tiklayinca liste bos" saniyordu.
+  const [kapaliUrunTuruGruplari, setKapaliUrunTuruGruplari] = useState(new Set());
 
   function urunTuruGrubuAcKapat(anahtar) {
-    setAcikUrunTuruGruplari((s) => {
+    setKapaliUrunTuruGruplari((s) => {
       const yeni = new Set(s);
       if (yeni.has(anahtar)) yeni.delete(anahtar); else yeni.add(anahtar);
       return yeni;
@@ -1087,8 +1085,6 @@ export default function StokSayfasi() {
     return c ? c.unvan : `#${musteriCariId}`;
   }
 
-  // Ayni siparise ait urunler ekranda yan yana gorunsun diye siparis_id'ye
-  // gore grupluyoruz (siparissiz/manuel urunler en sona duser).
   function stokExcelIndir() {
     const veri = gruplananUrunler.map((u) => ({
       'Seri No': u.seri_no,
@@ -1103,47 +1099,28 @@ export default function StokSayfasi() {
     excelIndir(veri, dosyaAdi, 'Stok');
   }
 
-  // Satilmis urunler, listeyi gereksiz kalabalik gostermesin diye
-  // varsayilan olarak GIZLENIR - "Satilanlari da göster" acikca
-  // isaretlenmedikce (ya da durum filtresi ozellikle "SATILDI" secilmedikce).
-  // "Satildi" filtresi secildiginde grup gorunumu (siparis bazli) yerine,
-  // DUZ bir liste - satis tarihine gore (varsayilan: en YENI satis en
-  // ustte) - daha mantikli oluyor, cunku farkli siparislerden gelen
-  // urunler ayni anda satilmis olabiliyor, "hangi siparisten geldigi"
-  // ARTIK ikincil bir bilgi.
   const satildiGorunumu = durumFiltre === 'SATILDI';
   const gruplananUrunler = [...urunler]
     .filter((u) => satilanlariGoster || durumFiltre === 'SATILDI' || u.durum !== 'SATILDI')
     .filter((u) => !seriNoArama || (u.seri_no || '').toLocaleLowerCase('tr').includes(seriNoArama.toLocaleLowerCase('tr')) || (u.sasi_no || '').toLocaleLowerCase('tr').includes(seriNoArama.toLocaleLowerCase('tr')))
     .sort((a, b) => {
       if (satildiGorunumu) {
-        // satis_kayit_zamani (saat dahil, GERCEK satis ani) varsa onu
-        // kullan - yoksa (eski kayitlar) satis_tarihi'ne (gun) geri don.
-        // "Satış Tarihi" basligina tiklanirsa (siralama.alan ===
-        // 'satis_tarihi'), yon (asc/desc) kullaniciya birakilir - aksi
-        // halde VARSAYILAN olarak en YENI satis en USTTE gosterilir.
         const az = a.satis_kayit_zamani || a.satis_tarihi || '';
         const bz = b.satis_kayit_zamani || b.satis_tarihi || '';
         if (siralama.alan === 'satis_tarihi') {
           return siralama.yon === 'asc' ? az.localeCompare(bz) : bz.localeCompare(az);
         }
-        return bz.localeCompare(az); // varsayilan: en yeni ustte
+        return bz.localeCompare(az);
       }
       if (a.siparis_id !== b.siparis_id) {
         if (a.siparis_id == null) return 1;
         if (b.siparis_id == null) return -1;
         return a.siparis_id - b.siparis_id;
       }
-      // Ayni siparis icinde, urun turune (stok_karti_id) gore alt-grupla -
-      // ayni siparisteki farkli urun turleri (orn. 5 elektrikli + 3 dizel)
-      // bir arada, karisik gorunmesin.
       if (a.stok_karti_id !== b.stok_karti_id) return a.stok_karti_id - b.stok_karti_id;
       return a.id - b.id;
     });
 
-  // Siparis bazli ozet: bu siparisten (tum urunler.map(), filtreden BAGIMSIZ,
-  // gercek toplam) kac tanesi HALA satilmamis (elimizde) - grup basliginda
-  // "X üründen Y'si elimizde" seklinde gostermek icin.
   const siparisOzetleri = {};
   urunler.forEach((u) => {
     if (u.siparis_id == null) return;
@@ -1157,8 +1134,6 @@ export default function StokSayfasi() {
     durumOzet[u.durum] = (durumOzet[u.durum] || 0) + 1;
   });
 
-  // Urun tanimi (stok karti) basina, stogumuza simdiye kadar girmis toplam
-  // adet - "Uruna gore filtrele" listesinde ve maliyet detayinda gosterilir.
   const urunAdetOzet = {};
   tumUrunler.forEach((u) => {
     urunAdetOzet[u.stok_karti_id] = (urunAdetOzet[u.stok_karti_id] || 0) + 1;
@@ -1417,13 +1392,7 @@ export default function StokSayfasi() {
                 const satilabilir = u.durum === 'DEPODA' || u.durum === 'ANTREPODA';
                 const oncekiUrun = gruplananUrunler[index - 1];
                 const grupBasi = !siralama.alan && !satildiGorunumu && (index === 0 || (oncekiUrun && oncekiUrun.siparis_id !== u.siparis_id));
-                // Grup kapaliysa, o gruba ait BASLIK DISINDAKI satirlari (urun
-                // satiri, duzenleme/durum formlari dahil) hic render etme.
                 const grupKapali = !siralama.alan && !satildiGorunumu && u.siparis_id != null && kapaliSiparisGruplari.has(u.siparis_id);
-                // ALT grup basligi: ayni siparis icinde urun turu (stok_karti_id)
-                // degistiginde - "5 Elektrikli + 3 Dizel" gibi karisik bir
-                // listeyi, urun turune gore ayri ayri gruplar (acilir/kapanir
-                // DEGIL, sadece gorsel bir ayirici basligi).
                 const altGrupBasi = !siralama.alan && !satildiGorunumu && !grupKapali && (
                   grupBasi || (oncekiUrun && oncekiUrun.stok_karti_id !== u.stok_karti_id && oncekiUrun.siparis_id === u.siparis_id)
                 );
@@ -1431,10 +1400,8 @@ export default function StokSayfasi() {
                   ? gruplananUrunler.filter((x) => x.siparis_id === u.siparis_id && x.stok_karti_id === u.stok_karti_id).length
                   : 0;
                 const urunTuruAnahtari = `${u.siparis_id}-${u.stok_karti_id}`;
-                const urunTuruAcik = acikUrunTuruGruplari.has(urunTuruAnahtari);
-                // Ayni siparis+urun turu icindeyken (altGrupBasi DEGILKEN),
-                // grup KAPALIYSA bu satiri (urun satiri, form satirlari
-                // dahil) hic render etme.
+                // VARSAYILAN ACIK: kapaliUrunTuruGruplari'nde YOKSA acik sayilir.
+                const urunTuruAcik = !kapaliUrunTuruGruplari.has(urunTuruAnahtari);
                 if (!satildiGorunumu && !siralama.alan && !grupBasi && !altGrupBasi && !urunTuruAcik) {
                   return null;
                 }
