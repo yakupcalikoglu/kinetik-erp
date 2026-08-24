@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func, case
 from datetime import date
+from pydantic import BaseModel
 
 from app.db.session import get_db
 from app.core.deps import aktif_sirket_id_getir, izin_gerektir, aktif_kullanici_getir
@@ -240,6 +241,52 @@ async def tum_carilerin_ozeti(
         ekle(b.cari_id, isaret * kalan * kur)
 
     return {str(k): v for k, v in net.items()}
+
+
+class CariTopluTipDegistirIstegi(BaseModel):
+    sifre: str
+    cari_idleri: list[int]
+    yeni_tip: str
+
+
+@router.put("/toplu-tip-degistir",
+            dependencies=[Depends(izin_gerektir("CARI_DUZENLE"))])
+def cari_toplu_tip_degistir(
+    istek: CariTopluTipDegistirIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    kullanici: Kullanici = Depends(aktif_kullanici_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Secilen birden fazla cariyi TEK seferde ayni tipe (orn. ORTAK) tasir -
+    her birini tek tek Duzenle'den acmadan. Sifre onayi zorunludur (tek
+    cari duzenlemedeki ile ayni guvenlik seviyesi); degisiklikler her cari
+    icin ayri ayri denetim_kayitlari'na islenir.
+    """
+    if not sifre_dogrula(istek.sifre, kullanici.sifre_hash):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Şifre yanlış, düzenleme yapılamadı.")
+
+    gecerli_tipler = {"MUSTERI", "TEDARIKCI", "PERSONEL", "ORTAK", "DIGER"}
+    if istek.yeni_tip not in gecerli_tipler:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Geçersiz tip: {istek.yeni_tip}")
+
+    if not istek.cari_idleri:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "En az bir cari seçmelisiniz.")
+
+    guncellenen = 0
+    for cari_id in istek.cari_idleri:
+        cari = db.get(CariHesap, cari_id)
+        if cari is None or cari.sirket_id != sirket_id:
+            continue
+        if cari.tip != istek.yeni_tip:
+            _degisiklikleri_kaydet(db, sirket_id, kullanici.id, "cari_hesaplar", cari.id, {
+                "Tip": {"eski": cari.tip, "yeni": istek.yeni_tip},
+            })
+            cari.tip = istek.yeni_tip
+            guncellenen += 1
+
+    db.commit()
+    return {"guncellenen_sayisi": guncellenen}
 
 
 @router.get("/{cari_id}", response_model=CariYanit,
