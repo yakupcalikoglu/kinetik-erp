@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { api, hataMesajiCikar, ozelOnayIste, ozelAlert, geriAlBildirimGoster } from '../api/client';
 import {
   Kart, SayfaBasligi, Buton, Alan, girdiStili, Etiket, BosDurum, HataMesaji, paraFormat, eylemChipStili, ParaGirdisi,
-  DahaFazlaMenu,
+  DahaFazlaMenu, GrupBasligi,
 } from '../components/Ortak';
 import * as XLSX from 'xlsx';
 import AramaliSecici from '../components/AramaliSecici';
@@ -241,7 +241,7 @@ function DemirbasSatisFormu({ demirbas, onKaydedildi, onVazgec }) {
 
   return (
     <tr>
-      <td colSpan={8} style={{ padding: 0 }}>
+      <td colSpan={9} style={{ padding: 0 }}>
         <div style={{ padding: 16, background: 'var(--zemin)' }}>
           <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 10 }}>{demirbas.ad} — Sat / Elden Çıkar</div>
           <HataMesaji>{hata}</HataMesaji>
@@ -458,6 +458,19 @@ export default function OzMalSayfasi() {
   const cariler = useCariler();
 
   const [stokKartlari, setStokKartlari] = useState([]);
+  // Ad/tanima gore gruplama - StokSayfasi'ndaki siparis gruplariyla AYNI
+  // mantik: bir grup KAPALI (Set icinde) olana kadar ACIK (satirlari
+  // gorunur) sayilir - boylece varsayilan olarak her sey acik baslar,
+  // kullanici isterse kapatir.
+  const [kapaliGruplar, setKapaliGruplar] = useState(new Set());
+
+  function grupAcKapat(ad) {
+    setKapaliGruplar((s) => {
+      const yeni = new Set(s);
+      if (yeni.has(ad)) yeni.delete(ad); else yeni.add(ad);
+      return yeni;
+    });
+  }
 
   function yukle() {
     setYukleniyor(true);
@@ -497,6 +510,19 @@ export default function OzMalSayfasi() {
   const gosterilecekler = aramaMetni
     ? birlesikListe.filter((k) => `${k.ad} ${k.tanimlayici || ''}`.toLowerCase().includes(aramaMetni.toLowerCase()))
     : birlesikListe;
+
+  // Ad'a gore grupla (ayni ad = ayni urun turu, orn. "JAC CPCD30 2024.4" -
+  // birden fazla adet olabilir). Bir siralama secilmisse gruplamayi
+  // devre disi birakiyoruz - kullanici baska bir sutuna gore duz siralama
+  // istedigi an gruplar karisir zaten.
+  const gruplamaAktif = !siralama.alan && !aramaMetni;
+  const siraliListe = gruplamaAktif
+    ? [...gosterilecekler].sort((a, b) => a.ad.localeCompare(b.ad, 'tr') || a.id - b.id)
+    : siralama.sirala(gosterilecekler, (item, alan) => item[alan]);
+
+  // Ad basina kac adet var - grup basliginda "X adet" gostermek icin.
+  const adAdetOzet = {};
+  birlesikListe.forEach((k) => { adAdetOzet[k.ad] = (adAdetOzet[k.ad] || 0) + 1; });
 
   const toplamDeger = birlesikListe
     .filter((k) => k.durum !== 'SATILDI' && k.durum !== 'HURDA')
@@ -633,58 +659,79 @@ export default function OzMalSayfasi() {
               </tr>
             </thead>
             <tbody>
-              {siralama.sirala(gosterilecekler, (item, alan) => item[alan]).map((k) => (
-                <Fragment key={`${k.kaynak}-${k.id}`}>
-                  <tr style={{ borderTop: '1px solid var(--kenarlik)' }}>
-                    <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>{KATEGORI_METIN[k.kategori] || k.kategori}</td>
-                    <td style={{ padding: '12px 16px', fontWeight: 500 }}>{k.ad}</td>
-                    <td style={{ padding: '12px 16px', fontFamily: 'var(--font-mono)', color: 'var(--metin-ikincil)' }}>{k.tanimlayici || '—'}</td>
-                    <td style={{ padding: '12px 16px' }}><Etiket ton={DURUM_TON[k.durum] || 'notr'}>{DURUM_METIN[k.durum] || k.durum}</Etiket></td>
-                    <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>{k.kiraci_unvan || k.konum || '—'}</td>
-                    <td style={{ padding: '12px 16px' }}>
-                      {paraFormat(k.maliyet_try)}
-                      {k.para_birimi && k.para_birimi !== 'TRY' && k.maliyet_orijinal != null && (
-                        <div style={{ fontSize: 11, color: 'var(--metin-ikincil)' }}>
-                          ({paraFormat(k.maliyet_orijinal, k.para_birimi)} girildi)
-                        </div>
-                      )}
-                    </td>
-                    <td style={{ padding: '12px 16px' }}>
-                      {k.kaynak === 'DEMIRBAS' ? (
-                        <>
-                          {paraFormat(k.guncel_deger_try ?? k.maliyet_try)}
-                          {k.amortisman_orani > 0 && (
-                            <div style={{ fontSize: 11, color: 'var(--metin-ikincil)' }}>(yıllık %{k.amortisman_orani} amortisman)</div>
+              {siraliListe.map((k, index) => {
+                const oncekiKayit = siraliListe[index - 1];
+                const grupBasi = gruplamaAktif && (index === 0 || oncekiKayit.ad !== k.ad);
+                const grupKapali = gruplamaAktif && kapaliGruplar.has(k.ad);
+                if (grupKapali && !grupBasi) return null;
+
+                return (
+                  <Fragment key={`${k.kaynak}-${k.id}`}>
+                    {grupBasi && adAdetOzet[k.ad] > 1 && (
+                      <tr>
+                        <td colSpan={9} style={{ padding: 0 }}>
+                          <GrupBasligi
+                            baslik={k.ad}
+                            altBaslik={`${adAdetOzet[k.ad]} adet`}
+                            acik={!grupKapali}
+                            onTikla={() => grupAcKapat(k.ad)}
+                          />
+                        </td>
+                      </tr>
+                    )}
+                    {(!grupKapali || !gruplamaAktif) && (
+                      <tr style={{ borderTop: grupBasi ? '3px solid var(--lacivert)' : '1px solid var(--kenarlik)' }}>
+                        <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>{KATEGORI_METIN[k.kategori] || k.kategori}</td>
+                        <td style={{ padding: '12px 16px', fontWeight: 500 }}>{k.ad}</td>
+                        <td style={{ padding: '12px 16px', fontFamily: 'var(--font-mono)', color: 'var(--metin-ikincil)' }}>{k.tanimlayici || '—'}</td>
+                        <td style={{ padding: '12px 16px' }}><Etiket ton={DURUM_TON[k.durum] || 'notr'}>{DURUM_METIN[k.durum] || k.durum}</Etiket></td>
+                        <td style={{ padding: '12px 16px', color: 'var(--metin-ikincil)' }}>{k.kiraci_unvan || k.konum || '—'}</td>
+                        <td style={{ padding: '12px 16px' }}>
+                          {paraFormat(k.maliyet_try)}
+                          {k.para_birimi && k.para_birimi !== 'TRY' && k.maliyet_orijinal != null && (
+                            <div style={{ fontSize: 11, color: 'var(--metin-ikincil)' }}>
+                              ({paraFormat(k.maliyet_orijinal, k.para_birimi)} girildi)
+                            </div>
                           )}
-                        </>
-                      ) : '—'}
-                    </td>
-                    <td style={{ padding: '12px 16px' }}>
-                      <Etiket ton={k.kaynak === 'EKIPMAN' ? 'amber' : 'notr'}>{k.kaynak === 'EKIPMAN' ? 'Stok (Ekipman)' : 'Demirbaş'}</Etiket>
-                    </td>
-                    <td style={{ padding: '12px 16px' }}>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <button onClick={() => duzenle(k)} style={eylemChipStili('lacivert')}>Düzenle</button>
-                        {k.kaynak === 'DEMIRBAS' && k.durum !== 'SATILDI' && k.durum !== 'HURDA' && (
-                          <button onClick={() => setSatisAcikId(k.id)} style={eylemChipStili('yesil')}>Sat</button>
-                        )}
-                        {k.kaynak === 'DEMIRBAS' && k.durum === 'SATILDI' ? (
-                          <button onClick={() => satisiGeriAl(k)} style={eylemChipStili('kirmizi')}>Satışı Geri Al</button>
-                        ) : (
-                          <button onClick={() => sil(k)} style={eylemChipStili('kirmizi')}>Sil</button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                  {satisAcikId === k.id && k.kaynak === 'DEMIRBAS' && (
-                    <DemirbasSatisFormu
-                      demirbas={k.ham}
-                      onKaydedildi={() => { setSatisAcikId(null); yukle(); }}
-                      onVazgec={() => setSatisAcikId(null)}
-                    />
-                  )}
-                </Fragment>
-              ))}
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          {k.kaynak === 'DEMIRBAS' ? (
+                            <>
+                              {paraFormat(k.guncel_deger_try ?? k.maliyet_try)}
+                              {k.amortisman_orani > 0 && (
+                                <div style={{ fontSize: 11, color: 'var(--metin-ikincil)' }}>(yıllık %{k.amortisman_orani} amortisman)</div>
+                              )}
+                            </>
+                          ) : '—'}
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <Etiket ton={k.kaynak === 'EKIPMAN' ? 'amber' : 'notr'}>{k.kaynak === 'EKIPMAN' ? 'Stok (Ekipman)' : 'Demirbaş'}</Etiket>
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <button onClick={() => duzenle(k)} style={eylemChipStili('lacivert')}>Düzenle</button>
+                            {k.kaynak === 'DEMIRBAS' && k.durum !== 'SATILDI' && k.durum !== 'HURDA' && (
+                              <button onClick={() => setSatisAcikId(k.id)} style={eylemChipStili('yesil')}>Sat</button>
+                            )}
+                            {k.kaynak === 'DEMIRBAS' && k.durum === 'SATILDI' ? (
+                              <button onClick={() => satisiGeriAl(k)} style={eylemChipStili('kirmizi')}>Satışı Geri Al</button>
+                            ) : (
+                              <button onClick={() => sil(k)} style={eylemChipStili('kirmizi')}>Sil</button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    {satisAcikId === k.id && k.kaynak === 'DEMIRBAS' && (!grupKapali || !gruplamaAktif) && (
+                      <DemirbasSatisFormu
+                        demirbas={k.ham}
+                        onKaydedildi={() => { setSatisAcikId(null); yukle(); }}
+                        onVazgec={() => setSatisAcikId(null)}
+                      />
+                    )}
+                  </Fragment>
+                );
+              })}
             </tbody>
           </table>
         )}
