@@ -170,7 +170,7 @@ def stok_seri_no_toplu_ice_aktar(
                 select(StokKarti).where(
                     StokKarti.sirket_id == sirket_id,
                     func.lower(StokKarti.marka) == (satir.marka or "").strip().lower(),
-                    func.lower(StokKarti.model) == (satir.model or "").strip().lower(),
+                    func.lower(func.coalesce(StokKarti.model, "")) == (satir.model or "").strip().lower(),
                 )
             ).scalar_one_or_none()
             if kart is None:
@@ -542,9 +542,6 @@ def stok_seri_no_sil(
             "Önce ürünün 'Satışı/Hurdayı Geri Al' işlemini yapın."
         )
 
-    # Maliyet kalemleri (alt kayitlar) GERCEKTEN silinir - bunlar bagimsiz
-    # bir "kayit" degil, urunun BIR PARCASI; ana urun soft-delete ile
-    # geri getirilince, maliyet kalemleri de zaten SIFIRDAN girilebilir.
     for kalem in list(db.execute(
         select(StokMaliyetKalemi).where(StokMaliyetKalemi.stok_seri_no_id == seri_id)
     ).scalars()):
@@ -722,12 +719,6 @@ def stok_satisi_yap(
     if istek.satis_yontemi is not None:
         kayit.satis_yontemi = istek.satis_yontemi
 
-    # Banka hesabina GERCEK ISLEM para biriminde/tutarinda yazmak icin -
-    # istek.islem_tutari verilmemisse (eski/basit cagrilar) TL varsayilir.
-    # para_hareketi_olustur, hesabin KENDI para birimiyle bu deger
-    # UYUSMUYORSA artik NET BIR HATA firlatir (sessizce yanlis kaydetmez -
-    # az once yasadigimiz "TL tutari USD hesaba USD sanilarak yazildi"
-    # hatasi BIR DAHA OLUSAMAZ).
     gonderilecek_tutar = istek.islem_tutari if istek.islem_tutari is not None else istek.satis_fiyati_try
     para_hareketi_olustur(
         db, sirket_id, kullanici.id, "GIRIS", gonderilecek_tutar,
@@ -938,9 +929,6 @@ def stok_satisini_geri_al(
     kayit.satis_tarihi = None
     kayit.satis_cek_id = None
     kayit.satis_kayit_zamani = None
-    # Eski satis bilgisi tamamen temizlensin - aksi halde urun DEPODA'ya
-    # dondugu halde "satis_odeme_tipi"/"satis_yontemi" eski (yanlis) degeri
-    # tasimaya devam edebilirdi (temiz veri icin, dusuk risk ama dogru olan).
     kayit.satis_odeme_tipi = None
     kayit.satis_yontemi = None
 
