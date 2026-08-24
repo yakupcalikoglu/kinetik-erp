@@ -691,6 +691,67 @@ function HurdayaCikarFormu({ urun, onKaydedildi, onVazgec }) {
   );
 }
 
+function BakimPeriyoduFormu({ urun, onKaydedildi, onVazgec }) {
+  const [periyot, setPeriyot] = useState('');
+  const [yukleniyor, setYukleniyor] = useState(true);
+  const [hata, setHata] = useState(null);
+  const [kaydediliyor, setKaydediliyor] = useState(false);
+
+  useEffect(() => {
+    api.get(`/stok-seri-no/${urun.id}/bakim-periyodu`)
+      .then((r) => setPeriyot(r.data.bakim_periyodu_gun != null ? String(r.data.bakim_periyodu_gun) : ''))
+      .catch(() => {})
+      .finally(() => setYukleniyor(false));
+  }, [urun.id]);
+
+  async function kaydet(e) {
+    e.preventDefault();
+    setHata(null);
+    setKaydediliyor(true);
+    try {
+      await api.put(`/stok-seri-no/${urun.id}/bakim-periyodu`, {
+        bakim_periyodu_gun: periyot.trim() ? Number(periyot) : null,
+      });
+      onKaydedildi();
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setKaydediliyor(false);
+    }
+  }
+
+  return (
+    <tr>
+      <td colSpan={10} style={{ padding: 0 }}>
+        <div style={{ padding: 16, background: 'var(--zemin)' }}>
+          <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 6 }}>{urun.seri_no} — Bakım Periyodu</div>
+          <div style={{ fontSize: 12, color: 'var(--metin-ikincil)', marginBottom: 10 }}>
+            Kaç günde bir bakım yapılması gerektiğini belirtin — süre yaklaşınca/dolunca sağ altta uyarı çıkar. Boş bırakırsan hatırlatma kapanır.
+          </div>
+          <HataMesaji>{hata}</HataMesaji>
+          {yukleniyor ? (
+            <div style={{ color: 'var(--metin-soluk)', fontSize: 12.5 }}>Yükleniyor...</div>
+          ) : (
+            <form onSubmit={kaydet} style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
+              <div style={{ minWidth: 160 }}>
+                <Alan etiket="Periyot (gün)">
+                  <input
+                    type="number" min="1" value={periyot}
+                    onChange={(e) => setPeriyot(e.target.value)}
+                    placeholder="Örn: 90" style={girdiStili}
+                  />
+                </Alan>
+              </div>
+              <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Kaydediliyor...' : 'Kaydet'}</Buton>
+              <Buton type="button" variant="ikincil" onClick={onVazgec}>Vazgeç</Buton>
+            </form>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 function UrunDuzenleFormu({ urun, stokKartlari, onKaydedildi, onVazgec }) {
   const [form, setForm] = useState({ seri_no: urun.seri_no, stok_karti_id: String(urun.stok_karti_id), sifre: '' });
   const [hata, setHata] = useState(null);
@@ -928,6 +989,7 @@ export default function StokSayfasi() {
   const [maliyetGosterilecekUrun, setMaliyetGosterilecekUrun] = useState(null);
   const [duzenlenenUrunId, setDuzenlenenUrunId] = useState(null);
   const [durumDegistirilenId, setDurumDegistirilenId] = useState(null);
+  const [bakimPeriyoduAcikId, setBakimPeriyoduAcikId] = useState(null);
   const [seciliIdler, setSeciliIdler] = useState([]);
   const [kapaliSiparisGruplari, setKapaliSiparisGruplari] = useState(new Set());
   // Urun turu (stok_karti_id) alt gruplari, siparis grubunun ICINDE -
@@ -1469,6 +1531,16 @@ export default function StokSayfasi() {
                     />
                   );
                 }
+                if (bakimPeriyoduAcikId === u.id) {
+                  return (
+                    <BakimPeriyoduFormu
+                      key={u.id}
+                      urun={u}
+                      onKaydedildi={() => setBakimPeriyoduAcikId(null)}
+                      onVazgec={() => setBakimPeriyoduAcikId(null)}
+                    />
+                  );
+                }
                 if (duzenlenenUrunId === u.id) {
                   return (
                     <UrunDuzenleFormu
@@ -1579,6 +1651,7 @@ export default function StokSayfasi() {
                                 window.scrollTo({ top: 0, behavior: 'smooth' });
                               } },
                             { etiket: 'Düzenle', onClick: () => setDuzenlenenUrunId(u.id) },
+                            { etiket: 'Bakım Periyodu Ayarla', onClick: () => setBakimPeriyoduAcikId(u.id) },
                             ...(u.durum !== 'SATILDI' && u.durum !== 'HURDA' ? [
                               { etiket: 'Hurdaya Çıkar', onClick: () => setHurdaAcikId(u.id) },
                             ] : []),
