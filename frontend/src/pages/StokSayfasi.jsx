@@ -199,9 +199,11 @@ function MaliyetDetayi({ urun, stokKartlari, onKapat, onUrunGuncellendi }) {
   const [denemeSatisFiyati, setDenemeSatisFiyati] = useState('');
   const [satisMaliyetEkleTipi, setSatisMaliyetEkleTipi] = useState(null);
   const [baglantilar, setBaglantilar] = useState(null);
+  const [kiralamaGecmisi, setKiralamaGecmisi] = useState(null);
 
   useEffect(() => {
     api.get(`/stok-seri-no/${urun.id}/baglantilar`).then((r) => setBaglantilar(r.data)).catch(() => setBaglantilar([]));
+    api.get(`/stok-seri-no/${urun.id}/kiralama-gecmisi`).then((r) => setKiralamaGecmisi(r.data)).catch(() => setKiralamaGecmisi([]));
   }, [urun.id]);
 
   function yukle() {
@@ -275,6 +277,40 @@ function MaliyetDetayi({ urun, stokKartlari, onKapat, onUrunGuncellendi }) {
               );
             })}
           </div>
+        </div>
+      )}
+
+      {kiralamaGecmisi && kiralamaGecmisi.length > 0 && (
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>
+            Kiralama geçmişi — {kiralamaGecmisi.length} sözleşme
+          </div>
+          <table>
+            <thead>
+              <tr style={{ background: 'var(--zemin)' }}>
+                {['Kiracı', 'Başlangıç', 'Bitiş', 'Aylık Tutar', 'Durum', 'Ödenen', 'Bekleyen'].map((b) => (
+                  <th key={b} style={{ textAlign: 'left', padding: '8px 10px', fontSize: 12, color: 'var(--metin-ikincil)', fontWeight: 500 }}>{b}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {kiralamaGecmisi.map((s) => (
+                <tr
+                  key={s.sozlesme_id}
+                  onClick={() => navigate('/finansal?sekme=kiralama')}
+                  style={{ borderTop: '1px solid var(--kenarlik)', cursor: 'pointer' }}
+                >
+                  <td style={{ padding: '8px 10px' }}>{s.kiraci_unvan || '—'}</td>
+                  <td style={{ padding: '8px 10px', color: 'var(--metin-ikincil)' }}>{tarihFormat(s.baslangic_tarihi)}</td>
+                  <td style={{ padding: '8px 10px', color: 'var(--metin-ikincil)' }}>{s.bitis_tarihi ? tarihFormat(s.bitis_tarihi) : '—'}</td>
+                  <td style={{ padding: '8px 10px' }}>{paraFormat(s.aylik_kira_tutari, s.para_birimi)}</td>
+                  <td style={{ padding: '8px 10px' }}><Etiket ton={s.durum === 'AKTIF' ? 'yesil' : 'notr'}>{s.durum}</Etiket></td>
+                  <td style={{ padding: '8px 10px', color: 'var(--yesil)' }}>{Number(s.toplam_odenen) > 0 ? paraFormat(s.toplam_odenen) : '—'}</td>
+                  <td style={{ padding: '8px 10px', color: Number(s.toplam_bekleyen) > 0 ? 'var(--kirmizi)' : 'var(--metin-soluk)' }}>{Number(s.toplam_bekleyen) > 0 ? paraFormat(s.toplam_bekleyen) : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
