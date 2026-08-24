@@ -11,12 +11,6 @@ import { api, hataMesajiCikar, basariBildirimDinle, geriAlBildirimDinle, yukleme
 
 const ARAMA_TUR_METIN = { CARI: 'Cari', SIPARIS: 'Sipariş', STOK: 'Stok', URUN_TANIMI: 'Ürün Tanımı', DEMIRBAS: 'Demirbaş', YEDEK_PARCA: 'Yedek Parça', KOMUT: 'İşlem' };
 
-// Programi hic bilmeyen biri "ne yazacagimi bilmiyorum" demesin diye -
-// GENEL ARAMA kutusuna, VERI kayitlarinin (cari/siparis/urun) YANINDA,
-// SIK yapilan ISLEMLERE dogrudan goturen "komutlar" da eklendi. Anahtar
-// kelimelerden HERHANGI biri sorguda GECERSE komut sonuclarda gorunur -
-// boylece "sipariş", "yeni sipariş", "alım" gibi FARKLI yazimlar ayni
-// komuta ulasabilir. Bu liste backend'e GITMEDEN, TAMAMEN yerel calisir.
 const KOMUTLAR = [
   { anahtarlar: ['sipariş', 'siparis', 'yeni sipariş', 'alım', 'alim', 'tedarikçi'], baslik: 'Yeni Sipariş Oluştur', altBaslik: 'Tedarikçiden mal alımı başlat', yol: '/siparisler/yeni' },
   { anahtarlar: ['satış', 'satis', 'satış yap', 'sat'], baslik: 'Satış Yap', altBaslik: 'Müşteriye ürün sat', yol: '/satis-yap' },
@@ -171,10 +165,6 @@ function Bildirimler() {
   );
 }
 
-// Mobilde HER islem icin hamburger menuyu acmak yerine - en sik kullanilan
-// 5 moduie (Instagram/WhatsApp tarzi) SABIT bir alt cubuktan HIZLI erisim.
-// SADECE dar ekranlarda (@media max-width: 860px, bkz. asagidaki <style>)
-// gorunur; genis ekranlarda hicbir etkisi yoktur.
 const MOBIL_ALT_NAV_OGELERI = [
   { yol: '/', ad: 'Ana Sayfa', Simge: LayoutDashboard },
   { yol: '/stok', ad: 'Stok', Simge: Boxes, gerekliIzin: 'STOK_GORUNTULE' },
@@ -231,9 +221,6 @@ function sonZiyaretleriOku() {
   }
 }
 
-// Kullanici bir arama SONUCUNA (KOMUT haric - komutlar "gecmis" degil,
-// islem kisayoludur) tikladiginda, bu kaydi "son ziyaret edilenler"
-// listesine ekler - EN BASTA, tekrarlari kaldirarak, en fazla 5 kayit.
 function sonZiyaretEkle(s) {
   if (s.tur === 'KOMUT') return;
   try {
@@ -263,9 +250,6 @@ function GenelArama() {
       setAramaHata(null);
       return;
     }
-    // Komutlar (Yeni Sipariş, Satış Yap vb.) YEREL calisir ve backend'i
-    // beklemeden ANINDA gorunur - kullanici "ne yazacagimi bilmiyorum"
-    // dediginde bile, yazdigi ilk birkac harfle bir ISLEM onerisi gorur.
     const komutSonuclari = komutlariBul(sorgu);
     const zamanlayici = setTimeout(() => {
       api.get('/arama', { params: { q: sorgu } })
@@ -291,8 +275,6 @@ function GenelArama() {
     return () => document.removeEventListener('mousedown', disaTikla);
   }, []);
 
-  // "/" tusuyla arama kutusuna odaklan (baska bir input/textarea'da
-  // yazarken tetiklenmesin diye kontrol ediyoruz), "Esc" ile kapat.
   useEffect(() => {
     function tusaBasildi(e) {
       const hedefEtiket = e.target.tagName;
@@ -321,9 +303,6 @@ function GenelArama() {
     return () => document.removeEventListener('keydown', tusaBasildi);
   }, [acik, sonuclar, secilenIndex]); // eslint-disable-line
 
-  // Bu turler icin, hedef sayfa "ara" query param'ini okuyup listeyi otomatik
-  // filtreler - boylece genel aramadan bir sonuca tiklayinca tum listeyle
-  // degil, DOGRUDAN aranan kayitla karsilasilir.
   const ARANABILIR_TURLER = ['SIPARIS', 'CARI', 'STOK', 'URUN_TANIMI', 'DEMIRBAS', 'YEDEK_PARCA'];
 
   function sonucaGit(s) {
@@ -429,11 +408,9 @@ function GenelArama() {
 
 const API_TABAN_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
-// Menu, mantiksal gruplara ayrildi - Finansal Takip sayfasindaki sekme
-// gruplamasiyla ayni mantik (once duz 14 ogelik bir listeydi).
 const MODUL_GRUPLARI = [
   {
-    baslik: null, // grup basligi olmadan direkt gosterilir (en ust seviye)
+    baslik: null,
     moduller: [
       { yol: '/', ad: 'Dashboard', Simge: LayoutDashboard },
     ],
@@ -446,9 +423,6 @@ const MODUL_GRUPLARI = [
       { yol: '/virman', ad: 'Virman', Simge: ArrowLeftRight },
       {
         yol: '/finansal', ad: 'Finansal Takip', Simge: Receipt,
-        // Finansal Takip'in KENDI SAYFASI icindeki 9-10 sekmeye, ana
-        // sidebar'dan da (hangi sayfada olursak olalim) dogrudan
-        // gidebilmek icin - tiklaninca sandvic/akordeon gibi asagi acilir.
         altModuller: [
           { yol: '/finansal?sekme=taksit', ad: 'Taksitli Satış' },
           { yol: '/finansal?sekme=kiralama', ad: 'Kiralama' },
@@ -493,8 +467,6 @@ const MODUL_GRUPLARI = [
     ],
   },
 ];
-// Duz liste - eski kod (baslik/sonucaGit/document.title mantigi) MODULLER
-// uzerinden calisiyor, gruplamayi bozmadan hepsini birlestiriyoruz.
 const MODULLER = MODUL_GRUPLARI.flatMap((g) => g.moduller);
 
 function BasariToast() {
@@ -528,11 +500,8 @@ function BasariToast() {
   );
 }
 
-// Bir kayit "yumusak silindiginde" (soft-delete), birkac saniye "Geri Al"
-// secenegi sunan toast - client.js'teki geriAlBildirimGoster() cagrildiginda
-// gorunur, ya GERI AL'a basilinca ya da 8 saniye sonra kendiliginden kapanir.
 function GeriAlToastPaneli() {
-  const [bildirim, setBildirim] = useState(null); // { mesaj, geriAlFn }
+  const [bildirim, setBildirim] = useState(null);
 
   useEffect(() => {
     let zamanlayici;
@@ -860,14 +829,118 @@ function KisayollarPaneli({ onKapat }) {
   );
 }
 
+// Basit bir "dikkat" sesi calar - harici ses dosyasina ihtiyac duymadan,
+// Web Audio API ile iki kisa (yukselen) ton uretir. Tarayicinin otomatik
+// ses politikasi geregi, kullanicinin sayfa ile HENUZ hicbir etkilesimi
+// olmadiysa ses calmayabilir - bu durumda catch ile sessizce yoksayilir,
+// gorsel bildirim yine de gorunur.
+function dikkatSesiCal() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    [660, 880].forEach((frekans, i) => {
+      const osc = ctx.createOscillator();
+      const kazanc = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = frekans;
+      const baslangic = ctx.currentTime + i * 0.14;
+      kazanc.gain.setValueAtTime(0.0001, baslangic);
+      kazanc.gain.exponentialRampToValueAtTime(0.18, baslangic + 0.02);
+      kazanc.gain.exponentialRampToValueAtTime(0.0001, baslangic + 0.18);
+      osc.connect(kazanc);
+      kazanc.connect(ctx.destination);
+      osc.start(baslangic);
+      osc.stop(baslangic + 0.2);
+    });
+  } catch {
+    // Ses calinamiyorsa (tarayici politikasi vb.) sessizce yoksay
+  }
+}
+
+// Uygulama acildiginda, suresi yaklasan/dolmus kiralama sozlesmeleri icin
+// sag altta (birbirinin ustune istiflenen) toast kartlari gosterir - her
+// biri kendi "x" ile ayri ayri kapatilabilir, tiklaninca ilgili sozlesmeye
+// goturur. Bildirimler (can ikonu) panelindeki AYNI bilgiden farkli olarak,
+// burasi kullanicinin herhangi bir seye tiklamasina GEREK KALMADAN, sayfa
+// acilir acilmaz kendiliginden beliren bir uyaridir.
+function KiralamaBitisToastlari() {
+  const [uyarilar, setUyarilar] = useState([]);
+  const [kapatilanlar, setKapatilanlar] = useState(new Set());
+  const navigate = useNavigate();
+  const sesCalindiRef = useRef(false);
+
+  useEffect(() => {
+    api.get('/raporlar/kiralama-sozlesme-bitisleri', { params: { gun: 15 } })
+      .then((r) => {
+        const liste = r.data || [];
+        setUyarilar(liste);
+        if (liste.length > 0 && !sesCalindiRef.current) {
+          sesCalindiRef.current = true;
+          dikkatSesiCal();
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  function kapat(sozlesmeId) {
+    setKapatilanlar((s) => new Set(s).add(sozlesmeId));
+  }
+
+  const gorunurler = uyarilar.filter((u) => !kapatilanlar.has(u.sozlesme_id));
+  if (gorunurler.length === 0) return null;
+
+  return (
+    <div style={{
+      position: 'fixed', bottom: 24, right: 24, zIndex: 250,
+      display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 340,
+    }}>
+      {gorunurler.map((u) => {
+        const suresiGectiMi = u.kalan_gun < 0;
+        return (
+          <div
+            key={u.sozlesme_id}
+            onClick={() => navigate('/finansal?sekme=kiralama')}
+            style={{
+              background: 'white', border: `1px solid ${suresiGectiMi ? 'var(--kirmizi)' : 'var(--amber, #d18f1f)'}`,
+              borderLeft: `4px solid ${suresiGectiMi ? 'var(--kirmizi)' : 'var(--amber, #d18f1f)'}`,
+              borderRadius: 8, padding: '12px 14px', boxShadow: '0 6px 18px rgba(0,0,0,0.16)',
+              cursor: 'pointer', animation: 'kinetikToastGir 0.25s ease-out', position: 'relative',
+            }}
+          >
+            <button
+              onClick={(e) => { e.stopPropagation(); kapat(u.sozlesme_id); }}
+              aria-label="Kapat"
+              style={{
+                position: 'absolute', top: 6, right: 8, background: 'none', border: 'none',
+                cursor: 'pointer', fontSize: 15, color: 'var(--metin-soluk)', lineHeight: 1, padding: 4,
+              }}
+            >
+              ×
+            </button>
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: suresiGectiMi ? 'var(--kirmizi)' : 'var(--metin-birincil)', paddingRight: 16, marginBottom: 3 }}>
+              {suresiGectiMi ? '⚠ Kiralama süresi doldu' : '⏰ Kiralama süresi yaklaşıyor'}
+            </div>
+            <div style={{ fontSize: 12.5, color: 'var(--metin-ikincil)', marginBottom: 2 }}>
+              {u.urun_bilgisi} — {u.kiraci_unvan || 'Kiracı belirtilmemiş'}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--metin-soluk)' }}>
+              {suresiGectiMi
+                ? `Bitiş: ${u.bitis_tarihi} (${Math.abs(u.kalan_gun)} gün önce)`
+                : `Bitiş: ${u.bitis_tarihi} (${u.kalan_gun} gün kaldı)`}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function AnaDuzen() {
   const { oturum, cikisYap, sirketDegistir, sirketleriTazele, izinVarMi } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [kisayollarAcik, setKisayollarAcik] = useState(false);
-  // Sol menudeki "Finansal Takip" gibi alt-modulu OLAN bir modulun,
-  // TIKLANINCA (sandvic/akordeon gibi) asagi acilmasi icin - hangi
-  // modulun akordeonu ACIK, tek seferde SADECE biri acik kalir.
   const [akikModulAkordeonu, setAkikModulAkordeonu] = useState(null);
 
   useEffect(() => {
@@ -885,9 +958,6 @@ export default function AnaDuzen() {
     return () => document.removeEventListener('keydown', tusaBasildi);
   }, [kisayollarAcik]);
 
-  // Tarayici sekmesi basligini aktif sayfaya gore gunceller - boylece
-  // birden fazla sekme acikken hangi sekmenin hangi sayfa oldugu kolayca
-  // ayirt edilebilir (hepsi ayni "Kinetik ERP" yazisini gostermek yerine).
   useEffect(() => {
     const modul = MODULLER.find((m) => m.yol === location.pathname)
       || MODULLER.find((m) => m.yol !== '/' && location.pathname.startsWith(m.yol));
@@ -925,6 +995,7 @@ export default function AnaDuzen() {
     <div style={{ display: 'flex', minHeight: '100vh' }}>
       <BasariToast />
       <GeriAlToastPaneli />
+      <KiralamaBitisToastlari />
       <GenelYuklemeCubugu />
       <OzelOnayPaneli />
       <OzelAlertPaneli />
@@ -977,8 +1048,6 @@ export default function AnaDuzen() {
           }
         }
 
-        /* Genis tablolar/gridler kucuk ekranlarda tasmasin diye yatay kaydirma acik
-           tutulur - sayfalar kendi ic yapisini degistirmeden calisir. */
         @media (max-width: 860px) {
           main {
             overflow-x: auto;
