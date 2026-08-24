@@ -1134,6 +1134,58 @@ function CariHareketleri({ cari, onKapat }) {
 }
 
 
+function TopluTipDegistirFormu({ secilenIdler, onKaydedildi, onVazgec }) {
+  const [yeniTip, setYeniTip] = useState('ORTAK');
+  const [sifre, setSifre] = useState('');
+  const [hata, setHata] = useState(null);
+  const [kaydediliyor, setKaydediliyor] = useState(false);
+
+  async function kaydet(e) {
+    e.preventDefault();
+    setHata(null);
+    setKaydediliyor(true);
+    try {
+      const { data } = await api.put('/cariler/toplu-tip-degistir', {
+        sifre, cari_idleri: [...secilenIdler], yeni_tip: yeniTip,
+      });
+      onKaydedildi(data);
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setKaydediliyor(false);
+    }
+  }
+
+  return (
+    <Kart style={{ marginBottom: 12 }}>
+      <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 10 }}>
+        {secilenIdler.size} cariyi başka bir tipe taşı
+      </div>
+      <HataMesaji>{hata}</HataMesaji>
+      <form onSubmit={kaydet} style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+        <div style={{ minWidth: 160 }}>
+          <Alan etiket="Yeni tip">
+            <select value={yeniTip} onChange={(e) => setYeniTip(e.target.value)} style={girdiStili}>
+              <option value="MUSTERI">Müşteri</option>
+              <option value="TEDARIKCI">Tedarikçi</option>
+              <option value="PERSONEL">Personel</option>
+              <option value="ORTAK">Ortak</option>
+              <option value="DIGER">Diğer</option>
+            </select>
+          </Alan>
+        </div>
+        <div style={{ minWidth: 200 }}>
+          <Alan etiket="Şifreniz (onay için zorunlu)">
+            <input required type="password" value={sifre} onChange={(e) => setSifre(e.target.value)} style={girdiStili} placeholder="Giriş şifreniz" />
+          </Alan>
+        </div>
+        <Buton type="submit" disabled={kaydediliyor}>{kaydediliyor ? 'Kaydediliyor...' : 'Taşı'}</Buton>
+        <Buton type="button" variant="ikincil" onClick={onVazgec}>Vazgeç</Buton>
+      </form>
+    </Kart>
+  );
+}
+
 export default function CarilerSayfasi() {
   const [cariler, setCariler] = useState([]);
   const [yukleniyor, setYukleniyor] = useState(true);
@@ -1146,6 +1198,7 @@ export default function CarilerSayfasi() {
   const [seciliCari, setSeciliCari] = useState(null);
   const [secilenIdler, setSecilenIdler] = useState(new Set());
   const [iceAktarAcik, setIceAktarAcik] = useState(false);
+  const [topluTipDegistirAcik, setTopluTipDegistirAcik] = useState(false);
   const siralama = useSiralama();
 
   const [ozetHaritasi, setOzetHaritasi] = useState({});
@@ -1300,7 +1353,7 @@ export default function CarilerSayfasi() {
       )}
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-        {[['', 'Tümü'], ['MUSTERI', 'Müşteri'], ['TEDARIKCI', 'Tedarikçi']].map(([deger, etiket]) => (
+        {[['', 'Tümü'], ['MUSTERI', 'Müşteri'], ['TEDARIKCI', 'Tedarikçi'], ['ORTAK', 'Ortak']].map(([deger, etiket]) => (
           <button
             key={deger}
             onClick={() => setFiltreTip(deger)}
@@ -1322,10 +1375,19 @@ export default function CarilerSayfasi() {
           <span style={{ fontSize: 13, fontWeight: 500 }}>{secilenIdler.size} kayıt seçili</span>
           <div style={{ display: 'flex', gap: 8 }}>
             <Buton variant="ikincil" onClick={secilenleriExceleAktar}>Excel'e Aktar</Buton>
+            <Buton variant="ikincil" onClick={() => setTopluTipDegistirAcik((a) => !a)}>Tip Değiştir</Buton>
             <Buton variant="tehlike" onClick={topluSil}>Seçilenleri Sil</Buton>
             <Buton variant="ikincil" onClick={() => setSecilenIdler(new Set())}>Seçimi Temizle</Buton>
           </div>
         </Kart>
+      )}
+
+      {topluTipDegistirAcik && secilenIdler.size > 0 && (
+        <TopluTipDegistirFormu
+          secilenIdler={secilenIdler}
+          onKaydedildi={() => { setTopluTipDegistirAcik(false); setSecilenIdler(new Set()); listeyiYukle(); }}
+          onVazgec={() => setTopluTipDegistirAcik(false)}
+        />
       )}
 
       <Kart style={{ padding: 0 }}>
