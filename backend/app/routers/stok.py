@@ -1266,3 +1266,38 @@ def urun_kiralama_gecmisi(
 
     sonuc.sort(key=lambda x: x.baslangic_tarihi, reverse=True)
     return sonuc
+
+
+class BakimPeriyoduGuncelleIstegi(BaseModel):
+    bakim_periyodu_gun: int | None  # None = hatirlatmayi kapat
+
+
+@router.get("/stok-seri-no/{seri_id}/bakim-periyodu",
+            dependencies=[Depends(izin_gerektir("STOK_GORUNTULE"))])
+def bakim_periyodu_getir(
+    seri_id: int,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    kayit = _seri_no_getir_veya_404(db, seri_id, sirket_id)
+    return {"id": kayit.id, "bakim_periyodu_gun": kayit.bakim_periyodu_gun}
+
+
+@router.put("/stok-seri-no/{seri_id}/bakim-periyodu",
+            dependencies=[Depends(izin_gerektir("STOK_DUZENLE"))])
+def bakim_periyodu_guncelle(
+    seri_id: int,
+    istek: BakimPeriyoduGuncelleIstegi,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Bu urunun periyodik bakim hatirlatma araligini (gun cinsinden) belirler
+    veya kaldirir (None gonderilirse). Sifre onayi GEREKTIRMEZ - bu, urunun
+    kendi verisini degil, sadece bir hatirlatma ayarini degistiren, dusuk
+    riskli bir islemdir.
+    """
+    kayit = _seri_no_getir_veya_404(db, seri_id, sirket_id)
+    kayit.bakim_periyodu_gun = istek.bakim_periyodu_gun
+    db.commit()
+    return {"id": kayit.id, "bakim_periyodu_gun": kayit.bakim_periyodu_gun}
