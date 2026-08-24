@@ -858,36 +858,52 @@ function dikkatSesiCal() {
   }
 }
 
-// Uygulama acildiginda, suresi yaklasan/dolmus kiralama sozlesmeleri icin
-// sag altta (birbirinin ustune istiflenen) toast kartlari gosterir - her
-// biri kendi "x" ile ayri ayri kapatilabilir, tiklaninca ilgili sozlesmeye
-// goturur. Bildirimler (can ikonu) panelindeki AYNI bilgiden farkli olarak,
-// burasi kullanicinin herhangi bir seye tiklamasina GEREK KALMADAN, sayfa
-// acilir acilmaz kendiliginden beliren bir uyaridir.
-function KiralamaBitisToastlari() {
-  const [uyarilar, setUyarilar] = useState([]);
+
+// Kiralama sozlesme bitisi VE bakim hatirlaticisi uyarilarini AYNI sag-alt
+// yigina, ust uste binmeden toplar - iki farkli veri kaynagindan gelen
+// uyarilari TEK bir kronolojik listede birlestirip render eder (ilki en
+// aciliyetli - suresi dolmus/gecmis - en ustte gorunecek sekilde).
+function UyariToastlari() {
+  const [uyarilar, setUyarilar] = useState([]); // {id, tur, aciklama1, aciklama2, aciklama3, aciliyetli, yol}
   const [kapatilanlar, setKapatilanlar] = useState(new Set());
   const navigate = useNavigate();
   const sesCalindiRef = useRef(false);
 
   useEffect(() => {
-    api.get('/raporlar/kiralama-sozlesme-bitisleri', { params: { gun: 15 } })
-      .then((r) => {
-        const liste = r.data || [];
-        setUyarilar(liste);
-        if (liste.length > 0 && !sesCalindiRef.current) {
-          sesCalindiRef.current = true;
-          dikkatSesiCal();
-        }
-      })
-      .catch(() => {});
+    Promise.all([
+      api.get('/raporlar/kiralama-sozlesme-bitisleri', { params: { gun: 15 } }).catch(() => ({ data: [] })),
+      api.get('/raporlar/bakim-hatirlaticilari', { params: { esik_gun: 7 } }).catch(() => ({ data: [] })),
+    ]).then(([kira, bakim]) => {
+      const liste = [
+        ...(kira.data || []).map((u) => ({
+          id: `kira-${u.sozlesme_id}`, tur: u.kalan_gun < 0 ? '⚠ Kiralama süresi doldu' : '⏰ Kiralama süresi yaklaşıyor',
+          aciliyetli: u.kalan_gun < 0,
+          satir1: `${u.urun_bilgisi} — ${u.kiraci_unvan || 'Kiracı belirtilmemiş'}`,
+          satir2: u.kalan_gun < 0 ? `Bitiş: ${u.bitis_tarihi} (${Math.abs(u.kalan_gun)} gün önce)` : `Bitiş: ${u.bitis_tarihi} (${u.kalan_gun} gün kaldı)`,
+          siralamaAnahtari: u.kalan_gun, yol: '/finansal?sekme=kiralama',
+        })),
+        ...(bakim.data || []).map((h) => ({
+          id: `bakim-${h.stok_seri_no_id}`, tur: h.gun_gecti >= 0 ? '🔧 Bakım zamanı geldi' : '🔧 Bakım zamanı yaklaşıyor',
+          aciliyetli: h.gun_gecti >= 0,
+          satir1: `${h.urun_bilgisi} — ${h.seri_no}`,
+          satir2: h.gun_gecti >= 0 ? `Periyot (${h.bakim_periyodu_gun} gün) ${h.gun_gecti} gün önce doldu` : `Periyoda ${Math.abs(h.gun_gecti)} gün kaldı`,
+          siralamaAnahtari: -h.gun_gecti, yol: `/stok?ara=${encodeURIComponent(h.seri_no)}`,
+        })),
+      ].sort((a, b) => a.siralamaAnahtari - b.siralamaAnahtari);
+
+      setUyarilar(liste);
+      if (liste.length > 0 && !sesCalindiRef.current) {
+        sesCalindiRef.current = true;
+        dikkatSesiCal();
+      }
+    });
   }, []);
 
-  function kapat(sozlesmeId) {
-    setKapatilanlar((s) => new Set(s).add(sozlesmeId));
+  function kapat(id) {
+    setKapatilanlar((s) => new Set(s).add(id));
   }
 
-  const gorunurler = uyarilar.filter((u) => !kapatilanlar.has(u.sozlesme_id));
+  const gorunurler = uyarilar.filter((u) => !kapatilanlar.has(u.id));
   if (gorunurler.length === 0) return null;
 
   return (
@@ -895,43 +911,34 @@ function KiralamaBitisToastlari() {
       position: 'fixed', bottom: 24, right: 24, zIndex: 250,
       display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 340,
     }}>
-      {gorunurler.map((u) => {
-        const suresiGectiMi = u.kalan_gun < 0;
-        return (
-          <div
-            key={u.sozlesme_id}
-            onClick={() => navigate('/finansal?sekme=kiralama')}
+      {gorunurler.map((u) => (
+        <div
+          key={u.id}
+          onClick={() => navigate(u.yol)}
+          style={{
+            background: 'white', border: `1px solid ${u.aciliyetli ? 'var(--kirmizi)' : 'var(--amber, #d18f1f)'}`,
+            borderLeft: `4px solid ${u.aciliyetli ? 'var(--kirmizi)' : 'var(--amber, #d18f1f)'}`,
+            borderRadius: 8, padding: '12px 14px', boxShadow: '0 6px 18px rgba(0,0,0,0.16)',
+            cursor: 'pointer', animation: 'kinetikToastGir 0.25s ease-out', position: 'relative',
+          }}
+        >
+          <button
+            onClick={(e) => { e.stopPropagation(); kapat(u.id); }}
+            aria-label="Kapat"
             style={{
-              background: 'white', border: `1px solid ${suresiGectiMi ? 'var(--kirmizi)' : 'var(--amber, #d18f1f)'}`,
-              borderLeft: `4px solid ${suresiGectiMi ? 'var(--kirmizi)' : 'var(--amber, #d18f1f)'}`,
-              borderRadius: 8, padding: '12px 14px', boxShadow: '0 6px 18px rgba(0,0,0,0.16)',
-              cursor: 'pointer', animation: 'kinetikToastGir 0.25s ease-out', position: 'relative',
+              position: 'absolute', top: 6, right: 8, background: 'none', border: 'none',
+              cursor: 'pointer', fontSize: 15, color: 'var(--metin-soluk)', lineHeight: 1, padding: 4,
             }}
           >
-            <button
-              onClick={(e) => { e.stopPropagation(); kapat(u.sozlesme_id); }}
-              aria-label="Kapat"
-              style={{
-                position: 'absolute', top: 6, right: 8, background: 'none', border: 'none',
-                cursor: 'pointer', fontSize: 15, color: 'var(--metin-soluk)', lineHeight: 1, padding: 4,
-              }}
-            >
-              ×
-            </button>
-            <div style={{ fontSize: 12.5, fontWeight: 600, color: suresiGectiMi ? 'var(--kirmizi)' : 'var(--metin-birincil)', paddingRight: 16, marginBottom: 3 }}>
-              {suresiGectiMi ? '⚠ Kiralama süresi doldu' : '⏰ Kiralama süresi yaklaşıyor'}
-            </div>
-            <div style={{ fontSize: 12.5, color: 'var(--metin-ikincil)', marginBottom: 2 }}>
-              {u.urun_bilgisi} — {u.kiraci_unvan || 'Kiracı belirtilmemiş'}
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--metin-soluk)' }}>
-              {suresiGectiMi
-                ? `Bitiş: ${u.bitis_tarihi} (${Math.abs(u.kalan_gun)} gün önce)`
-                : `Bitiş: ${u.bitis_tarihi} (${u.kalan_gun} gün kaldı)`}
-            </div>
+            ×
+          </button>
+          <div style={{ fontSize: 12.5, fontWeight: 600, color: u.aciliyetli ? 'var(--kirmizi)' : 'var(--metin-birincil)', paddingRight: 16, marginBottom: 3 }}>
+            {u.tur}
           </div>
-        );
-      })}
+          <div style={{ fontSize: 12.5, color: 'var(--metin-ikincil)', marginBottom: 2 }}>{u.satir1}</div>
+          <div style={{ fontSize: 12, color: 'var(--metin-soluk)' }}>{u.satir2}</div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -995,7 +1002,7 @@ export default function AnaDuzen() {
     <div style={{ display: 'flex', minHeight: '100vh' }}>
       <BasariToast />
       <GeriAlToastPaneli />
-      <KiralamaBitisToastlari />
+      <UyariToastlari />
       <GenelYuklemeCubugu />
       <OzelOnayPaneli />
       <OzelAlertPaneli />
