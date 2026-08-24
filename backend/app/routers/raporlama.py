@@ -1567,3 +1567,63 @@ def kiralama_sozlesme_bitisleri(
 
     sonuc.sort(key=lambda x: x.bitis_tarihi)
     return sonuc
+
+
+class BakimHatirlaticisiSatiri(BaseModel):
+    stok_seri_no_id: int
+    seri_no: str
+    urun_bilgisi: str
+    bakim_periyodu_gun: int
+    son_bakim_tarihi: date | None  # None ise giris_tarihi referans alinir
+    gun_gecti: int  # negatifse henuz periyot dolmamis (yakinda dolacak)
+
+
+@router.get("/bakim-hatirlaticilari", response_model=list[BakimHatirlaticisiSatiri],
+            dependencies=[Depends(izin_gerektir("RAPOR_GORUNTULE"))])
+def bakim_hatirlaticilari(
+    esik_gun: int = Query(7, description="Periyot dolmadan kac gun once uyarilmaya baslansin"),
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    bakim_periyodu_gun ALANI DOLU olan, satilmamis/hurdaya cikmamis TUM
+    urunler icin, "son bakimdan (yoksa giris tarihinden) bu yana kac gun
+    gecti" hesaplar; periyot -esik_gun kadar kalaninda veya asilmissa
+    listeye dahil eder. gun_gecti alani, periyodun ne kadar asildigini
+    (pozitif) veya periyoda ne kadar kaldigini (negatif) gosterir.
+    """
+    from app.models.finansal import BakimKaydi
+
+    urunler = list(db.execute(
+        select(StokSeriNo).where(
+            StokSeriNo.sirket_id == sirket_id,
+            StokSeriNo.bakim_periyodu_gun.isnot(None),
+            StokSeriNo.durum.notin_([StokDurum.SATILDI, StokDurum.HURDA]),
+        )
+    ).scalars())
+
+    bugun = date.today()
+    sonuc = []
+    for u in urunler:
+        son_bakim = db.execute(
+            select(func.max(BakimKaydi.tarih)).where(BakimKaydi.stok_seri_no_id == u.id)
+        ).scalar_one_or_none()
+        referans_tarih = son_bakim or u.giris_tarihi
+        if referans_tarih is None:
+            continue
+        gecen_gun = (bugun - referans_tarih).days
+        kalan = u.bakim_periyodu_gun - gecen_gun
+        if kalan > esik_gun:
+            continue
+
+        kart = db.get(StokKarti, u.stok_karti_id)
+        urun_bilgisi = f"{kart.marka} {kart.model}" if kart else "—"
+
+        sonuc.append(BakimHatirlaticisiSatiri(
+            stok_seri_no_id=u.id, seri_no=u.seri_no, urun_bilgisi=urun_bilgisi,
+            bakim_periyodu_gun=u.bakim_periyodu_gun, son_bakim_tarihi=son_bakim,
+            gun_gecti=gecen_gun - u.bakim_periyodu_gun,
+        ))
+
+    sonuc.sort(key=lambda x: x.gun_gecti, reverse=True)
+    return sonuc
