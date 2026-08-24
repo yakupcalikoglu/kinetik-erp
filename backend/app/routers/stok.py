@@ -1205,3 +1205,64 @@ def urun_baglantilarini_getir(
         ))
 
     return sonuclar
+
+
+class UrunKiralamaGecmisiSatiri(BaseModel):
+    sozlesme_id: int
+    kiraci_unvan: str | None
+    baslangic_tarihi: date
+    bitis_tarihi: date | None
+    aylik_kira_tutari: Decimal
+    para_birimi: str
+    durum: str
+    toplam_odenen: Decimal
+    toplam_bekleyen: Decimal
+
+
+@router.get("/stok-seri-no/{seri_id}/kiralama-gecmisi", response_model=list[UrunKiralamaGecmisiSatiri],
+            dependencies=[Depends(izin_gerektir("STOK_GORUNTULE"))])
+def urun_kiralama_gecmisi(
+    seri_id: int,
+    sirket_id: int = Depends(aktif_sirket_id_getir),
+    db: Session = Depends(get_db),
+):
+    """
+    Bu urunun (seri no) BAGLI OLDUGU TUM kiralama sozlesmelerini (gecmis +
+    aktif), kiraci/tarih/tutar/odeme durumuyla BIRLIKTE, tek bir kronolojik
+    listede doner - "bu forklift simdiye kadar kime, ne zaman, ne kadara
+    kiralandi" sorusuna Stok sayfasindan tek ekranda cevap vermek icin.
+    Baglanti, KiralamaKalemUrunu uzerinden kurulur (KiralamaSozlesme.
+    stok_seri_no_id ESKI/tekli-urun tasarimdan kalma bir alan, coklu urun
+    sistemine gecildiginden beri YENI sozlesmelerde dolmuyor).
+    """
+    from app.models.finansal import (
+        KiralamaSozlesme, KiralamaSozlesmeKalemi, KiralamaKalemUrunu, KiralamaOdeme,
+    )
+    from app.models.cari import CariHesap
+
+    _seri_no_getir_veya_404(db, seri_id, sirket_id)
+
+    sozlesmeler = list(db.execute(
+        select(KiralamaSozlesme)
+        .join(KiralamaSozlesmeKalemi, KiralamaSozlesmeKalemi.sozlesme_id == KiralamaSozlesme.id)
+        .join(KiralamaKalemUrunu, KiralamaKalemUrunu.kalem_id == KiralamaSozlesmeKalemi.id)
+        .where(KiralamaKalemUrunu.stok_seri_no_id == seri_id, KiralamaSozlesme.sirket_id == sirket_id)
+        .distinct()
+    ).scalars())
+
+    sonuc = []
+    for s in sozlesmeler:
+        cari = db.get(CariHesap, s.kiraci_cari_id)
+        odemeler = list(db.execute(select(KiralamaOdeme).where(KiralamaOdeme.sozlesme_id == s.id)).scalars())
+        toplam_odenen = sum((o.tutar for o in odemeler if o.odendi_mi), Decimal("0"))
+        toplam_bekleyen = sum((o.tutar for o in odemeler if not o.odendi_mi), Decimal("0"))
+        pb = s.para_birimi.value if hasattr(s.para_birimi, "value") else s.para_birimi
+        sonuc.append(UrunKiralamaGecmisiSatiri(
+            sozlesme_id=s.id, kiraci_unvan=cari.unvan if cari else None,
+            baslangic_tarihi=s.baslangic_tarihi, bitis_tarihi=s.bitis_tarihi,
+            aylik_kira_tutari=s.aylik_kira_tutari, para_birimi=pb, durum=s.durum,
+            toplam_odenen=toplam_odenen, toplam_bekleyen=toplam_bekleyen,
+        ))
+
+    sonuc.sort(key=lambda x: x.baslangic_tarihi, reverse=True)
+    return sonuc
