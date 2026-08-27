@@ -49,15 +49,10 @@ function NetDurumKutusu() {
   const [veri, setVeri] = useState(null);
   const [hata, setHata] = useState(null);
   const [detayAcik, setDetayAcik] = useState(false);
-
   useEffect(() => {
     api.get('/raporlar/net-durum').then((r) => setVeri(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
   }, []);
-
   if (hata) return <Kart style={{ marginBottom: 16 }}><HataMesaji>{hata}</HataMesaji></Kart>;
-
-  const toplamVarlikVeAlacak = veri ? Number(veri.toplam_varlik_try) + Number(veri.toplam_alacak_try) : 0;
-
   return (
     <Kart style={{ marginBottom: 16, background: 'var(--lacivert-koyu, #0f2340)', color: 'white' }}>
       <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -69,16 +64,22 @@ function NetDurumKutusu() {
         <>
           <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginBottom: 12 }}>
             <div>
-              <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.6)' }}>Toplam Varlık + Alacak</div>
-              <div style={{ fontSize: 24, fontWeight: 700 }}>{paraFormat(toplamVarlikVeAlacak)}</div>
+              <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.6)' }}>Öz Mal Değeri</div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: '#ffcf80' }}>{paraFormat(veri.oz_mal_degeri_try)}</div>
             </div>
             <div>
-              <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.6)' }}>Toplam Borç</div>
-              <div style={{ fontSize: 24, fontWeight: 700, color: '#ff9d9d' }}>{paraFormat(veri.toplam_borc_try)}</div>
+              <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.6)' }}>Ticari Stok Değeri</div>
+              <div style={{ fontSize: 22, fontWeight: 700 }}>{paraFormat(veri.ticari_stok_degeri_try)}</div>
             </div>
             <div>
-              <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.6)' }}>Net Değer</div>
-              <div style={{ fontSize: 24, fontWeight: 700, color: Number(veri.net_deger_try) >= 0 ? '#8ef0b0' : '#ff9d9d' }}>
+              <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.6)' }}>Nakit / Finansal Net Değer</div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: Number(veri.nakit_finansal_net_try) >= 0 ? '#8ef0b0' : '#ff9d9d' }}>
+                {paraFormat(veri.nakit_finansal_net_try)}
+              </div>
+            </div>
+            <div style={{ borderLeft: '1px solid rgba(255,255,255,0.25)', paddingLeft: 24 }}>
+              <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.6)' }}>Genel Net Değer</div>
+              <div style={{ fontSize: 26, fontWeight: 800, color: Number(veri.net_deger_try) >= 0 ? '#8ef0b0' : '#ff9d9d' }}>
                 {paraFormat(veri.net_deger_try)}
               </div>
             </div>
@@ -89,7 +90,6 @@ function NetDurumKutusu() {
           >
             {detayAcik ? 'Detayı gizle' : 'Kalem kalem detayı göster'}
           </span>
-
           {detayAcik && (
             <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 20 }}>
               <div>
@@ -131,11 +131,9 @@ function NetDurumKutusu() {
 function AnaKasaKutusu({ navigate }) {
   const [bakiye, setBakiye] = useState(null);
   const [hata, setHata] = useState(null);
-
   useEffect(() => {
     api.get('/kasa-bakiye').then((r) => setBakiye(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
   }, []);
-
   return (
     <TiklanabilirKart baslik="Ana Kasa" Simge={Wallet2} onClick={() => navigate('/kasa')}>
       {hata ? <HataMesaji>{hata}</HataMesaji> : !bakiye ? (
@@ -164,11 +162,9 @@ function AnaKasaKutusu({ navigate }) {
 function BankalarKutusu({ navigate }) {
   const [hesaplar, setHesaplar] = useState(null);
   const [hata, setHata] = useState(null);
-
   useEffect(() => {
     api.get('/banka-bakiyeleri').then((r) => setHesaplar(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
   }, []);
-
   return (
     <TiklanabilirKart baslik="Bankalar" Simge={Landmark} onClick={() => navigate('/banka')}>
       {hata ? <HataMesaji>{hata}</HataMesaji> : !hesaplar ? (
@@ -194,21 +190,17 @@ const STOK_DURUM_METIN = {
   YOLDA: 'Yolda', GUMRUKTE: 'Gümrükte', ANTREPODA: 'Antrepoda', DEPODA: 'Depoda',
   SATILDI: 'Satıldı', KIRADA: 'Kirada',
 };
-
 function StokKutusu({ navigate }) {
   const [urunler, setUrunler] = useState(null);
   const [hata, setHata] = useState(null);
-
   useEffect(() => {
     api.get('/stok-seri-no').then((r) => setUrunler(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
   }, []);
-
   const durumOzet = {};
   if (urunler) {
     urunler.forEach((u) => { durumOzet[u.durum] = (durumOzet[u.durum] || 0) + 1; });
   }
   const gosterilecekDurumlar = ['DEPODA', 'ANTREPODA', 'YOLDA', 'GUMRUKTE', 'KIRADA'];
-
   return (
     <TiklanabilirKart baslik="Stok" Simge={Boxes} onClick={() => navigate('/stok')}>
       {hata ? <HataMesaji>{hata}</HataMesaji> : !urunler ? (
@@ -232,15 +224,12 @@ function StokKutusu({ navigate }) {
 function YedekParcaKutusu({ navigate }) {
   const [parcalar, setParcalar] = useState(null);
   const [hata, setHata] = useState(null);
-
   useEffect(() => {
     api.get('/yedek-parcalar').then((r) => setParcalar(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
   }, []);
-
   const minAltindakiler = parcalar
     ? parcalar.filter((p) => p.min_stok_seviyesi && Number(p.mevcut_miktar) < Number(p.min_stok_seviyesi))
     : [];
-
   return (
     <TiklanabilirKart baslik="Yedek Parça / Sarf" Simge={Wrench} onClick={() => navigate('/yedek-parcalar')} vurgu={minAltindakiler.length > 0}>
       {hata ? <HataMesaji>{hata}</HataMesaji> : !parcalar ? (
@@ -272,13 +261,10 @@ function YedekParcaKutusu({ navigate }) {
 function KiralikUrunlerKutusu({ navigate }) {
   const [liste, setListe] = useState(null);
   const [hata, setHata] = useState(null);
-
   useEffect(() => {
     api.get('/raporlar/aktif-kiralamalar').then((r) => setListe(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
   }, []);
-
   const toplamKira = liste ? paraBazliToplamGoster(liste, 'aylik_kira_tutari') : '—';
-
   return (
     <TiklanabilirKart baslik="Kiralık Ürünler" Simge={KeyRound} onClick={() => navigate('/finansal?sekme=kiralama')}>
       {hata ? <HataMesaji>{hata}</HataMesaji> : !liste ? (
@@ -316,15 +302,12 @@ function KiralikUrunlerKutusu({ navigate }) {
 function OdemeAlacakKutusu({ navigate }) {
   const [veri, setVeri] = useState(null);
   const [hata, setHata] = useState(null);
-
   useEffect(() => {
     api.get('/raporlar/yaklasan-vadeler', { params: { gun: 30 } }).then((r) => setVeri(r.data)).catch((e) => setHata(hataMesajiCikar(e)));
   }, []);
-
   const bugun = new Date().toISOString().slice(0, 10);
   const gecikenOdeme = veri ? veri.odemeler.filter((o) => o.tarih < bugun).length : 0;
   const gecikenTahsilat = veri ? veri.tahsilatlar.filter((t) => t.tarih < bugun).length : 0;
-
   return (
     <TiklanabilirKart baslik="Aylık Ödeme / Alacak Listesi" Simge={CalendarClock} onClick={() => navigate('/raporlar')} vurgu={gecikenOdeme > 0 || gecikenTahsilat > 0}>
       {hata ? <HataMesaji>{hata}</HataMesaji> : !veri ? (
@@ -349,17 +332,11 @@ function OdemeAlacakKutusu({ navigate }) {
   );
 }
 
-
 const SON_ISLEM_TUR_METIN = {
   SIPARIS: 'Sipariş', TEDARIKCI_FATURA: 'Tedarikçi Faturası', TEDARIKCI_FATURA_ODEME: 'Fatura Ödemesi',
   STOK: 'Stok', STOK_SATIS: 'Satış', CARI: 'Cari',
 };
 
-// "Son Islemler" satirindaki kaynak_tablo degerine gore, hangi sayfaya
-// gidilecegini belirler. Backend'den gelen kaynak_tablo hem kendi "tur"
-// degerlerimizi (SIPARIS, TEDARIKCI_FATURA, STOK, CARI) hem de Kasa/Banka
-// hareketlerinin GERCEK kaynagini (orn. AKREDITIF_KALEMI, TAKSIT_DETAY)
-// tasiyabilir - BankaSayfasi'ndaki KAYNAK_YOL_HARITASI ile AYNI mantik.
 const SON_ISLEM_YOL_HARITASI = {
   SIPARIS: '/siparisler',
   TEDARIKCI_FATURA: '/tedarikci-faturalari',
@@ -390,15 +367,12 @@ function SonIslemlerKutusu() {
   const [liste, setListe] = useState(null);
   const [hata, setHata] = useState(null);
   const [genisletildi, setGenisletildi] = useState(false);
-
   useEffect(() => {
     api.get('/raporlar/son-islemler', { params: { limit: 50 } })
       .then((r) => setListe(r.data))
       .catch((e) => setHata(hataMesajiCikar(e)));
   }, []);
-
   const gosterilecekler = genisletildi ? liste : (liste || []).slice(0, 10);
-
   return (
     <Kart style={{ marginTop: 16 }}>
       <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>Son İşlemler</div>
@@ -453,16 +427,12 @@ function SonIslemlerKutusu() {
   );
 }
 
-// Programi ilk kullanan biri bile "ne yapmam lazim" sorusuna hemen cevap
-// bulsun diye - en sik yapilan 4 islem, buyuk ve belirgin butonlar olarak
-// sayfanin en ustunde. Her buton, ilgili sayfaya goturur.
 const HIZLI_ISLEMLER = [
   { etiket: 'Yeni Sipariş', aciklama: 'Tedarikçiden mal alımı başlat', yol: '/siparisler', renk: 'var(--lacivert)' },
   { etiket: 'Satış Yap', aciklama: 'Müşteriye ürün sat', yol: '/satis-yap', renk: 'var(--yesil)' },
   { etiket: 'Ödeme / Tahsilat', aciklama: 'Cari bazlı borç-alacak işlemleri', yol: '/cariler', renk: 'var(--amber, #d97706)' },
   { etiket: 'Yeni Cari', aciklama: 'Müşteri/tedarikçi ekle', yol: '/cariler', renk: 'var(--metin-ikincil)' },
 ];
-
 function HizliIslemlerKutusu({ navigate }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 20 }}>
@@ -484,20 +454,13 @@ function HizliIslemlerKutusu({ navigate }) {
   );
 }
 
-// Programi ILK KEZ acan biri, "burada ne yapacagim" sorusuna hemen cevap
-// bulsun diye - sistemin TEMEL AKISINI (Siparis -> Teslim Al -> Satis ->
-// Tahsilat) 4 kisa adimda ozetleyen bir karsilama ekrani. localStorage'da
-// bir bayrakla SADECE ilk girişte gösterilir, "Anladım" ile kapatılınca
-// bir daha çıkmaz (kullanıcı isterse Dashboard'daki (?) ile tekrar açabilir).
 const KARSILAMA_ANAHTARI = 'kinetik_erp_karsilama_gosterildi';
-
 const AKIS_ADIMLARI = [
   { no: 1, baslik: 'Sipariş Ver', aciklama: 'Tedarikçiden mal alımı için Siparişler sayfasından yeni sipariş oluştur.' },
   { no: 2, baslik: 'Teslim Al', aciklama: 'Mal geldiğinde, seri numaralarını girerek envantere (Stok) ekle.' },
   { no: 3, baslik: 'Maliyetleri Tamamla', aciklama: 'Navlun, gümrük, sigorta gibi ek masrafları siparişe işle.' },
   { no: 4, baslik: 'Sat ve Tahsil Et', aciklama: 'Müşteriye peşin/taksitli/leasingli satış yap, ödemeleri Finansal Takip\'ten izle.' },
 ];
-
 function KarsilamaModali({ onKapat }) {
   return (
     <div
@@ -546,35 +509,22 @@ function KarsilamaModali({ onKapat }) {
   );
 }
 
-// "Bugun ne yapmam lazim" sorusuna dogrudan cevap veren ozet - vadesi
-// GECMIS (henuz odenmemis/tahsil edilmemis) VE bugun vadesi gelen TUM
-// odeme/tahsilatlari (kaynagi ne olursa olsun - cek/leasing/akreditif/
-// taksit/kira) tek bir kutuda toplar. Backend'deki /yaklasan-vadeler
-// endpoint'i ZATEN bu birlestirmeyi yapiyor - burada sadece "gun=0"
-// (bugune kadar) ve "baslangic_gun=-60" (son 60 gundeki vadesi gecmisler
-// de dahil olsun) ile cagriliyor.
 function BugunYapilacaklarKutusu({ navigate }) {
   const [veri, setVeri] = useState(null);
   const [hata, setHata] = useState(null);
-
   useEffect(() => {
     api.get('/raporlar/yaklasan-vadeler', { params: { gun: 0, baslangic_gun: -60 } })
       .then((r) => setVeri(r.data))
       .catch((e) => setHata(hataMesajiCikar(e)));
   }, []);
-
-  if (hata) return null; // sessizce gizle - dashboard'un geri kalanini bozmasin
+  if (hata) return null;
   if (!veri) return null;
-
   const tumKalemler = [
     ...veri.odemeler.map((o) => ({ ...o, yon: 'ODEME' })),
     ...veri.tahsilatlar.map((t) => ({ ...t, yon: 'TAHSILAT' })),
   ].sort((a, b) => a.tarih.localeCompare(b.tarih));
-
   if (tumKalemler.length === 0) return null;
-
   const bugun = new Date().toISOString().slice(0, 10);
-
   return (
     <Kart style={{ marginBottom: 20, border: '1.5px solid var(--amber, #d97706)' }}>
       <div style={{ fontWeight: 700, fontSize: 14.5, marginBottom: 10 }}>
@@ -615,12 +565,10 @@ function BugunYapilacaklarKutusu({ navigate }) {
 export default function DashboardSayfasi() {
   const navigate = useNavigate();
   const [karsilamaAcik, setKarsilamaAcik] = useState(() => !localStorage.getItem(KARSILAMA_ANAHTARI));
-
   function karsilamayiKapat() {
     localStorage.setItem(KARSILAMA_ANAHTARI, '1');
     setKarsilamaAcik(false);
   }
-
   return (
     <div>
       {karsilamaAcik && <KarsilamaModali onKapat={karsilamayiKapat} />}
