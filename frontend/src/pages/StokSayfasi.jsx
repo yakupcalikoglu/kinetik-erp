@@ -200,6 +200,47 @@ function MaliyetDetayi({ urun, stokKartlari, onKapat, onUrunGuncellendi }) {
   const [satisMaliyetEkleTipi, setSatisMaliyetEkleTipi] = useState(null);
   const [baglantilar, setBaglantilar] = useState(null);
   const [kiralamaGecmisi, setKiralamaGecmisi] = useState(null);
+  const [yeniKalemFormuAcik, setYeniKalemFormuAcik] = useState(false);
+  const [yeniKalemForm, setYeniKalemForm] = useState({
+    tip: 'DIGER', aciklama: '', tutar: '', para_birimi: 'TRY', kur: '1',
+    belge_no: '', tarih: new Date().toISOString().slice(0, 10),
+  });
+  const [yeniKalemKaydediliyor, setYeniKalemKaydediliyor] = useState(false);
+
+  useEffect(() => {
+    if (yeniKalemForm.para_birimi !== 'TRY') {
+      api.get(`/kur/${yeniKalemForm.para_birimi}`).then((r) => setYeniKalemForm((f) => ({ ...f, kur: String(r.data.kur) }))).catch(() => {});
+    } else {
+      setYeniKalemForm((f) => ({ ...f, kur: '1' }));
+    }
+  }, [yeniKalemForm.para_birimi]);
+
+  async function yeniKalemKaydet(e) {
+    e.preventDefault();
+    setHata(null);
+    setYeniKalemKaydediliyor(true);
+    try {
+      await api.post(`/stok-seri-no/${urun.id}/maliyet-kalemi`, {
+        tip: yeniKalemForm.tip,
+        aciklama: yeniKalemForm.aciklama || null,
+        tedarikci_cari_id: null,
+        para_birimi: yeniKalemForm.para_birimi,
+        tutar: Number(yeniKalemForm.tutar),
+        kur: Number(yeniKalemForm.kur || 1),
+        belge_no: yeniKalemForm.belge_no || null,
+        tarih: yeniKalemForm.tarih,
+        referans_usd_kuru: null,
+      });
+      setYeniKalemFormuAcik(false);
+      setYeniKalemForm({ tip: 'DIGER', aciklama: '', tutar: '', para_birimi: 'TRY', kur: '1', belge_no: '', tarih: new Date().toISOString().slice(0, 10) });
+      yukle();
+      api.get(`/stok-seri-no/${urun.id}`).then((r) => onUrunGuncellendi(r.data)).catch(() => {});
+    } catch (err) {
+      setHata(hataMesajiCikar(err));
+    } finally {
+      setYeniKalemKaydediliyor(false);
+    }
+  }
 
   useEffect(() => {
     api.get(`/stok-seri-no/${urun.id}/baglantilar`).then((r) => setBaglantilar(r.data)).catch(() => setBaglantilar([]));
@@ -378,9 +419,53 @@ function MaliyetDetayi({ urun, stokKartlari, onKapat, onUrunGuncellendi }) {
         </div>
       )}
 
-      <div style={{ padding: '10px 14px', background: 'var(--zemin)', borderRadius: 8, fontSize: 12.5, color: 'var(--metin-ikincil)', marginBottom: 16 }}>
-        Yeni maliyet kalemi eklemek için <strong>Siparişler</strong> sayfasında ilgili siparişin içeriğini açın —
-        maliyetler artık sipariş bazlı, ilgili ürüne oradan ekleniyor (bu sayfa sadece görüntüleme/düzenleme içindir).
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: yeniKalemFormuAcik ? 10 : 0 }}>
+          <div style={{ fontSize: 12.5, color: 'var(--metin-ikincil)' }}>
+            Bu ürüne özel bir masraf (bakım, nakliye, diğer vb.) eklemek için — sipariş bazlı maliyetler için Siparişler sayfasını da kullanabilirsiniz.
+          </div>
+          <Buton variant="ikincil" onClick={() => setYeniKalemFormuAcik((a) => !a)}>
+            {yeniKalemFormuAcik ? 'Kapat' : '+ Yeni Maliyet Kalemi Ekle'}
+          </Buton>
+        </div>
+        {yeniKalemFormuAcik && (
+          <form onSubmit={yeniKalemKaydet} style={{ marginTop: 10, padding: 14, background: 'var(--zemin)', borderRadius: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10 }}>
+              <Alan etiket="Tip">
+                <select value={yeniKalemForm.tip} onChange={(e) => setYeniKalemForm((f) => ({ ...f, tip: e.target.value }))} style={girdiStili}>
+                  {Object.entries(MALIYET_TIP_METIN).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+              </Alan>
+              <Alan etiket="Para birimi">
+                <select value={yeniKalemForm.para_birimi} onChange={(e) => setYeniKalemForm((f) => ({ ...f, para_birimi: e.target.value }))} style={girdiStili}>
+                  <option value="TRY">TRY</option>
+                  <option value="USD">USD</option>
+                  <option value="EUR">EUR</option>
+                </select>
+              </Alan>
+              <Alan etiket="Tutar">
+                <ParaGirdisi required value={yeniKalemForm.tutar} onChange={(v) => setYeniKalemForm((f) => ({ ...f, tutar: v }))} />
+              </Alan>
+              {yeniKalemForm.para_birimi !== 'TRY' && (
+                <Alan etiket="Kur (otomatik, elle değiştirilebilir)">
+                  <input type="number" step="0.0001" value={yeniKalemForm.kur} onChange={(e) => setYeniKalemForm((f) => ({ ...f, kur: e.target.value }))} style={girdiStili} />
+                </Alan>
+              )}
+              <Alan etiket="Belge/fatura no (opsiyonel)">
+                <input value={yeniKalemForm.belge_no} onChange={(e) => setYeniKalemForm((f) => ({ ...f, belge_no: e.target.value }))} style={girdiStili} />
+              </Alan>
+              <Alan etiket="Tarih">
+                <input required type="date" value={yeniKalemForm.tarih} onChange={(e) => setYeniKalemForm((f) => ({ ...f, tarih: e.target.value }))} style={girdiStili} />
+              </Alan>
+              <Alan etiket="Açıklama (opsiyonel)">
+                <input value={yeniKalemForm.aciklama} onChange={(e) => setYeniKalemForm((f) => ({ ...f, aciklama: e.target.value }))} style={girdiStili} />
+              </Alan>
+            </div>
+            <div style={{ marginTop: 10 }}>
+              <Buton type="submit" disabled={yeniKalemKaydediliyor}>{yeniKalemKaydediliyor ? 'Kaydediliyor...' : 'Kaydet'}</Buton>
+            </div>
+          </form>
+        )}
       </div>
 
       {yukleniyor ? (
