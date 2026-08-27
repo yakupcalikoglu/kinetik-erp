@@ -894,7 +894,7 @@ class NetDurumYaniti(BaseModel):
     net_deger_try: Decimal
 
 
-@router.get("/net-durum", response_model=NetDurumYaniti,
+@router.get("/net-durum",
             dependencies=[Depends(izin_gerektir("RAPOR_GORUNTULE"))])
 async def net_durum(
     sirket_id: int = Depends(aktif_sirket_id_getir),
@@ -930,11 +930,17 @@ async def net_durum(
     stok_urunleri = list(db.execute(
         select(StokSeriNo).where(StokSeriNo.sirket_id == sirket_id, StokSeriNo.durum != StokDurum.SATILDI)
     ).scalars())
-    stok_degeri_try = sum((
+    ticari_stok_degeri_try = sum((
         u.satinalma_maliyeti_try + u.nakliye_maliyeti_try + u.sigorta_maliyeti_try + u.gumruk_maliyeti_try +
         u.antrepo_maliyeti_try + u.millilestirme_maliyeti_try + u.leasing_maliyeti_try + u.diger_maliyet_try
-        for u in stok_urunleri
+        for u in stok_urunleri if (u.sahiplik_tipi or "TICARI") == "TICARI"
     ), Decimal("0"))
+    oz_mal_degeri_try = sum((
+        u.satinalma_maliyeti_try + u.nakliye_maliyeti_try + u.sigorta_maliyeti_try + u.gumruk_maliyeti_try +
+        u.antrepo_maliyeti_try + u.millilestirme_maliyeti_try + u.leasing_maliyeti_try + u.diger_maliyet_try
+        for u in stok_urunleri if u.sahiplik_tipi == "OZ_MAL"
+    ), Decimal("0"))
+    stok_degeri_try = ticari_stok_degeri_try + oz_mal_degeri_try
 
     yedek_parcalar = list(db.execute(select(YedekParca).where(YedekParca.sirket_id == sirket_id)).scalars())
     yedek_parca_degeri_try = sum((p.mevcut_miktar * p.birim_fiyat_try for p in yedek_parcalar), Decimal("0"))
@@ -1124,7 +1130,8 @@ async def net_durum(
     varliklar = [
         NetDurumKalemi(kategori="Ana Kasa (Nakit)", tutar_try=kasa_bakiye_try),
         NetDurumKalemi(kategori="Banka", tutar_try=banka_bakiye_try),
-        NetDurumKalemi(kategori="Stok (satılmamış ürünler)", tutar_try=stok_degeri_try),
+        NetDurumKalemi(kategori="Stok (Ticari, satılmamış ürünler)", tutar_try=ticari_stok_degeri_try),
+        NetDurumKalemi(kategori="Öz Mal Değeri", tutar_try=oz_mal_degeri_try),
         NetDurumKalemi(kategori="Yedek Parça / Sarf Malzeme", tutar_try=yedek_parca_degeri_try),
     ]
     alacaklar = [
@@ -1153,11 +1160,21 @@ async def net_durum(
     toplam_alacak = sum((a.tutar_try for a in alacaklar), Decimal("0"))
     toplam_borc = sum((b.tutar_try for b in borclar), Decimal("0"))
 
-    return NetDurumYaniti(
+    # Nakit/Finansal net deger: kasa+banka + TUM alacak kalemleri - TUM borc
+    # kalemleri (stok/oz-mal HARIC) - kullaniciya, "likit" durumunu, ayri bir
+    # ozet kalemi olarak tek bakista gostermek icin.
+    nakit_finansal_net_try = kasa_bakiye_try + banka_bakiye_try + toplam_alacak - toplam_borc
+
+    sonuc = NetDurumYaniti(
         varliklar=varliklar, alacaklar=alacaklar, borclar=borclar,
         toplam_varlik_try=toplam_varlik, toplam_alacak_try=toplam_alacak, toplam_borc_try=toplam_borc,
         net_deger_try=(toplam_varlik + toplam_alacak) - toplam_borc,
     )
+    sonuc_dict = sonuc.model_dump()
+    sonuc_dict["oz_mal_degeri_try"] = oz_mal_degeri_try
+    sonuc_dict["ticari_stok_degeri_try"] = ticari_stok_degeri_try
+    sonuc_dict["nakit_finansal_net_try"] = nakit_finansal_net_try
+    return sonuc_dict
 
 
 class YillikKarsilastirmaYaniti(BaseModel):
