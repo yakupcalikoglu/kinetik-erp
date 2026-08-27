@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { api, hataMesajiCikar } from '../../api/client';
 import {
   Kart, Alan, girdiStili, HataMesaji, paraFormat, Buton, eylemChipStili, ParaGirdisi, BosDurum,
+  useTarihGruplama, YilBasligi, AyBasligi,
 } from '../Ortak';
+import { Fragment } from 'react';
 
 export function tarihFormat(iso) {
   if (!iso || typeof iso !== 'string' || !iso.includes('-')) return iso || '—';
@@ -51,10 +53,11 @@ export function SiraliBaslik({ children, alanAdi, siralama, style }) {
 }
 
 export function BasitTablo({ basliklar, satirlar, render, siralama, tarihAlani }) {
-  // NOT: useTarihGruplama, Fragment, YilBasligi, AyBasligi bu dosyaya tasinmadi -
-  // tarihAlani kullanan cagiranlar (varsa) kendi sayfalarinda import edip
-  // kullanmali. Bu fonksiyon, tarihAlani verilmediginde (coğu kullanim) sorunsuz calisir.
+  const tarihGrup = useTarihGruplama(tarihAlani ? satirlar : [], tarihAlani || 'tarih');
+
   if (satirlar.length === 0) return <BosDurum baslik="Kayıt bulunamadı" />;
+
+  const sutunSayisi = basliklar.length;
 
   return (
     <table>
@@ -81,7 +84,35 @@ export function BasitTablo({ basliklar, satirlar, render, siralama, tarihAlani }
         </tr>
       </thead>
       <tbody>
-        {satirlar.map(render)}
+        {!tarihAlani ? satirlar.map(render) : tarihGrup.yillar.map((yil) => (
+          <Fragment key={yil}>
+            <tr>
+              <td colSpan={sutunSayisi} style={{ padding: 0 }}>
+                <YilBasligi
+                  yil={yil}
+                  kayitSayisi={Object.values(tarihGrup.gruplar[yil]).flat().length}
+                  acik={tarihGrup.acikYillar.has(yil)}
+                  onTikla={() => tarihGrup.yilAcKapat(yil)}
+                />
+              </td>
+            </tr>
+            {tarihGrup.acikYillar.has(yil) && Object.keys(tarihGrup.gruplar[yil]).sort().reverse().map((ayAnahtari) => (
+              <Fragment key={ayAnahtari}>
+                <tr>
+                  <td colSpan={sutunSayisi} style={{ padding: 0 }}>
+                    <AyBasligi
+                      ayAnahtari={ayAnahtari}
+                      kayitSayisi={tarihGrup.gruplar[yil][ayAnahtari].length}
+                      acik={tarihGrup.acikAylar.has(ayAnahtari)}
+                      onTikla={() => tarihGrup.ayAcKapat(ayAnahtari)}
+                    />
+                  </td>
+                </tr>
+                {tarihGrup.acikAylar.has(ayAnahtari) && tarihGrup.gruplar[yil][ayAnahtari].map(render)}
+              </Fragment>
+            ))}
+          </Fragment>
+        ))}
       </tbody>
     </table>
   );
