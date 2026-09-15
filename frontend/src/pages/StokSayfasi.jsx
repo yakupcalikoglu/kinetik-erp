@@ -1183,8 +1183,15 @@ export default function StokSayfasi() {
     if (!(await ozelOnayIste(`${urun.seri_no} seri numaralı ürünü silmek istediğinize emin misiniz?`))) return;
     try {
       await api.delete(`/stok-seri-no/${urun.id}`);
-      urunleriYukle();
-      tumUrunleriYukle();
+      // Tum listeyi API'den yeniden cekmek (ve "yukleniyor" durumunu
+      // tetikleyip tabloyu gecici olarak iskelete donusturmek) yerine,
+      // SADECE silinen urunu yerel state'ten cikariyoruz - boylece sayfa
+      // ani sekilde kisalmiyor ve kullanicinin scroll konumu KORUNUYOR
+      // (ust uste birden fazla urun silerken, her seferinde sayfanin
+      // basina kaymasini onlemek icin).
+      setUrunler((mevcut) => mevcut.filter((u) => u.id !== urun.id));
+      setTumUrunler((mevcut) => mevcut.filter((u) => u.id !== urun.id));
+      setSeciliIdler((mevcut) => mevcut.filter((id) => id !== urun.id));
       geriAlBildirimGoster(`"${urun.seri_no}" silindi.`, async () => {
         await api.put(`/stok-seri-no/${urun.id}/geri-getir`);
         urunleriYukle();
@@ -1192,6 +1199,38 @@ export default function StokSayfasi() {
       });
     } catch (err) {
       setHata(hataMesajiCikar(err));
+    }
+  }
+
+  async function topluSil() {
+    if (seciliIdler.length === 0) return;
+    if (!(await ozelOnayIste(`Seçili ${seciliIdler.length} ürünü silmek istediğinize emin misiniz?`))) return;
+    const basarili = [];
+    const basarisiz = [];
+    for (const id of seciliIdler) {
+      try {
+        await api.delete(`/stok-seri-no/${id}`);
+        basarili.push(id);
+      } catch (err) {
+        basarisiz.push(id);
+      }
+    }
+    if (basarili.length > 0) {
+      setUrunler((mevcut) => mevcut.filter((u) => !basarili.includes(u.id)));
+      setTumUrunler((mevcut) => mevcut.filter((u) => !basarili.includes(u.id)));
+    }
+    setSeciliIdler(basarisiz);
+    if (basarisiz.length > 0) {
+      setHata(`${basarisiz.length} ürün silinemedi (satılmış/hurda olanlar önce geri alınmalı).`);
+    } else {
+      setHata(null);
+    }
+    if (basarili.length > 0) {
+      geriAlBildirimGoster(`${basarili.length} ürün silindi.`, async () => {
+        await Promise.all(basarili.map((id) => api.put(`/stok-seri-no/${id}/geri-getir`)));
+        urunleriYukle();
+        tumUrunleriYukle();
+      });
     }
   }
 
@@ -1457,6 +1496,7 @@ export default function StokSayfasi() {
             <Buton variant="ikincil" onClick={() => setTopluMaliyetAcik((a) => !a)}>
               {topluMaliyetAcik ? 'Maliyet formunu kapat' : 'Seçilenlere Maliyet Ekle (Dağıt)'}
             </Buton>
+            <Buton variant="tehlike" onClick={topluSil}>Seçilenleri Sil</Buton>
             <Buton variant="ikincil" onClick={() => setSeciliIdler([])}>Seçimi temizle</Buton>
           </div>
           {topluHata && <div style={{ marginTop: 8, fontSize: 13, color: '#ffd7d7' }}>{topluHata}</div>}
