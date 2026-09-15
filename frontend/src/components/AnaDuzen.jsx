@@ -579,14 +579,25 @@ function YukariCikButonu() {
 
 function OzelOnayPaneli() {
   const [mesaj, setMesaj] = useState(null);
+  const scrollKonumuRef = useRef(0);
 
   useEffect(() => {
-    return onayIstegiDinle((m) => setMesaj(m));
+    return onayIstegiDinle((m) => {
+      scrollKonumuRef.current = window.scrollY;
+      setMesaj(m);
+    });
   }, []);
 
   function yanitla(sonuc) {
     _onayYaniti(sonuc);
     setMesaj(null);
+    // Modal kapanirken, DOM'dan kaldirilan (odaklanmis) "Onayla"/"Vazgec"
+    // butonu yuzunden tarayici odagi (focus) sayfanin basina tasiyip
+    // sayfayi otomatik kaydirabiliyor - bunu onlemek icin, modal acilmadan
+    // ONCEKI scroll konumuna geri donuyoruz.
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: scrollKonumuRef.current, behavior: 'instant' });
+    });
   }
 
   if (!mesaj) return null;
@@ -636,14 +647,21 @@ function OzelOnayPaneli() {
 
 function OzelAlertPaneli() {
   const [mesaj, setMesaj] = useState(null);
+  const scrollKonumuRef = useRef(0);
 
   useEffect(() => {
-    return alertIstegiDinle((m) => setMesaj(m));
+    return alertIstegiDinle((m) => {
+      scrollKonumuRef.current = window.scrollY;
+      setMesaj(m);
+    });
   }, []);
 
   function kapat() {
     _alertYaniti();
     setMesaj(null);
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: scrollKonumuRef.current, behavior: 'instant' });
+    });
   }
 
   if (!mesaj) return null;
@@ -685,20 +703,33 @@ function OzelAlertPaneli() {
 function OzelPromptPaneli() {
   const [istek, setIstek] = useState(null);
   const [deger, setDeger] = useState('');
+  const scrollKonumuRef = useRef(0);
 
   useEffect(() => {
-    return promptIstegiDinle((i) => { setIstek(i); setDeger(i.varsayilanDeger || ''); });
+    return promptIstegiDinle((i) => {
+      scrollKonumuRef.current = window.scrollY;
+      setIstek(i);
+      setDeger(i.varsayilanDeger || '');
+    });
   }, []);
+
+  function scrollGeriDon() {
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: scrollKonumuRef.current, behavior: 'instant' });
+    });
+  }
 
   function gonder(e) {
     e.preventDefault();
     _promptYaniti(deger);
     setIstek(null);
+    scrollGeriDon();
   }
 
   function vazgec() {
     _promptYaniti(null);
     setIstek(null);
+    scrollGeriDon();
   }
 
   if (!istek) return null;
