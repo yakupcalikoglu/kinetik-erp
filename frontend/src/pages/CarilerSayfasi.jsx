@@ -1194,6 +1194,15 @@ export default function CarilerSayfasi() {
   const [duzenlenenCari, setDuzenlenenCari] = useState(null);
   const location = useLocation();
   const [arama, setArama] = useState(new URLSearchParams(location.search).get('ara') || '');
+  // Genel Arama (ust bardaki), kullanici ZATEN bu sayfadayken bir sonuca
+  // tiklarsa, React Router ayni route icinde kaldigi icin (sadece query
+  // degisiyor) component YENIDEN MOUNT olmuyor - bu yuzden yukaridaki
+  // useState'in ilk deger okumasi tekrar calismiyor. URL'deki "ara"
+  // degisikligini burada AYRICA yakalayip "arama"yi senkronize ediyoruz.
+  useEffect(() => {
+    const yeni = new URLSearchParams(location.search).get('ara');
+    if (yeni != null) setArama(yeni);
+  }, [location.search]);
   const [filtreTip, setFiltreTip] = useState('');
   const [seciliCari, setSeciliCari] = useState(null);
   const [secilenIdler, setSecilenIdler] = useState(new Set());
@@ -1243,7 +1252,16 @@ export default function CarilerSayfasi() {
     if (!(await ozelOnayIste(`${cari.unvan} adlı cariyi silmek istediğinize emin misiniz?`))) return;
     try {
       await api.delete(`/cariler/${cari.id}`);
-      listeyiYukle();
+      // Tum listeyi API'den yeniden cekmek (ve "yukleniyor" durumunu
+      // tetikleyip tabloyu gecici olarak iskelete donusturmek) yerine,
+      // SADECE silinen cariyi yerel state'ten cikariyoruz - boylece sayfa
+      // ani sekilde kisalmiyor ve kullanicinin scroll konumu KORUNUYOR.
+      setCariler((mevcut) => mevcut.filter((c) => c.id !== cari.id));
+      setSecilenIdler((s) => {
+        const yeni = new Set(s);
+        yeni.delete(cari.id);
+        return yeni;
+      });
       geriAlBildirimGoster(`"${cari.unvan}" silindi.`, async () => {
         await api.put(`/cariler/${cari.id}/geri-getir`);
         listeyiYukle();
@@ -1273,12 +1291,14 @@ export default function CarilerSayfasi() {
         basarisizlar.push(id);
       }
     }
-    setSecilenIdler(new Set());
-    listeyiYukle();
+    const basarili = silinenIdler.filter((id) => !basarisizlar.includes(id));
+    if (basarili.length > 0) {
+      setCariler((mevcut) => mevcut.filter((c) => !basarili.includes(c.id)));
+    }
+    setSecilenIdler(new Set(basarisizlar));
     if (basarisizlar.length > 0) {
       setHata(`${basarisizlar.length} kayıt silinemedi.`);
     }
-    const basarili = silinenIdler.filter((id) => !basarisizlar.includes(id));
     if (basarili.length > 0) {
       geriAlBildirimGoster(`${basarili.length} cari silindi.`, async () => {
         await Promise.all(basarili.map((id) => api.put(`/cariler/${id}/geri-getir`)));
